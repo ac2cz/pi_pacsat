@@ -4,26 +4,17 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../src/agw_tnc.c \
-../src/crc.c \
-../src/pacsat_main.c \
-../src/str_util.c 
+../ax25_tools.c 
 
 C_DEPS += \
-./src/agw_tnc.d \
-./src/crc.d \
-./src/pacsat_main.d \
-./src/str_util.d 
+./ax25_tools.d 
 
 OBJS += \
-./src/agw_tnc.o \
-./src/crc.o \
-./src/pacsat_main.o \
-./src/str_util.o 
+./ax25_tools.o 
 
 
 # Each subdirectory must supply rules for building sources it contributes
-src/%.o: ../src/%.c src/subdir.mk
+%.o: ../%.c subdir.mk
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C Compiler'
 	gcc -I"/home/g0kla/Desktop/workspace/Pacsat/inc" -I"/home/g0kla/Desktop/workspace/Pacsat/broadcast/inc" -I"/home/g0kla/Desktop/workspace/Pacsat/ftl0/inc" -I"/home/g0kla/Desktop/workspace/Pacsat/directory/inc" -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" -o "$@" "$<"
@@ -31,10 +22,10 @@ src/%.o: ../src/%.c src/subdir.mk
 	@echo ' '
 
 
-clean: clean-src
+clean: clean--2e-
 
-clean-src:
-	-$(RM) ./src/agw_tnc.d ./src/agw_tnc.o ./src/crc.d ./src/crc.o ./src/pacsat_main.d ./src/pacsat_main.o ./src/str_util.d ./src/str_util.o
+clean--2e-:
+	-$(RM) ./ax25_tools.d ./ax25_tools.o
 
-.PHONY: clean-src
+.PHONY: clean--2e-
 

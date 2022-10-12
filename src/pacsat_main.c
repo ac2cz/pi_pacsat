@@ -31,14 +31,18 @@
 /* Program Include files */
 #include "config.h"
 #include "agw_tnc.h"
-#include "util.h"
+#include "str_util.h"
+#include "pacsat_header.h"
+#include "pacsat_dir.h"
 
+/* Forward declarations */
 void connection_received(char *from_callsign, char *to_callsign, int incomming, char * data);
+void process_monitored_frame(char *from_callsign, char *to_callsign, char *data, int len);
 
 /*
  *  GLOBAL VARIABLES defined here.  They are declared in config.h
  *  These are the default values.  Many can be updated with a value
- *  in telem_radio.config or can be over riden on the command line.
+ *  in pacsat.config or can be overridden on the command line.
  *
  */
 int g_verbose = false;
@@ -47,6 +51,7 @@ char g_broadcast_callsign[10] = "PFS3-11";
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
+int run_self_test = false;
 
 //// TEMP VARS FOR TESTING PB
 	int sent_pb_status = false;
@@ -58,6 +63,17 @@ int main(int argc, char *argv[]) {
 	printf("Build: %s\n", VERSION);
 
 	int rc = EXIT_SUCCESS;
+
+	if (run_self_test) {
+		printf("Running Self Tests..\n");
+		rc = test_pacsat_header();
+		if (rc != EXIT_SUCCESS) exit(rc);
+
+		rc = test_pacsat_dir();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		printf("ALL TESTS PASSED\n");
+		exit (rc);
+	}
 
 	rc = tnc_connect("127.0.0.1", AGW_PORT);
 	if (rc != EXIT_SUCCESS) {
@@ -140,7 +156,7 @@ int main(int argc, char *argv[]) {
 		if (!sent_pb_status) { // TEST - this should be a timer
 			// then send the status
 			char command[] = "PB Empty.";
-			rc = send_ui_packet(g_bbs_callsign, "PBLIST", command, sizeof(command));
+			rc = send_ui_packet(g_bbs_callsign, "PBLIST", 0xf0, command, sizeof(command));
 			if (rc != EXIT_SUCCESS) {
 				printf("\n Error : Could not send PB status to TNC \n");
 			}
@@ -149,9 +165,9 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* For testing wait until the TNC thread returns.  Otherwise the program just ends. */
-	int *return_code;
-	pthread_join(tnc_listen_pthread, return_code);
-	exit(return_code);
+
+	pthread_join(tnc_listen_pthread, NULL);
+	exit(EXIT_SUCCESS);
 
 }
 
@@ -187,12 +203,12 @@ struct PAIR {
 struct t_broadcast_request_header {
 	unsigned char flag;
 	unsigned char to_callsign[7];
-	unsigned char from_callsign2[7];
+	unsigned char from_callsign[7];
 	unsigned char control_byte;
 	unsigned char pid;
 };
 
-void process_monitored_frame(char *from_callsign, char *to_callsign, char * data, int len) {
+void process_monitored_frame(char *from_callsign, char *to_callsign, char *data, int len) {
 	if (strncasecmp(to_callsign, g_bbs_callsign, 7) == 0) {
 		// this was sent to the BBS Callsign
 		debug_print("BBS Request\n");
@@ -218,7 +234,7 @@ void process_monitored_frame(char *from_callsign, char *to_callsign, char * data
 				char buffer[14]; // OK + 10 char for callsign with SSID
 				strlcpy(buffer,"OK ", sizeof(buffer));
 				strlcat(buffer, from_callsign, sizeof(buffer));
-				rc = send_ui_packet(g_bbs_callsign, "BBSTAT", buffer, sizeof(buffer));
+				rc = send_ui_packet(g_broadcast_callsign, "BBSTAT", 0xbb, buffer, sizeof(buffer));
 				if (rc != EXIT_SUCCESS) {
 					printf("\n Error : Could not send OK Response to TNC \n");
 					exit(EXIT_FAILURE);
@@ -226,19 +242,19 @@ void process_monitored_frame(char *from_callsign, char *to_callsign, char * data
 //				// OK AC2CZ
 //				char pbd[] = {0x00, 0x82, 0x86, 0x64, 0x86, 0xB4, 0x40, 0x00, 0xA0, 0x8C, 0xA6,
 //								0x66, 0x40, 0x40, 0x17, 0x03, 0xBB, 0x4F, 0x4B, 0x20, 0x41, 0x43, 0x32, 0x43, 0x5A, 0x0D, 0xC0};
-//				//send_raw_packet('K', "PFS3-12", "AC2CZ", pbd, sizeof(pbd));
+//				//send_raw_packet('K', "PFS3-12", "AC2CZ", 0xbb, pbd, sizeof(pbd));
 //				// ON PB AC2CZ/D
 //				char pbd2[] ={0x00, 0xA0, 0x84, 0x98, 0x92, 0xA6, 0xA8, 0x00, 0xA0, 0x8C, 0xA6, 0x66, 0x40,
 //									0x40, 0x17, 0x03, 0xF0, 0x50, 0x42, 0x3A, 0x20, 0x41, 0x43, 0x32, 0x43, 0x5A,
 //									0x5C, 0x44, 0x0D};
-//				//send_raw_packet('K', "PFS3-12", "AC2CZ", pbd2, sizeof(pbd2));
+//				//send_raw_packet('K', "PFS3-12", "AC2CZ", 0xf0, pbd2, sizeof(pbd2));
 
 				// Add to PB - TEST
 				on_pb = true;
 				char buffer2[14]; // OK + 10 char for callsign with SSID
 				strlcpy(buffer2,"PB: ", sizeof(buffer2));
 				strlcat(buffer2, from_callsign, sizeof(buffer2));
-				rc = send_ui_packet(g_bbs_callsign, "PBLIST", buffer2, sizeof(buffer2));
+				rc = send_ui_packet(g_bbs_callsign, "PBLIST", 0xf0, buffer2, sizeof(buffer2));
 				if (rc != EXIT_SUCCESS) {
 					printf("\n Error : Could not send OK Response to TNC \n");
 					exit(EXIT_FAILURE);
@@ -273,11 +289,11 @@ void connection_received(char *from_callsign, char *to_callsign, int incomming, 
 	debug_print("HANDLE CONNECTION FOR FILE UPLOAD\n");
 	char loggedin[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x00,
 			0xF0,0x05,0x02,0x34,0xC4,0xB9,0x5A,0x04};
-	send_raw_packet('K', "PFS3-12", "AC2CZ", loggedin, sizeof(loggedin));
+	send_raw_packet('K', "PFS3-12", "AC2CZ", 0xf0, loggedin, sizeof(loggedin));
 
 	char go[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x22,
 			0xF0,0x08,0x04,0x4E,0x03,0x00,0x00,0x00,0x00,0x00,0x00};
-	send_raw_packet('K', "PFS3-12", "AC2CZ", go, sizeof(go));
+	send_raw_packet('K', "PFS3-12", "AC2CZ", 0xf0, go, sizeof(go));
 
 	//Disconnect
 	//header.data_kind = 'd';

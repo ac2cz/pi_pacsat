@@ -4,26 +4,20 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../src/agw_tnc.c \
-../src/crc.c \
-../src/pacsat_main.c \
-../src/str_util.c 
+../directory/src/pacsat_dir.c \
+../directory/src/pacsat_header.c 
 
 C_DEPS += \
-./src/agw_tnc.d \
-./src/crc.d \
-./src/pacsat_main.d \
-./src/str_util.d 
+./directory/src/pacsat_dir.d \
+./directory/src/pacsat_header.d 
 
 OBJS += \
-./src/agw_tnc.o \
-./src/crc.o \
-./src/pacsat_main.o \
-./src/str_util.o 
+./directory/src/pacsat_dir.o \
+./directory/src/pacsat_header.o 
 
 
 # Each subdirectory must supply rules for building sources it contributes
-src/%.o: ../src/%.c src/subdir.mk
+directory/src/%.o: ../directory/src/%.c directory/src/subdir.mk
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C Compiler'
 	gcc -I"/home/g0kla/Desktop/workspace/Pacsat/inc" -I"/home/g0kla/Desktop/workspace/Pacsat/broadcast/inc" -I"/home/g0kla/Desktop/workspace/Pacsat/ftl0/inc" -I"/home/g0kla/Desktop/workspace/Pacsat/directory/inc" -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" -o "$@" "$<"
@@ -31,10 +25,10 @@ src/%.o: ../src/%.c src/subdir.mk
 	@echo ' '
 
 
-clean: clean-src
+clean: clean-directory-2f-src
 
-clean-src:
-	-$(RM) ./src/agw_tnc.d ./src/agw_tnc.o ./src/crc.d ./src/crc.o ./src/pacsat_main.d ./src/pacsat_main.o ./src/str_util.d ./src/str_util.o
+clean-directory-2f-src:
+	-$(RM) ./directory/src/pacsat_dir.d ./directory/src/pacsat_dir.o ./directory/src/pacsat_header.d ./directory/src/pacsat_header.o
 
-.PHONY: clean-src
+.PHONY: clean-directory-2f-src
 

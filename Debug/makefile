@@ -9,6 +9,8 @@ RM := rm -rf
 # All of the sources participating in the build are defined here
 -include sources.mk
 -include src/subdir.mk
+-include directory/src/subdir.mk
+-include ax25/src/subdir.mk
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)

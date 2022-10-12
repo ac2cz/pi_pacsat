@@ -38,7 +38,7 @@ struct t_agw_frame_ptr {
 int tnc_connect(char *addr, int port);
 int tnc_start_monitoring(char type);
 int tnc_register_callsign(char *callsign);
-int send_ui_packet(char *from_callsign, char *to_callsign, char *bytes, int len);
+int send_ui_packet(char *from_callsign, char *to_callsign, char pid, char *bytes, int len);
 int tnc_receive_packet();
 void print_header(struct t_agw_header *header);
 void print_data(char *data, int len);

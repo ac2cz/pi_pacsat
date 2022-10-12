@@ -55,7 +55,7 @@ strlcpy(char *dst, const char *src, size_t dsize) {
 
 	return(src - osrc - 1);	/* count does not include NUL */
 }
-DEF_WEAK(strlcpy);
+
 
 /*
  * Appends src to string dst of size dsize (unlike strncat, dsize is the
@@ -90,4 +90,16 @@ strlcat(char *dst, const char *src, size_t dsize) {
 
 	return(dlen + (src - osrc));	/* count does not include NUL */
 }
-DEF_WEAK(strlcat);
+
+/**
+ * Checks if a string ends with a suffix
+ */
+int str_ends_with(const char *str, const char *suffix) {
+    if (str == NULL || suffix == NULL)
+        return NULL;
+    size_t lenstr = strlen(str);
+    size_t lensuffix = strlen(suffix);
+    if (lensuffix >  lenstr)
+        return NULL;
+    return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}

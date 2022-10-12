@@ -17,6 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  *
+ *
+ * Interface with the AGW TNC interface of Direwolf.
+ *
  */
 
 #include <sys/socket.h>
@@ -31,12 +34,12 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <assert.h>
+#include <str_util.h>
 #include <string.h>
 
 /* program include files */
 #include "config.h"
 #include "debug.h"
-#include "util.h"
 #include "agw_tnc.h"
 
 
@@ -51,8 +54,12 @@ struct t_agw_frame receive_circular_buffer[MAX_RX_QUEUE_LEN]; // buffer received
 int debug_raw_frames = false;
 
 /* Forward declarations*/
-int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char *bytes, int len);
+int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char pid, char *bytes, int len);
 
+/**
+ * Connect to the AGW TNC socket using the passed address and port
+ * Returns 0 if successful otherwise 1
+ */
 int tnc_connect(char *addr, int port) {
 	if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		printf("\n Error : Could not create socket \n");
@@ -78,6 +85,11 @@ int tnc_connect(char *addr, int port) {
 	return EXIT_SUCCESS;
 }
 
+/**
+ * Send an AGW frame to start monitoring the output of the TNC.
+ *
+ * Returns 0 if successful otherwise 1
+ */
 int tnc_start_monitoring(char type) {
 	struct t_agw_header header;
 	memset (&header, 0, sizeof(header));
@@ -91,6 +103,10 @@ int tnc_start_monitoring(char type) {
 	return EXIT_SUCCESS;
 }
 
+/**
+ * Registers the callsign of this station with Direwolf using an AGW X type frame
+ * Returns 0 if successful otherwise 1
+ */
 int tnc_register_callsign(char *callsign) {
 	struct t_agw_header header;
 	memset (&header, 0, sizeof(header));
@@ -105,7 +121,7 @@ int tnc_register_callsign(char *callsign) {
 	return EXIT_SUCCESS;
 }
 
-int send_ui_packet(char *from_callsign, char *to_callsign, char *sendbytes, int len) {
+int send_ui_packet(char *from_callsign, char *to_callsign, char pid, char *sendbytes, int len) {
 
 	char bytes[len+1];
 	bytes[0] = 0x00; // number of VIAs
@@ -118,18 +134,18 @@ int send_ui_packet(char *from_callsign, char *to_callsign, char *sendbytes, int 
 	}
 
 //	int err = send_raw_packet('V', from_callsign, to_callsign, bytes, sizeof(bytes));
-	int err = send_raw_packet('M', from_callsign, to_callsign, bytes, sizeof(bytes));
+	int err = send_raw_packet('M', from_callsign, to_callsign, pid, bytes, sizeof(bytes));
 
 	return err;
 }
 
-int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char *bytes, int len) {
+int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char pid, char *bytes, int len) {
 	struct t_agw_header header;
 
 	printf("SENDING: ");
 
 	memset (&header, 0, sizeof(header));
-	header.pid = 0xbb;
+	header.pid = pid;
 	strlcpy( header.call_from, from_callsign, sizeof(header.call_from) );
 	strlcpy( header.call_to, to_callsign,sizeof(header.call_to)  );
 
@@ -233,27 +249,10 @@ int tnc_receive_packet() {
 		}
 		if (debug_raw_frames)
 			print_data(receive_circular_buffer[next_frame_ptr].data, header.data_len);
-//		printf("\nRX DATA2:");
-//		for (int i=0; i < header.data_len; i++) {
-//			if (isprint(receive_circular_buffer[next_frame_ptr].data[i]))
-//				printf("%c",receive_circular_buffer[next_frame_ptr].data[i]);
-//			else
-//				printf(" ");
-//		}
-//		printf(" : ");
-//		for (int i=0; i < header.data_len; i++) {
-//			printf("%02x ",receive_circular_buffer[next_frame_ptr].data[i] & 0xff);
-//		}
+
 		if (debug_raw_frames)
 			debug_print("\n");
 
-//		if (header.data_kind == 'C') {
-//			// connected
-//			// send loged in
-//			printf("CONNECTED!!\n");
-
-
-//		}
 		next_frame_ptr++;
 		if (next_frame_ptr == MAX_RX_QUEUE_LEN)
 			next_frame_ptr=0;

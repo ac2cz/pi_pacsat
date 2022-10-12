@@ -24,14 +24,15 @@
 
 #include "debug.h"
 
-#define VERSION __DATE__ " - Version 0.4"
+#define VERSION __DATE__ " PARISS - Version 0.5"
 #define DEBUG 1
 #define true 1
 #define false 0
+#define MAX_FILE_PATH_LEN 256
 #define AX25_MAX_DATA_LEN 2048
 #define AGW_PORT 8000
 
-extern int g_verbose;          /* set from command line switch or from the cmd console */
+extern int g_verbose;          /* print verbose output when set */
 
 extern char g_bbs_callsign[10];
 extern char g_broadcast_callsign[10];
