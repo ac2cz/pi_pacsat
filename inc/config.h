@@ -28,14 +28,15 @@
 #define DEBUG 1
 #define true 1
 #define false 0
+#define MAX_CALLSIGN_LEN 10
 #define MAX_FILE_PATH_LEN 256
 #define AX25_MAX_DATA_LEN 2048
 #define AGW_PORT 8000
 
 extern int g_verbose;          /* print verbose output when set */
-
-extern char g_bbs_callsign[10];
-extern char g_broadcast_callsign[10];
-extern char g_digi_callsign[10];
+extern int g_run_self_test;    /* true when the self test is running */
+extern char g_bbs_callsign[MAX_CALLSIGN_LEN];
+extern char g_broadcast_callsign[MAX_CALLSIGN_LEN];
+extern char g_digi_callsign[MAX_CALLSIGN_LEN];
 
 #endif /* CONFIG_H_ */

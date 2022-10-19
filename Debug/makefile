@@ -10,6 +10,7 @@ RM := rm -rf
 -include sources.mk
 -include src/subdir.mk
 -include directory/src/subdir.mk
+-include broadcast/src/subdir.mk
 -include ax25/src/subdir.mk
 -include objects.mk
 

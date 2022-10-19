@@ -41,7 +41,7 @@
 #include "config.h"
 #include "debug.h"
 #include "agw_tnc.h"
-
+#include "ax25_tools.h"
 
 
 int sockfd = 0;
@@ -54,7 +54,7 @@ struct t_agw_frame receive_circular_buffer[MAX_RX_QUEUE_LEN]; // buffer received
 int debug_raw_frames = false;
 
 /* Forward declarations*/
-int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char pid, char *bytes, int len);
+int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len);
 
 /**
  * Connect to the AGW TNC socket using the passed address and port
@@ -121,25 +121,25 @@ int tnc_register_callsign(char *callsign) {
 	return EXIT_SUCCESS;
 }
 
-int send_ui_packet(char *from_callsign, char *to_callsign, char pid, char *sendbytes, int len) {
+int send_ui_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *sendbytes, int len) {
 
-	char bytes[len+1];
-	bytes[0] = 0x00; // number of VIAs
-	for (int i=0; i < len; i++) {
-		bytes[i+1] = sendbytes[i];
-//		if (isprint(bytes[i]))
-//			printf("%c",bytes[i]);
-//		else
-//			printf(" ");
-	}
+//	char bytes[len+1];
+//	bytes[0] = 0x00; // number of VIAs
+//	for (int i=0; i < len; i++) {
+//		bytes[i+1] = sendbytes[i];
+////		if (isprint(bytes[i]))
+////			printf("%c",bytes[i]);
+////		else
+////			printf(" ");
+//	}
 
-//	int err = send_raw_packet('V', from_callsign, to_callsign, bytes, sizeof(bytes));
-	int err = send_raw_packet('M', from_callsign, to_callsign, pid, bytes, sizeof(bytes));
+//	int err = send_raw_packet('V', from_callsign, to_callsign, pid, bytes, sizeof(bytes));
+	int err = send_raw_packet('M', from_callsign, to_callsign, pid, sendbytes, len);
 
 	return err;
 }
 
-int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char pid, char *bytes, int len) {
+int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len) {
 	struct t_agw_header header;
 
 	printf("SENDING: ");
@@ -152,13 +152,18 @@ int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char 
 	header.data_kind = datakind; //'K';  // transmit a RAW frame
 	header.data_len = len;
 	for (int i=0; i < header.data_len; i++) {
-		if (isprint(bytes[i]))
-			printf("%c",bytes[i]);
-		else
-			printf(" ");
+		printf("%02x ",bytes[i]);
+		if (i%8 == 0 && i!=0) printf("\n");
+//		if (isprint(bytes[i]))
+//			printf("%c",bytes[i]);
+//		else
+//			printf(" ");
 	}
 	printf(" .. %d bytes\n", header.data_len);
-	int err = send(sockfd, (char*)(&header), sizeof(header), MSG_NOSIGNAL);
+
+//////////////	if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mode */
+
+	int err = send(sockfd, (unsigned char*)(&header), sizeof(header), MSG_NOSIGNAL);
 	if (err == -1) {
 		printf ("Socket Send error with header, Terminating.\n");
 		return EXIT_FAILURE;
@@ -168,6 +173,66 @@ int send_raw_packet(char datakind, char *from_callsign, char *to_callsign, char 
 		printf ("Socket Send error with data, Terminating.\n");
 		return EXIT_FAILURE;
 	}
+
+	return EXIT_SUCCESS;
+}
+
+int send_K_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len) {
+	struct t_agw_header header;
+
+	printf("SENDING: ");
+
+	memset (&header, 0, sizeof(header));
+	header.pid = pid;
+	strlcpy( header.call_from, from_callsign, sizeof(header.call_from) );
+	strlcpy( header.call_to, to_callsign,sizeof(header.call_to)  );
+
+	unsigned char raw_hdr[17];
+	raw_hdr[0] = 0x00; /* Port settings */
+
+	unsigned char buf[7];
+	int l = encode_call(to_callsign, buf, false, 0);
+	if (l != EXIT_SUCCESS) return EXIT_FAILURE;
+	for (int i=0; i<7; i++)
+		raw_hdr[i+1] = buf[i];
+	l = encode_call(from_callsign, buf, true, 0);
+	if (l != EXIT_SUCCESS) return EXIT_FAILURE;
+	for (int i=0; i<7; i++)
+		raw_hdr[i+8] = buf[i];
+	raw_hdr[15] = 0x03; // UI Frame control byte
+	raw_hdr[16] = pid;
+	header.data_kind = 'K';
+
+
+
+	unsigned char raw_bytes[sizeof(raw_hdr)+len];
+	for (int i=0; i< sizeof(raw_hdr); i++) {
+		raw_bytes[i] = raw_hdr[i];
+	}
+	for (int i=0; i< len; i++) {
+		raw_bytes[i+sizeof(raw_hdr)] = bytes[i];
+	}
+	header.data_len = len+sizeof(raw_hdr);
+
+//	for (int i=0; i< (len+sizeof(raw_hdr)); i++) {
+//		printf("%02x ",raw_bytes[i]);
+//		if (i%8 == 0 && i!=0) printf("\n");
+//	}
+
+if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mode */
+
+	printf(" .. %d bytes\n", header.data_len);
+	int err = send(sockfd, (unsigned char*)(&header), sizeof(header), MSG_NOSIGNAL);
+	if (err == -1) {
+		printf ("Socket Send error with header, Terminating.\n");
+		return EXIT_FAILURE;
+	}
+	err = send(sockfd, raw_bytes, len+sizeof(raw_hdr), MSG_NOSIGNAL);
+	if (err == -1) {
+		printf ("Socket Send error with data, Terminating.\n");
+		return EXIT_FAILURE;
+	}
+
 	return EXIT_SUCCESS;
 }
 
@@ -233,6 +298,7 @@ int tnc_receive_packet() {
 		exit (1);
 	}
 
+	/* If this asset fails then we are likely receiving frames that are longer than AX25_MAX_DATA_LEN */
 	assert (header.data_len >= 0 && header.data_len < (int)(sizeof(receive_circular_buffer[next_frame_ptr].data)));
 
 	if (debug_raw_frames) {
@@ -264,8 +330,9 @@ int tnc_receive_packet() {
 /**
  * Return the frame if there is one available, which is true if the write pointer is
  * not equal to this number
- * TODO - this fails if we have wrapped all the way around the circular buffer.  But then
- * we are way behind and probably in trouble anyway
+ * TODO - this fails if we have wrapped all the way around the circular buffer. Need
+ * to print a warning.  But then we are way behind and probably in trouble anyway.
+ *
  */
 int get_next_frame(int frame_num, struct t_agw_frame_ptr *frame) {
 	if (next_frame_ptr != frame_num) {

@@ -34,6 +34,7 @@
 #include "str_util.h"
 #include "pacsat_header.h"
 #include "pacsat_dir.h"
+#include "pacsat_broadcast.h"
 
 /* Forward declarations */
 void connection_received(char *from_callsign, char *to_callsign, int incomming, char * data);
@@ -51,11 +52,7 @@ char g_broadcast_callsign[10] = "PFS3-11";
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
-int run_self_test = false;
-
-//// TEMP VARS FOR TESTING PB
-	int sent_pb_status = false;
-	int on_pb = false;
+int g_run_self_test = false;
 
 int main(int argc, char *argv[]) {
 
@@ -64,48 +61,82 @@ int main(int argc, char *argv[]) {
 
 	int rc = EXIT_SUCCESS;
 
-	if (run_self_test) {
-		printf("Running Self Tests..\n");
+	rc = tnc_connect("127.0.0.1", AGW_PORT);
+	if (rc != EXIT_SUCCESS) {
+		error_print("\n Error : Could not connect to TNC \n");
+		exit(EXIT_FAILURE);
+	}
+
+	rc = tnc_start_monitoring('k'); // k monitors raw frames, m monitors normal frames
+//	rc = tnc_start_monitoring('m');
+	if (rc != EXIT_SUCCESS) {
+		error_print("\n Error : Could not monitor TNC \n");
+		exit(EXIT_FAILURE);
+	}
+
+	if (g_run_self_test) {
+		debug_print("Running Self Tests..\n");
 		rc = test_pacsat_header();
 		if (rc != EXIT_SUCCESS) exit(rc);
-
 		rc = test_pacsat_dir();
 		if (rc != EXIT_SUCCESS) exit(rc);
-		printf("ALL TESTS PASSED\n");
+		rc = test_pb_list();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pb();
+		if (rc != EXIT_SUCCESS) exit(rc);
+
+		debug_print("ALL TESTS PASSED\n");
 		exit (rc);
 	}
 
-	rc = tnc_connect("127.0.0.1", AGW_PORT);
-	if (rc != EXIT_SUCCESS) {
-		printf("\n Error : Could not connect to TNC \n");
-		exit(EXIT_FAILURE);
-	}
-
-	rc = tnc_start_monitoring('k'); // k monitors raw frames
-//	rc = tnc_start_monitoring('m');
-	if (rc != EXIT_SUCCESS) {
-		printf("\n Error : Could not monitor TNC \n");
-		exit(EXIT_FAILURE);
-	}
-
+	/**
+	 * Register the callsign that will accept connection requests.
+	 */
 	rc = tnc_register_callsign(g_bbs_callsign);
 	if (rc != EXIT_SUCCESS) {
-		printf("\n Error : Could not register callsign with TNC \n");
+		error_print("\n Error : Could not register callsign with TNC \n");
 		exit(EXIT_FAILURE);
 	}
 
+	/**
+	 * Start a thread to listen to the TNC.  This will write all received frames into
+	 * a circular buffer.  This thread runs in the background and is always ready to
+	 * receive data from the TNC.
+	 *
+	 * The receive loop reads frames from the buffer and processes
+	 * them when we have time.
+	 */
 	printf("Start listen thread.\n");
 	char *name = "TNC Listen Thread";
 	rc = pthread_create( &tnc_listen_pthread, NULL, tnc_listen_process, (void*) name);
 	if (rc != EXIT_SUCCESS) {
-		printf("FATAL. Could not start the TNC listen thread.\n");
+		error_print("FATAL. Could not start the TNC listen thread.\n");
 		exit(rc);
 	}
 
+	/* Initialize the directory */
+	debug_print("LOAD DIR\n");
+	if (dir_init("/tmp/test_dir") != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
+	dir_load();
+
 //	char command[] = "PB Empty.";
 
-
-
+	/**
+	 * RECEIVE LOOP
+	 * Each time there is a new frame available in the receive buffer, process it.
+	 * We expect only these types of frames:
+	 *
+	 * DIR REQUEST
+	 * New DIR requests are added to the Pacsat Broadcast (PB) queue unless it is full
+	 *
+	 * FILE REQUEST
+	 * New FILE requests are added to the Pacsat Broadcast (PB) queue unless it is full
+	 *
+	 * CONNECTION REQUEST
+	 * This launches a state machine to handle the connection request and the
+	 * messages.  A state machine is created for each connection request.
+	 *
+	 */
 	int frame_num = 0;
 	while(1) {
 		struct t_agw_frame_ptr frame;
@@ -146,145 +177,21 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		if (on_pb) {
-			// Send a test DIR header
-
-		}
+		pb_next_action();
 
 		usleep(1000); // sleep 1000uS
 
-		if (!sent_pb_status) { // TEST - this should be a timer
-			// then send the status
-			char command[] = "PB Empty.";
-			rc = send_ui_packet(g_bbs_callsign, "PBLIST", 0xf0, command, sizeof(command));
-			if (rc != EXIT_SUCCESS) {
-				printf("\n Error : Could not send PB status to TNC \n");
-			}
-			sent_pb_status = true;
-		}
 	}
 
-	/* For testing wait until the TNC thread returns.  Otherwise the program just ends. */
+	/* For testing wait until the TNC thread returns.  Otherwise the program just ends.
+	 * TODO - catch a signal and exit the TNC thread cleanly. */
 
 	pthread_join(tnc_listen_pthread, NULL);
 	exit(EXIT_SUCCESS);
 
 }
 
-
-
-struct FRAME_HEADER {
-     unsigned char flags;
-     unsigned int file_id : 32;
-     unsigned char file_type;
-     unsigned int offset : 16;
-     unsigned char offset_msb;
-};
-
-struct DIR_HEADER { // sent by Pacsat
-	unsigned char flags;
-	unsigned int file_id : 32;
-	unsigned int offset : 32;
-	time_t t_old;
-	time_t t_new;
-};
-
-struct DIR_REQ_HEADER{ // sent by client
-	unsigned char flags;
-	unsigned int block_size : 16;
-};
-
-struct PAIR {
-	time_t start;
-	time_t end;
-};
-
-#define BROADCAST_REQUEST_HEADER_SIZE 17
-struct t_broadcast_request_header {
-	unsigned char flag;
-	unsigned char to_callsign[7];
-	unsigned char from_callsign[7];
-	unsigned char control_byte;
-	unsigned char pid;
-};
-
-void process_monitored_frame(char *from_callsign, char *to_callsign, char *data, int len) {
-	if (strncasecmp(to_callsign, g_bbs_callsign, 7) == 0) {
-		// this was sent to the BBS Callsign
-		debug_print("BBS Request\n");
-
-	}
-	if (strncasecmp(to_callsign, g_broadcast_callsign, 7) == 0) {
-		// this was sent to the Broadcast Callsign
-
-
-		struct t_broadcast_request_header *broadcast_request_header;
-		broadcast_request_header = (struct t_broadcast_request_header *)data;
-		debug_print("pid: %02x \n", broadcast_request_header->pid & 0xff);
-		if ((broadcast_request_header->pid & 0xff) == 0xbd) {
-			// Dir Request
-			struct DIR_REQ_HEADER *dir_header;
-			dir_header = (struct DIR_REQ_HEADER *)(data + BROADCAST_REQUEST_HEADER_SIZE);
-
-			/* least sig 2 bits of flags are 00 if this is a fill request */
-			if ((dir_header->flags & 0b11) == 0b00) {
-				debug_print("DIR FILL REQUEST: flags: %02x BLK_SIZE: %04x\n", dir_header->flags & 0xff, dir_header->block_size &0xffff);
-				int rc=0;
-				// ACK the station
-				char buffer[14]; // OK + 10 char for callsign with SSID
-				strlcpy(buffer,"OK ", sizeof(buffer));
-				strlcat(buffer, from_callsign, sizeof(buffer));
-				rc = send_ui_packet(g_broadcast_callsign, "BBSTAT", 0xbb, buffer, sizeof(buffer));
-				if (rc != EXIT_SUCCESS) {
-					printf("\n Error : Could not send OK Response to TNC \n");
-					exit(EXIT_FAILURE);
-				}
-//				// OK AC2CZ
-//				char pbd[] = {0x00, 0x82, 0x86, 0x64, 0x86, 0xB4, 0x40, 0x00, 0xA0, 0x8C, 0xA6,
-//								0x66, 0x40, 0x40, 0x17, 0x03, 0xBB, 0x4F, 0x4B, 0x20, 0x41, 0x43, 0x32, 0x43, 0x5A, 0x0D, 0xC0};
-//				//send_raw_packet('K', "PFS3-12", "AC2CZ", 0xbb, pbd, sizeof(pbd));
-//				// ON PB AC2CZ/D
-//				char pbd2[] ={0x00, 0xA0, 0x84, 0x98, 0x92, 0xA6, 0xA8, 0x00, 0xA0, 0x8C, 0xA6, 0x66, 0x40,
-//									0x40, 0x17, 0x03, 0xF0, 0x50, 0x42, 0x3A, 0x20, 0x41, 0x43, 0x32, 0x43, 0x5A,
-//									0x5C, 0x44, 0x0D};
-//				//send_raw_packet('K', "PFS3-12", "AC2CZ", 0xf0, pbd2, sizeof(pbd2));
-
-				// Add to PB - TEST
-				on_pb = true;
-				char buffer2[14]; // OK + 10 char for callsign with SSID
-				strlcpy(buffer2,"PB: ", sizeof(buffer2));
-				strlcat(buffer2, from_callsign, sizeof(buffer2));
-				rc = send_ui_packet(g_bbs_callsign, "PBLIST", 0xf0, buffer2, sizeof(buffer2));
-				if (rc != EXIT_SUCCESS) {
-					printf("\n Error : Could not send OK Response to TNC \n");
-					exit(EXIT_FAILURE);
-				}
-			}
-		}
-		if ((broadcast_request_header->pid & 0xff) == 0xbb) {
-			// File Request
-			debug_print("FILE REQUEST\n");
-		}
-
-	}
-}
-
-/**
- * PB
- * This Directory and File broadcast list is a list of callsigns that will receive attention from
- * the PACSAT.  It stores the callsign and the request, which is for a file or a directory.
- *
- * There are two functions.  One adds stations to the PB.  The other checks the PB and sends data if
- * that is needed. If we have finished sending data then it removes the station from the PB.
- *
- * If there are too many callsigns already then we send PBFULL.
- *
- */
-
-void add_to_pb(char *from_callsign, int fileid) {
-
-}
-
+/* TODO - move this to FTL0 */
 void connection_received(char *from_callsign, char *to_callsign, int incomming, char * data) {
 	debug_print("HANDLE CONNECTION FOR FILE UPLOAD\n");
 	char loggedin[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x00,

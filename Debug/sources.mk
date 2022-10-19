@@ -14,6 +14,7 @@ OBJS :=
 # Every subdirectory with source files must be described here
 SUBDIRS := \
 ax25/src \
+broadcast/src \
 directory/src \
 src \
 
