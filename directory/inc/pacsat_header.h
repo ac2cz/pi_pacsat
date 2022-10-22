@@ -72,8 +72,9 @@
 #define PFH_TYPE_WOD 3
 #define PFH_TYPE_IMAGES 211
 
-#define FILE_SIZE_BYTE_POS 27
-#define BODY_OFFSET_BYTE_POS 66
+#define FILE_SIZE_BYTE_POS 26
+#define BODY_OFFSET_BYTE_POS 65
+#define HEADER_CHECKSUM_BYTE_POS 60
 
 #define PSF_FILE_EXT "act"
 
@@ -114,14 +115,16 @@ typedef struct {
 }
 HEADER;
 
-void get_filename(HEADER *hdr, char *dir_name, char *filename);
-void get_user_filename(HEADER *hdr,  char *dir_name, char *filename);
+void pfh_get_filename(HEADER *hdr, char *dir_name, char *filename, int max_len);
+void pfh_get_user_filename(HEADER *hdr,  char *dir_name, char *filename, int max_len);
 HEADER *pfh_new_header();
-HEADER *pfh_extract_header(unsigned char *buffer, int nBytes, int *size);
+HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *crc_passed);
 int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder);
 HEADER * pfh_load_from_file(char *filename);
 void pfh_debug_print(HEADER *pfh);
 int test_pacsat_header();
 int write_test_msg(char *dir_folder, char *pfh_filename, char *contents, int length);
+int test_pfh_checksum() ;
+HEADER * make_test_header(unsigned int id, char *filename, char *source, char *destination, char *title, char *user_filename) ;
 
 #endif /* PACSAT_HEADER_H_ */

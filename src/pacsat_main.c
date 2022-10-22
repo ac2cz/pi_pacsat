@@ -37,8 +37,8 @@
 #include "pacsat_broadcast.h"
 
 /* Forward declarations */
+void process_frames_queued(char * data, int len);
 void connection_received(char *from_callsign, char *to_callsign, int incomming, char * data);
-void process_monitored_frame(char *from_callsign, char *to_callsign, char *data, int len);
 
 /*
  *  GLOBAL VARIABLES defined here.  They are declared in config.h
@@ -47,12 +47,15 @@ void process_monitored_frame(char *from_callsign, char *to_callsign, char *data,
  *
  */
 int g_verbose = false;
+int g_bit_rate = 1200;
 char g_bbs_callsign[10] = "PFS3-12";
 char g_broadcast_callsign[10] = "PFS3-11";
+int g_frames_queued = 0;
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
 int g_run_self_test = false;
+int frame_queue_status_known = false;
 
 int main(int argc, char *argv[]) {
 
@@ -76,13 +79,22 @@ int main(int argc, char *argv[]) {
 
 	if (g_run_self_test) {
 		debug_print("Running Self Tests..\n");
+		rc = test_pfh_checksum();
+		if (rc != EXIT_SUCCESS) exit(rc);
 		rc = test_pacsat_header();
 		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pacsat_dir_one();
+		if (rc != EXIT_SUCCESS) exit(rc);
+
 		rc = test_pacsat_dir();
 		if (rc != EXIT_SUCCESS) exit(rc);
 		rc = test_pb_list();
 		if (rc != EXIT_SUCCESS) exit(rc);
 		rc = test_pb();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pb_file();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pb_file_holes();
 		if (rc != EXIT_SUCCESS) exit(rc);
 
 		debug_print("ALL TESTS PASSED\n");
@@ -151,13 +163,16 @@ int main(int argc, char *argv[]) {
 			switch (frame.header->data_kind) {
 			case 'X': // Response to callsign registration
 				break;
+			case 'y': // Response to query of number of frames outstanding
+				process_frames_queued (frame.data, frame.header->data_len);
+				break;
 			case 'K': // Monitored frame
-				debug_print("FRM:%d:",frame_num);
-				print_header(frame.header);
-				print_data(frame.data, frame.header->data_len);
-				debug_print("\n");
+				//debug_print("FRM:%d:",frame_num);
+				//print_header(frame.header);
+				//print_data(frame.data, frame.header->data_len);
+				//debug_print("\n");
 
-				process_monitored_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
+				pb_process_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
 				break;
 			case 'C': // Connected to a station
 				debug_print("FRM:%d:",frame_num);
@@ -172,14 +187,21 @@ int main(int argc, char *argv[]) {
 				else if (strncmp(frame.data, "*** CONNECTED With Station", 26) == 0) {
 					// Outgoing: Other station accepted my connect request.
 					connection_received (frame.header->call_from, frame.header->call_to, 0, frame.data);
-				}
+				}/* If we removed a station then we don't want/need to increment the current station pointer */
+				return EXIT_SUCCESS;
 				break;
 			}
 		}
 
-		pb_next_action();
+		/* Don't take the next action until we know the state of the TNC frame queue */
 
-		usleep(1000); // sleep 1000uS
+		if (frame_queue_status_known == true) {
+			pb_next_action();
+			frame_queue_status_known = false;
+		}
+		tnc_frames_queued();
+
+		usleep(1000); // sleep 1ms
 
 	}
 
@@ -191,16 +213,23 @@ int main(int argc, char *argv[]) {
 
 }
 
+void process_frames_queued(char * data, int len) {
+	uint32_t *num = (uint32_t *)data;
+	g_frames_queued = *num;
+	frame_queue_status_known = true;
+	//debug_print("Received y: %d\n", g_frames_queued);
+}
+
 /* TODO - move this to FTL0 */
 void connection_received(char *from_callsign, char *to_callsign, int incomming, char * data) {
 	debug_print("HANDLE CONNECTION FOR FILE UPLOAD\n");
-	char loggedin[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x00,
+	unsigned char loggedin[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x00,
 			0xF0,0x05,0x02,0x34,0xC4,0xB9,0x5A,0x04};
-	send_raw_packet('K', "PFS3-12", "AC2CZ", 0xf0, loggedin, sizeof(loggedin));
+	send_K_packet("PFS3-12", "AC2CZ", 0xf0, loggedin, sizeof(loggedin));
 
-	char go[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x22,
+	unsigned char go[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x22,
 			0xF0,0x08,0x04,0x4E,0x03,0x00,0x00,0x00,0x00,0x00,0x00};
-	send_raw_packet('K', "PFS3-12", "AC2CZ", 0xf0, go, sizeof(go));
+	send_K_packet("PFS3-12", "AC2CZ", 0xf0, go, sizeof(go));
 
 	//Disconnect
 	//header.data_kind = 'd';

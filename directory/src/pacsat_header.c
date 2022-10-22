@@ -110,19 +110,18 @@ HEADER *pfh_new_header() {
 	return NULL;
 }
 
-// TODO - should pass in a max length and use strlcpy etc to avoid buffer overruns
-void get_filename(HEADER *hdr, char *dir_name, char *filename) {
-	strcpy(filename, dir_name);
-	strcat(filename, "/");
-	strcat(filename, hdr->fileName);
-	strcat(filename, ".");
-	strcat(filename, PSF_FILE_EXT);
+void pfh_get_filename(HEADER *hdr, char *dir_name, char *filename, int max_len) {
+	strlcpy(filename, dir_name, max_len);
+	strlcat(filename, "/", max_len);
+	strlcat(filename, hdr->fileName, max_len);
+	strlcat(filename, ".", max_len);
+	strlcat(filename, hdr->fileExt, max_len);
 }
 
-void get_user_filename(HEADER *hdr,  char *dir_name, char *filename) {
-	strcpy(filename, dir_name);
-	strcat(filename, "/");
-	strcat(filename, hdr->userFileName);
+void pfh_get_user_filename(HEADER *hdr,  char *dir_name, char *filename, int max_len) {
+	strlcpy(filename, dir_name, max_len);
+	strlcat(filename, "/", max_len);
+	strlcat(filename, hdr->userFileName, max_len);
 }
 
 /**
@@ -134,12 +133,13 @@ void get_user_filename(HEADER *hdr,  char *dir_name, char *filename) {
  *
  * Returns: A pointer to the allocated header.
  */
-HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size) {
+HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *crc_passed) {
 	int i = 0;
 	int bMore = 0;
 	unsigned id;
 	unsigned char length;
 	HEADER  *hdr;
+	unsigned short int crc_result = 0;
 
 	hdr = pfh_new_header();
 	if (hdr != NULL ){
@@ -152,13 +152,29 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size) {
 
 		bMore = 1;
 
+		crc_result += buffer[0] & 0xff;
+		//debug_print("%02x ",buffer[0]);
+		crc_result += buffer[1] & 0xff;
+		//debug_print("%02x ",buffer[1]);
 		i = 2; /* skip over 0xAA 0x55 */
 
-		while (bMore && i < nBytes)
-		{
+		while (bMore && i < nBytes) {
+			crc_result += buffer[i] & 0xff;
+			//debug_print("%02x ",buffer[i]);
 			id = buffer[i++];
+			crc_result += buffer[i] & 0xff;
+			//debug_print("%02x ",buffer[i]);
 			id += buffer[i++] << 8;
+			crc_result += buffer[i] & 0xff;
+			//debug_print("%02x ",buffer[i]);
 			length = buffer[i++];
+
+			if (id != HEADER_CHECKSUM) {
+				for (int j=0; j<length; j++) {
+					crc_result += buffer[i+j] & 0xff;
+					//debug_print("%02x ",buffer[i+j]);
+				}
+			}
 
 			//debug_print("ExtractHeader: id:%X length:%d ", id, length);
 
@@ -171,7 +187,7 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size) {
 				hdr->fileId = *(unsigned int *)&buffer[i];
 				break;
 			case FILE_NAME:
-				header_copy_to_str(&buffer[i], length, hdr->fileName, 9);
+				header_copy_to_str(&buffer[i], length, hdr->fileName, 8);
 				break;
 			case FILE_EXT:
 				header_copy_to_str(&buffer[i], length, hdr->fileExt, 3);
@@ -285,6 +301,12 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size) {
 		return NULL;
 	}
 
+	debug_print("CRC: %02x\n", crc_result);
+	if (crc_result == hdr->headerCRC )
+		*crc_passed = true;
+	else
+		*crc_passed = false;
+
 	return hdr;
 }
 
@@ -301,8 +323,8 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 
 	char body_filename[MAX_FILE_PATH_LEN];
 	char out_filename[MAX_FILE_PATH_LEN];
-	get_user_filename(pfh, dir_folder, body_filename);
-	get_filename(pfh,dir_folder, out_filename);
+	pfh_get_user_filename(pfh, dir_folder, body_filename, MAX_FILE_PATH_LEN);
+	pfh_get_filename(pfh,dir_folder, out_filename, MAX_FILE_PATH_LEN);
 
 	/* Clean up data values.  These are usually callsigns.
 	 * The spec says source and destination can be mixed case, but typically they
@@ -317,7 +339,7 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 		pfh->downloader[a]=toupper(pfh->downloader[a]);
 
 	/* Measure body_size and calculate body_checksum */
-	unsigned short int body_checksum = 0;
+	short int body_checksum = 0;
 	unsigned int body_size = 0;
 
 	FILE *infile = fopen(body_filename, "rb");
@@ -326,7 +348,7 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 	int ch=fgetc(infile);
 
 	while (ch!=EOF) {
-		body_checksum+=(unsigned short)ch;
+		body_checksum += ch & 0xff;
 		body_size++;
 		ch=fgetc(infile);
 	}
@@ -341,6 +363,7 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 	*p++ = 0xaa;
 	*p++ = 0x55;
 
+	pfh->headerCRC = 0; /* Zero this out so it is recalculated correctly */
 	p = add_mandatory_header(p, pfh);
 	p = add_extended_header(p, pfh);
 	p = add_optional_header(p, pfh);
@@ -351,7 +374,7 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 	*p++ = 0x00;
 
 	/* update some items in the mandatory header.  They are at a fixed offset because
-	 * all the items are mandatory
+	 * all the items before them are mandatory
 	 */
 	pfh->bodyOffset = p-&buffer[0];
 	pfh->fileSize = pfh->bodyOffset + body_size;
@@ -359,6 +382,14 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 	//debug_print("File Size: %04x\n",pfh->fileSize);
 	pfh_store_int_field(&buffer[FILE_SIZE_BYTE_POS] , FILE_SIZE, pfh->fileSize);
 	pfh_store_short_int_field(&buffer[BODY_OFFSET_BYTE_POS] , BODY_OFFSET, pfh->bodyOffset);
+
+	/* Now that all fields are populated we need to calculate the header checksum */
+	short int header_checksum = 0;
+	for (int i=0; i< pfh->bodyOffset; i++) {
+		header_checksum += buffer[i] & 0xff;
+	}
+	pfh->headerCRC = header_checksum;
+	pfh_store_short_int_field(&buffer[HEADER_CHECKSUM_BYTE_POS] , HEADER_CHECKSUM, header_checksum);
 
 	int rc = pfh_save_pacsatfile(buffer, pfh->bodyOffset, out_filename, body_filename);
 
@@ -388,8 +419,18 @@ HEADER * pfh_load_from_file(char *filename) {
 		return NULL; // nothing was read
 	}
 	int size;
-	pfh = pfh_extract_header(buffer, 1025, &size);
+	int crc_passed;
+	pfh = pfh_extract_header(buffer, 1025, &size, &crc_passed);
 	//debug_print("Read: %d Header size: %d\n",num, size);
+
+	// TODO - if we load from the file and the CRC does not pass then this was corrupted
+	if (crc_passed)
+		debug_print("CRC passed when loading PFH from file\n");
+	else {
+		debug_print("CRC failed when loading PFH from file\n");
+		return NULL;
+	}
+
 	fclose(f);
 	return pfh;
 }
@@ -426,6 +467,8 @@ void pfh_debug_print(HEADER *pfh) {
 
 	debug_print("Source:%s ", pfh->source);
 	debug_print("Dest:%s ", pfh->destination);
+	debug_print("Crc:%04x ", pfh->headerCRC);
+	debug_print("Size:%04x ", pfh->fileSize);
 
 	char buf[30];
 	time_t now = pfh->createTime;
@@ -540,7 +583,7 @@ unsigned char * pfh_store_str_field(unsigned char *buffer, unsigned short id, un
 unsigned char * add_mandatory_header(unsigned char *p, HEADER *pfh) {
 	/* Mandatory header */
 	p = pfh_store_int_field(p, FILE_ID, pfh->fileId);
-	p = pfh_store_str_field(p, FILE_NAME, 9, pfh->fileName);
+	p = pfh_store_str_field(p, FILE_NAME, 8, pfh->fileName);
 	p = pfh_store_str_field(p, FILE_EXT, 3, pfh->fileExt);
 	p = pfh_store_int_field(p, FILE_SIZE, pfh->fileSize); // this is the size of the header and file, so populated at end
 	p = pfh_store_int_field(p, CREATE_TIME, pfh->createTime);
@@ -645,6 +688,37 @@ void pfh_populate_test_header(HEADER *pfh, char *user_file_name) {
 	}
 }
 
+HEADER * make_test_header(unsigned int id, char *filename, char *source, char *destination, char *title, char *user_filename) {
+	HEADER *pfh= pfh_new_header();
+	if (pfh != NULL) {
+		/* Required Header Information */
+		pfh->fileId = id;
+		strlcpy(pfh->fileName,filename, sizeof(pfh->fileName));
+		strlcpy(pfh->fileExt,PSF_FILE_EXT, sizeof(pfh->fileExt));
+
+		time_t now = time(0); // Get the system time in seconds since the epoch
+		pfh->createTime = now;
+		pfh->modifiedTime = now;
+		pfh->SEUflag = 1;
+		pfh->fileType = PFH_TYPE_ASCII;
+
+		/* Extended Header Information */
+		strlcpy(pfh->source,source, sizeof(pfh->source));
+
+		pfh->uploadTime = 0;
+		pfh->downloadCount = 0;
+		strlcpy(pfh->destination,destination, sizeof(pfh->destination));
+		pfh->downloadTime = 0;
+		pfh->expireTime = now + 30*24*60*60;  // use for testing
+		pfh->priority = 0;
+
+		/* Optional Header Information */
+		strlcpy(pfh->title,title, sizeof(pfh->title));
+		strlcpy(pfh->userFileName,user_filename, sizeof(pfh->userFileName));
+	}
+	return pfh;
+}
+
 int write_test_msg(char *dir_folder, char *pfh_filename, char *contents, int length) {
 	char filename[MAX_FILE_PATH_LEN];
 	strcpy(filename, dir_folder);
@@ -673,13 +747,14 @@ int test_pacsat_header() {
 	pfh_debug_print(pfh);
 
 	/* Make test files */
-
 	char *msg = "Hi there,\nThis is a test message\n73 Chris\n";
 	rc = write_test_msg(".", userfilename1, msg, strlen(msg));
 	if (rc != EXIT_SUCCESS) { printf("** Failed to make file.txt file.\n"); return EXIT_FAILURE; }
 
 	rc = pfh_make_pacsat_file(pfh, ".");
 	if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file.  Make sure there is a test file called %s\n",userfilename1); return EXIT_FAILURE; }
+	pfh_debug_print(pfh);
+	if (pfh->fileId != 0x1234) { 				printf("** Wrong fileId\n"); rc = EXIT_FAILURE; }
 
 	HEADER * pfh2 = pfh_load_from_file(filename1);
 	if (pfh2 == NULL) { printf("** Failed to load pacsat header\n"); return EXIT_FAILURE; }
@@ -726,4 +801,62 @@ int test_pacsat_header() {
 	else
 		printf(" TEST PACSAT HEADER: fail:\n");
 	return rc;
+}
+
+int test_pfh_checksum() {
+	printf(" TEST PACSAT HEADER CRC:\n");
+	int rc = EXIT_SUCCESS;
+
+	debug_print("Test PFH with checksum: Expected CRC: 282b\n");
+	unsigned char big_header [] = {0xAA, 0x55, 0x01, 0x00, 0x04, 0x47, 0x03, 0x00, 0x00, 0x02, 0x00, 0x08, 0x35, 0x61, 0x62, 0x39, 0x38, 0x34, 0x62,
+			0x30, 0x03, 0x00, 0x03, 0x20, 0x20, 0x20, 0x04, 0x00, 0x04, 0xDE, 0x3D, 0x01, 0x00, 0x05, 0x00, 0x04, 0x47, 0x7D, 0xB9, 0x5A,
+			0x06, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x01, 0x00, 0x08, 0x00, 0x01, 0x10, 0x09, 0x00, 0x02, 0x3E, 0x54,
+			0x0A, 0x00, 0x02, 0x2B, 0x28,
+			0x0B, 0x00, 0x02, 0xD8, 0x00, 0x10, 0x00, 0x05, 0x53, 0x54, 0x32, 0x4E, 0x48, 0x11, 0x00, 0x06, 0x53,
+			0x54, 0x32, 0x4E, 0x48, 0x20, 0x12, 0x00, 0x04, 0x31, 0x85, 0xB9, 0x5A, 0x13, 0x00, 0x01, 0x00, 0x14, 0x00, 0x03, 0x41, 0x4C,
+			0x4C, 0x15, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x48, 0x00, 0x16, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x17, 0x00, 0x04, 0xC7,
+			0x71, 0xBD, 0x5A, 0x18, 0x00, 0x01, 0x00, 0x19, 0x00, 0x01, 0x00, 0x22, 0x00, 0x10, 0x4D, 0x59, 0x20, 0x53, 0x48, 0x41, 0x43,
+			0x4B, 0x20, 0x41, 0x4E, 0x44, 0x20, 0x41, 0x4E, 0x54, 0x23, 0x00, 0x04, 0x3C, 0x57, 0x3E, 0x20, 0x26, 0x00, 0x11, 0x73, 0x74,
+			0x32, 0x6E, 0x68, 0x20, 0x70, 0x69, 0x63, 0x20, 0x61, 0x6E, 0x74, 0x2E, 0x6A, 0x70, 0x67, 0x2A, 0x00, 0x07, 0x41, 0x57, 0x55,
+			0x32, 0x2E, 0x31, 0x30, 0x2E, 0x00, 0x08, 0xAE, 0x47, 0xE1, 0x7A, 0x14, 0x2E, 0x2F, 0x40, 0x2F, 0x00, 0x08, 0xCD, 0xCC, 0xCC,
+			0xCC, 0xCC, 0x4C, 0x40, 0xC0, 0x00, 0x00, 0x00};
+
+	int size = 0;
+	int crc_passed = false;
+	HEADER *pfh = pfh_extract_header(big_header, sizeof(big_header), &size, &crc_passed);
+	pfh_debug_print(pfh);
+	if (crc_passed)
+		debug_print("CRC PASSED\n");
+	else {
+		debug_print("CRC FAILED\n");
+		return EXIT_FAILURE;
+	}
+	debug_print("Calculate PFH checksum: Expected CRC: 282b\n");
+	unsigned char big_header_no_checksum [] = {0xAA, 0x55, 0x01, 0x00, 0x04, 0x47, 0x03, 0x00, 0x00, 0x02, 0x00, 0x08, 0x35, 0x61, 0x62, 0x39, 0x38, 0x34, 0x62,
+				0x30, 0x03, 0x00, 0x03, 0x20, 0x20, 0x20, 0x04, 0x00, 0x04, 0xDE, 0x3D, 0x01, 0x00, 0x05, 0x00, 0x04, 0x47, 0x7D, 0xB9, 0x5A,
+				0x06, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x01, 0x00, 0x08, 0x00, 0x01, 0x10, 0x09, 0x00, 0x02, 0x3E, 0x54,
+				0x0A, 0x00, 0x02, 0x00, 0x00,
+				0x0B, 0x00, 0x02, 0xD8, 0x00, 0x10, 0x00, 0x05, 0x53, 0x54, 0x32, 0x4E, 0x48, 0x11, 0x00, 0x06, 0x53,
+				0x54, 0x32, 0x4E, 0x48, 0x20, 0x12, 0x00, 0x04, 0x31, 0x85, 0xB9, 0x5A, 0x13, 0x00, 0x01, 0x00, 0x14, 0x00, 0x03, 0x41, 0x4C,
+				0x4C, 0x15, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x48, 0x00, 0x16, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x17, 0x00, 0x04, 0xC7,
+				0x71, 0xBD, 0x5A, 0x18, 0x00, 0x01, 0x00, 0x19, 0x00, 0x01, 0x00, 0x22, 0x00, 0x10, 0x4D, 0x59, 0x20, 0x53, 0x48, 0x41, 0x43,
+				0x4B, 0x20, 0x41, 0x4E, 0x44, 0x20, 0x41, 0x4E, 0x54, 0x23, 0x00, 0x04, 0x3C, 0x57, 0x3E, 0x20, 0x26, 0x00, 0x11, 0x73, 0x74,
+				0x32, 0x6E, 0x68, 0x20, 0x70, 0x69, 0x63, 0x20, 0x61, 0x6E, 0x74, 0x2E, 0x6A, 0x70, 0x67, 0x2A, 0x00, 0x07, 0x41, 0x57, 0x55,
+				0x32, 0x2E, 0x31, 0x30, 0x2E, 0x00, 0x08, 0xAE, 0x47, 0xE1, 0x7A, 0x14, 0x2E, 0x2F, 0x40, 0x2F, 0x00, 0x08, 0xCD, 0xCC, 0xCC,
+				0xCC, 0xCC, 0x4C, 0x40, 0xC0, 0x00, 0x00, 0x00};
+
+
+	unsigned short int result = 0;
+	for (int i=0; i< sizeof(big_header_no_checksum); i++)
+		result += big_header_no_checksum[i] & 0xff;
+	debug_print("CRC: %02x\n", result);
+
+	if (result != 0x282b) { printf("** Mismatched CRC\n"); return EXIT_FAILURE; }
+
+	if (rc == EXIT_SUCCESS)
+			printf(" TEST PACSAT HEADER CRC: success:\n");
+		else
+			printf(" TEST PACSAT HEADER CRC: fail:\n");
+		return rc;
+
 }

@@ -34,9 +34,11 @@
 #define AGW_PORT 8000
 
 extern int g_verbose;          /* print verbose output when set */
+extern int g_bit_rate;		   /* the bit rate of the TNC - 1200 4800 9600 etc) */
 extern int g_run_self_test;    /* true when the self test is running */
 extern char g_bbs_callsign[MAX_CALLSIGN_LEN];
 extern char g_broadcast_callsign[MAX_CALLSIGN_LEN];
 extern char g_digi_callsign[MAX_CALLSIGN_LEN];
+extern int g_frames_queued; /* The number of frames waiting to be transmitted */
 
 #endif /* CONFIG_H_ */
