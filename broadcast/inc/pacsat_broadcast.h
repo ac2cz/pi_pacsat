@@ -31,6 +31,7 @@
 
 // TODO - this should be in the CONFIG file
 #define PB_STATUS_PERIOD_IN_SECONDS 30
+#define PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS 36000 // This is 10 mins in the spec 10*60*60 seconds
 #define MAX_PB_LENGTH 10 /* This is the maximum number of stations that can be on the PB at one time */
 #define PB_DIR_REQUEST_TYPE 1
 #define PB_FILE_REQUEST_TYPE 2

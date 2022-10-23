@@ -164,7 +164,7 @@ int tnc_frames_queued() {
  * Direwolf also assumes the PID is F0.
  *
  */
-int send_M_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len) {
+int send_ui_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len) {
 	struct t_agw_header header;
 
 	debug_print("SENDING: ");
@@ -209,7 +209,7 @@ if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mod
 	return EXIT_SUCCESS;
 }
 
-int send_K_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len) {
+int send_raw_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len) {
 	struct t_agw_header header;
 
 	debug_print("SENDING: ");

@@ -128,7 +128,7 @@ int main(int argc, char *argv[]) {
 
 	/* Initialize the directory */
 	debug_print("LOAD DIR\n");
-	if (dir_init("/tmp/test_dir") != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
+	if (dir_init("./dir") != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 
 //	char command[] = "PB Empty.";
@@ -225,11 +225,11 @@ void connection_received(char *from_callsign, char *to_callsign, int incomming, 
 	debug_print("HANDLE CONNECTION FOR FILE UPLOAD\n");
 	unsigned char loggedin[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x00,
 			0xF0,0x05,0x02,0x34,0xC4,0xB9,0x5A,0x04};
-	send_K_packet("PFS3-12", "AC2CZ", 0xf0, loggedin, sizeof(loggedin));
+	send_raw_packet("PFS3-12", "AC2CZ", 0xf0, loggedin, sizeof(loggedin));
 
 	unsigned char go[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x22,
 			0xF0,0x08,0x04,0x4E,0x03,0x00,0x00,0x00,0x00,0x00,0x00};
-	send_K_packet("PFS3-12", "AC2CZ", 0xf0, go, sizeof(go));
+	send_raw_packet("PFS3-12", "AC2CZ", 0xf0, go, sizeof(go));
 
 	//Disconnect
 	//header.data_kind = 'd';

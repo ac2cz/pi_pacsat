@@ -109,7 +109,7 @@ int pb_make_file_broadcast(HEADER *pfh, unsigned char *data_bytes,
 FILE_DATE_PAIR * get_file_holes_list(char *data);
 int get_num_of_file_holes(int request_len);
 
-void pb_debug_dir_req(char *data, int len);
+void pb_debug_print_dir_req(char *data, int len);
 void pb_debug_print_dir_holes(DIR_DATE_PAIR *holes, int num_of_holes);
 void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes);
 void pb_debug_print_list_item(int i);
@@ -151,7 +151,7 @@ int sent_pb_status = false;
 int pb_send_status() {
 	if (pb_shut) {
 		unsigned char shut[] = "PB Closed.";
-		int rc = send_K_packet(g_broadcast_callsign, PBSHUT, PID_NO_PROTOCOL, shut, sizeof(shut));
+		int rc = send_raw_packet(g_broadcast_callsign, PBSHUT, PID_NO_PROTOCOL, shut, sizeof(shut));
 		return rc;
 //	} else if (number_on_pb == MAX_PB_LENGTH -1) {
 //		char full[] = "PB Full.";
@@ -166,7 +166,7 @@ int pb_send_status() {
 		pb_make_list_str(buffer, sizeof(buffer));
 		unsigned char command[strlen(buffer)]; // now put the list in a buffer of the right size
 		strlcpy((char *)command, (char *)buffer,sizeof(command));
-		int rc = send_K_packet(g_broadcast_callsign, CALL, PID_NO_PROTOCOL, command, sizeof(command));
+		int rc = send_raw_packet(g_broadcast_callsign, CALL, PID_NO_PROTOCOL, command, sizeof(command));
 		return rc;
 	}
 }
@@ -182,12 +182,8 @@ int pb_send_ok(char *from_callsign) {
 	char buffer[4 + strlen(from_callsign)]; // OK + 10 char for callsign with SSID
 	strlcpy(buffer,"OK ", sizeof(buffer));
 	strlcat(buffer, from_callsign, sizeof(buffer));
-	rc = send_K_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
+	rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
 
-	//				// OK AC2CZ
-	//				char pbd[] = {0x00, 0x82, 0x86, 0x64, 0x86, 0xB4, 0x40, 0x00, 0xA0, 0x8C, 0xA6,
-	//								0x66, 0x40, 0x40, 0x17, 0x03, 0xBB, 0x4F, 0x4B, 0x20, 0x41, 0x43, 0x32, 0x43, 0x5A, 0x0D, 0xC0};
-	//				//send_raw_packet('K', "PFS3-12", "AC2CZ", 0xbb, pbd, sizeof(pbd));
 	return rc;
 }
 
@@ -211,7 +207,7 @@ int pb_send_err(char *from_callsign, int err) {
 	strlcat(buffer," ", sizeof(buffer));
 	strlcat(buffer, from_callsign, sizeof(buffer));
 	strncat(buffer,&CR,1); // very specifically add just one char to the end of the string for the CR
-	rc = send_K_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
+	rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
 
 	return rc;
 }
@@ -310,6 +306,12 @@ int pb_remove_request(int pos) {
 	return EXIT_SUCCESS;
 }
 
+/**
+ * pb_make_list_str()
+ *
+ * Build the status string that is periodically transmitted.
+ * The *buffer to receive the string and its length len should be passed in.
+ */
 void pb_make_list_str(char *buffer, int len) {
 	if (number_on_pb == 0)
 		strlcpy(buffer, "PB Empty.", len);
@@ -352,12 +354,13 @@ void pb_debug_print_list_item(int i) {
  *
  * process a UI frame received from a ground station.  This may contain a Pacsat Broadcast request,
  * otherwise it can be ignored.
+ * This is called from the main processing loop whenever a type K frame is received.
  *
  */
 void pb_process_frame(char *from_callsign, char *to_callsign, char *data, int len) {
 	if (strncasecmp(to_callsign, g_bbs_callsign, 7) == 0) {
 		// this was sent to the BBS Callsign
-		debug_print("BBS Request\n");
+		debug_print("BBS Request - Ignored\n");
 
 	}
 	if (strncasecmp(to_callsign, g_broadcast_callsign, 7) == 0) {
@@ -365,14 +368,12 @@ void pb_process_frame(char *from_callsign, char *to_callsign, char *data, int le
 
 		struct t_broadcast_request_header *broadcast_request_header;
 		broadcast_request_header = (struct t_broadcast_request_header *)data;
-		debug_print("pid: %02x \n", broadcast_request_header->pid & 0xff);
+		debug_print("Broadcast Request: pid: %02x \n", broadcast_request_header->pid & 0xff);
 		if ((broadcast_request_header->pid & 0xff) == PID_DIRECTORY) {
-			debug_print("DIR REQUEST\n");
 			pb_handle_dir_request(from_callsign, data, len);
 		}
 		if ((broadcast_request_header->pid & 0xff) == PID_FILE) {
 			// File Request
-			debug_print("FILE REQUEST\n");
 			pb_handle_file_request(from_callsign, data, len);
 		}
 	}
@@ -385,6 +386,9 @@ void pb_process_frame(char *from_callsign, char *to_callsign, char *data, int le
  *
  * Process a dir request from a ground station
  *
+ * Returns EXIT_SUCCESS if the request could be processed, even if the
+ * station was not added to the PB.  Only returns EXIT_FAILURE if there is
+ * an unexpected error, such as the TNC is unavailable.
  */
 int pb_handle_dir_request(char *from_callsign, char *data, int len) {
 	// Dir Request
@@ -392,47 +396,47 @@ int pb_handle_dir_request(char *from_callsign, char *data, int len) {
 	DIR_REQ_HEADER *dir_header;
 	dir_header = (DIR_REQ_HEADER *)(data + sizeof(AX25_HEADER));
 
+	// TODO - we do not check bit 5, which must be 1 or the version bits, which must be 00.
+
 	/* least sig 2 bits of flags are 00 if this is a fill request */
 	if ((dir_header->flags & 0b11) == 0b00) {
-		pb_debug_dir_req(data, len);
+		pb_debug_print_dir_req(data, len);
 		debug_print("DIR FILL REQUEST: flags: %02x BLK_SIZE: %04x\n", dir_header->flags & 0xff, dir_header->block_size &0xffff);
 
-//		for (int i=0; i < len; i++) {
-//			printf("0x%02x,",data[i] & 0xff);
-//		}
-
+		/* Get the number of holes in this request and make sure it is in a valid range */
 		int num_of_holes = get_num_of_dir_holes(len);
 		if (num_of_holes < 1 || num_of_holes > AX25_MAX_DATA_LEN / sizeof(DIR_DATE_PAIR)) {
 			/* This does not have a valid holes list */
 			rc = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 			if (rc != EXIT_SUCCESS) {
 				error_print("\n Error : Could not send ERR Response to TNC \n");
-				//exit(EXIT_FAILURE);
+				return EXIT_FAILURE;
 			}
 			return EXIT_SUCCESS;
 		}
-		// Add to the PB
+		/* Add to the PB if we can*/
 		DIR_DATE_PAIR * holes = get_dir_holes_list(data);
 		if (pb_add_request(from_callsign, PB_DIR_REQUEST_TYPE, NULL, 0, 0, holes, num_of_holes) == EXIT_SUCCESS) {
 			// ACK the station
 			rc = pb_send_ok(from_callsign);
 			if (rc != EXIT_SUCCESS) {
 				error_print("\n Error : Could not send OK Response to TNC \n");
-				//exit(EXIT_FAILURE);
+				return EXIT_FAILURE;
 			}
 		} else {
-			// the protocol says NO -1 means temporary problem. e.g. shut and -2 means permanent
-			rc = pb_send_err(from_callsign, PB_ERR_TEMPORARY); // shut or closed
+			// the protocol says NO -1 means temporary problem. e.g. shut or you are already on the PB, and -2 means permanent
+			rc = pb_send_err(from_callsign, PB_ERR_TEMPORARY);
 			if (rc != EXIT_SUCCESS) {
 				error_print("\n Error : Could not send ERR Response to TNC \n");
-				//exit(EXIT_FAILURE);
+				return EXIT_FAILURE;
 			}
 		}
 	} else {
+		/* There are no other valid DIR Requests other than a fill */
 		rc = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 		if (rc != EXIT_SUCCESS) {
 			error_print("\n Error : Could not send ERR Response to TNC \n");
-			//exit(EXIT_FAILURE);
+			return EXIT_FAILURE;
 		}
 	}
 	return rc;
@@ -481,7 +485,7 @@ void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes) {
 	debug_print("\n");
 }
 
-void pb_debug_dir_req(char *data, int len) {
+void pb_debug_print_dir_req(char *data, int len) {
 	DIR_REQ_HEADER *dir_header;
 	dir_header = (DIR_REQ_HEADER *)(data + sizeof(AX25_HEADER));
 	debug_print("DIR REQ: flags: %02x BLK_SIZE: %04x ", dir_header->flags & 0xff, dir_header->block_size &0xffff);
@@ -502,7 +506,8 @@ void pb_debug_dir_req(char *data, int len) {
  *
  * Parse the data from a Broadcast File Request and add an entry on the PB.
  *
- * Returns EXIT_SUCCESS
+ * Returns EXIT_SUCCESS if the station was added to the PB, otherwise it
+ * returns EXIT_FAILURE
  */
 int pb_handle_file_request(char *from_callsign, char *data, int len) {
 	// File Request
@@ -510,25 +515,24 @@ int pb_handle_file_request(char *from_callsign, char *data, int len) {
 	FILE_REQ_HEADER *file_header;
 	file_header = (FILE_REQ_HEADER *)(data + sizeof(AX25_HEADER));
 
-	/////////// TODO - validate the packet here and send err -5 if it fails
 	debug_print("FILE REQUEST: flags: %02x file: %04x BLK_SIZE: %04x\n", file_header->flags & 0xff, file_header->file_id &0xffff, file_header->block_size &0xffff);
 
-	/* least sig 2 bits of flags are 00 if this is a request to send a new file */
-	if ((file_header->flags & 0b11) == PB_START_SENDING_FILE) {
-		/* Start Sending the file */
-		//pb_debug_dir_req(data, len);
-
-		// Add to the PB
-		/* First, does the file exist */
-		DIR_NODE * node = dir_get_node_by_id(file_header->file_id);
-		if (node == NULL) {
-			rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
-			if (rc != EXIT_SUCCESS) {
-				error_print("\n Error : Could not send ERR Response to TNC \n");
-				//exit(EXIT_FAILURE);
-			}
-			return EXIT_SUCCESS;
+	/* First, does the file exist */
+	DIR_NODE * node = dir_get_node_by_id(file_header->file_id);
+	if (node == NULL) {
+		rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+		if (rc != EXIT_SUCCESS) {
+			error_print("\n Error : Could not send ERR Response to TNC \n");
+			//exit(EXIT_FAILURE);
 		}
+		return EXIT_FAILURE;
+	}
+
+	switch ((file_header->flags & 0b11)) {
+
+	case PB_START_SENDING_FILE :
+		/* least sig 2 bits of flags are 00 if this is a request to send a new file */
+		// Add to the PB
 
 		if (pb_add_request(from_callsign, PB_FILE_REQUEST_TYPE, node, file_header->file_id, 0, 0, 0) == EXIT_SUCCESS) {
 			// ACK the station
@@ -546,23 +550,18 @@ int pb_handle_file_request(char *from_callsign, char *data, int len) {
 			}
 			return EXIT_FAILURE;
 		}
-	} else if ((file_header->flags & 0b11) == PB_STOP_SENDING_FILE) {
+		break;
+
+
+	case PB_STOP_SENDING_FILE :
 		/* A station can only stop a file broadcast if they started it */
 		error_print("\n NOT IMPLEMENTED YET : Unable to handle a file download cancel request \n");
 		return EXIT_FAILURE;
+		break;
 
-	} else if ((file_header->flags & 0b11) == PB_FILE_HOLE_LIST) {
-		/* First, does the file exist */
-		DIR_NODE * node = dir_get_node_by_id(file_header->file_id);
-		if (node == NULL) {
-			rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
-			if (rc != EXIT_SUCCESS) {
-				error_print("\n Error : Could not send ERR Response to TNC \n");
-				//exit(EXIT_FAILURE);
-			}
-			return EXIT_SUCCESS;
-		}
 
+	case PB_FILE_HOLE_LIST :
+		/* Process the hole list for the file */
 		int num_of_holes = get_num_of_file_holes(len);
 		if (num_of_holes < 1 || num_of_holes > AX25_MAX_DATA_LEN / sizeof(FILE_DATE_PAIR)) {
 			/* This does not have a valid holes list */
@@ -585,13 +584,18 @@ int pb_handle_file_request(char *from_callsign, char *data, int len) {
 		} else {
 			return EXIT_FAILURE;
 		}
-	} else {
+		break;
+
+
+	default :
 		rc = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 		if (rc != EXIT_SUCCESS) {
 			error_print("\n Error : Could not send ERR Response to TNC \n");
 			//exit(EXIT_FAILURE);
 		}
 		return EXIT_FAILURE;
+		break;
+
 	}
 	return rc;
 }
@@ -621,13 +625,23 @@ int pb_next_action() {
 		sent_pb_status = true;
 	}
 
+	/* Print debug info to the console */
 	if (now - last_pb_frames_queued_time > 2) {
-		debug_print("Frames Queued: %d\n", g_frames_queued);
+		char buffer[256];
+		pb_make_list_str(buffer, sizeof(buffer));
+		debug_print("%s | %d frames queued\n", buffer, g_frames_queued);
 		last_pb_frames_queued_time = now;
 	}
 
 	/* Now process the next station on the PB if there is one and take its action */
 	if (number_on_pb == 0) return EXIT_SUCCESS; // nothing to do
+
+	if (now - pb_list[current_station_on_pb].request_time > PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS) {
+		/* This station has exceeded the time allowed on the PB */
+		pb_remove_request(current_station_on_pb);
+		/* If we removed a station then we don't want/need to increment the current station pointer */
+		return EXIT_SUCCESS;
+	}
 
 	if (g_frames_queued > 5) return EXIT_SUCCESS; /* TNC is Busy */
 
@@ -666,8 +680,7 @@ int pb_next_action() {
 
 		}
 		else {
-			/* We found a header */
-
+			/* We found a dir header */
 			pb_list[current_station_on_pb].node = node->next; /* Store where we are in this broadcast of DIR fills */
 			if (node->next == NULL) {
 				/* There are no more records, we are at the end of the list */
@@ -681,7 +694,7 @@ int pb_next_action() {
 			if (data_len == 0) {printf("** Could not create the test DIR Broadcast frame\n"); return EXIT_FAILURE; }
 
 			/* Send the fill and finish */
-			int rc = send_K_packet(g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
+			int rc = send_raw_packet(g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			//int rc = send_raw_packet('K', g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			if (rc != EXIT_SUCCESS) {
 				error_print("Could not send broadcast packet to TNC \n");
@@ -708,7 +721,7 @@ int pb_next_action() {
 			 *  Request to broadcast the whole file
 			 */
 
-			// SEND THE NEXT CHUNK OF THE FILE BASED ON THE OFFSET
+			/* SEND THE NEXT CHUNK OF THE FILE BASED ON THE OFFSET */
 			char psf_filename[MAX_FILE_PATH_LEN];
 			pfh_get_filename(pb_list[current_station_on_pb].node->pfh,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
 			FILE * f = fopen(psf_filename, "r");
@@ -772,7 +785,7 @@ int pb_next_action() {
 			}
 
 			/* Send the fill and finish */
-			int rc = send_K_packet(g_bbs_callsign, QST, PID_FILE, data_bytes, data_len);
+			int rc = send_raw_packet(g_bbs_callsign, QST, PID_FILE, data_bytes, data_len);
 			if (rc != EXIT_SUCCESS) {
 				error_print("Could not send broadcast packet to TNC \n");
 				return EXIT_FAILURE;
