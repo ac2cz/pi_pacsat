@@ -4,12 +4,10 @@ For those interested I have a list of the Pacsat Protocol documents on this page
 
 To build this, clone the repository then cd into the Debug folder
 
-You can use:
-make all
-
-to build everything, or
-make clean to remove all the compiled objects.
+You can use:  make all to build everything, or make clean to remove all the compiled objects.
 
 Follow the instructions to setup direwolf from https://github.com/wb2osz/direwolf/blob/master/doc/
 
 To run the program start direwolf in one terminal and then run Pacsat in another.  It should connect to the direwolf AGW engine to send and receive packets.
+
+Currently this supports only broadcast requests and transmissions.  You can request the directory or a file.  More to come as I build this out.
