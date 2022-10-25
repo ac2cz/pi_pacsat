@@ -560,9 +560,9 @@ int pb_handle_file_request(char *from_callsign, char *data, int len) {
 		break;
 
 
+	int num_of_holes = 0;
 	case PB_FILE_HOLE_LIST :
 		/* Process the hole list for the file */
-		int num_of_holes = 0;
 		num_of_holes = get_num_of_file_holes(len);
 		if (num_of_holes < 1 || num_of_holes > AX25_MAX_DATA_LEN / sizeof(FILE_DATE_PAIR)) {
 			/* This does not have a valid holes list */
