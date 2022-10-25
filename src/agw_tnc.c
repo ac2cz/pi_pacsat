@@ -34,7 +34,6 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <assert.h>
-#include <str_util.h>
 #include <string.h>
 
 /* program include files */
@@ -42,6 +41,7 @@
 #include "debug.h"
 #include "agw_tnc.h"
 #include "ax25_tools.h"
+#include "str_util.h"
 
 int sockfd = 0;
 
