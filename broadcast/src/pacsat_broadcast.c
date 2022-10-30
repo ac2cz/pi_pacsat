@@ -101,10 +101,11 @@ int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, 
 int pb_handle_dir_request(char *from_callsign, char *data, int len);
 int pb_handle_file_request(char *from_callsign, char *data, int len);
 void pb_make_list_str(char *buffer, int len);
-int pb_make_dir_broadcast(DIR_NODE *node, unsigned char *data_bytes);
+int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes);
 DIR_DATE_PAIR * get_dir_holes_list(char *data);
 int get_num_of_dir_holes(int request_len);
-int pb_make_file_broadcast(HEADER *pfh, unsigned char *data_bytes,
+int pb_broadcast_next_file_chunk(HEADER *psf, char * psf_filename, int offset, int length, int file_size);
+int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
 		unsigned char *buffer, int number_of_bytes_read, int offset, int chunk_includes_last_byte);
 FILE_DATE_PAIR * get_file_holes_list(char *data);
 int get_num_of_file_holes(int request_len);
@@ -174,7 +175,7 @@ int pb_send_status() {
 /**
  * pb_send_ok()
  *
- * Send a UI frame from the bbs callsign to the station with PID BB and the
+ * Send a UI frame from the broadcast callsign to the station with PID BB and the
  * text OK <callsign>0x0Drequest_list
  */
 int pb_send_ok(char *from_callsign) {
@@ -380,7 +381,6 @@ void pb_process_frame(char *from_callsign, char *to_callsign, char *data, int le
 }
 
 
-
 /**
  * pb_handle_dir_request()
  *
@@ -512,10 +512,11 @@ void pb_debug_print_dir_req(char *data, int len) {
 int pb_handle_file_request(char *from_callsign, char *data, int len) {
 	// File Request
 	int rc=EXIT_SUCCESS;
+	int num_of_holes = 0;
 	FILE_REQ_HEADER *file_header;
 	file_header = (FILE_REQ_HEADER *)(data + sizeof(AX25_HEADER));
 
-	debug_print("FILE REQUEST: flags: %02x file: %04x BLK_SIZE: %04x\n", file_header->flags & 0xff, file_header->file_id &0xffff, file_header->block_size &0xffff);
+	debug_print("FILE REQUEST: flags: %02x file: %04x BLK_SIZE: %04x", file_header->flags & 0xff, file_header->file_id &0xffff, file_header->block_size &0xffff);
 
 	/* First, does the file exist */
 	DIR_NODE * node = dir_get_node_by_id(file_header->file_id);
@@ -533,7 +534,7 @@ int pb_handle_file_request(char *from_callsign, char *data, int len) {
 	case PB_START_SENDING_FILE :
 		/* least sig 2 bits of flags are 00 if this is a request to send a new file */
 		// Add to the PB
-
+		debug_print(" - send whole file\n");
 		if (pb_add_request(from_callsign, PB_FILE_REQUEST_TYPE, node, file_header->file_id, 0, 0, 0) == EXIT_SUCCESS) {
 			// ACK the station
 			rc = pb_send_ok(from_callsign);
@@ -555,12 +556,11 @@ int pb_handle_file_request(char *from_callsign, char *data, int len) {
 
 	case PB_STOP_SENDING_FILE :
 		/* A station can only stop a file broadcast if they started it */
+		debug_print(" - stop sending file\n");
 		error_print("\n NOT IMPLEMENTED YET : Unable to handle a file download cancel request \n");
 		return EXIT_FAILURE;
 		break;
 
-
-	int num_of_holes = 0;
 	case PB_FILE_HOLE_LIST :
 		/* Process the hole list for the file */
 		num_of_holes = get_num_of_file_holes(len);
@@ -571,10 +571,22 @@ int pb_handle_file_request(char *from_callsign, char *data, int len) {
 				error_print("\n Error : Could not send ERR Response to TNC \n");
 				//exit(EXIT_FAILURE);
 			}
-			return EXIT_SUCCESS;
+			return EXIT_FAILURE;
 		}
 		FILE_DATE_PAIR * holes = get_file_holes_list(data);
-
+		pb_debug_print_file_holes(holes, num_of_holes);
+		/* Check the integrity of the holes list.  The offset has to be inside the file length */
+		for (int i=0; i < num_of_holes; i++) {
+			if (holes[i].offset >= node->pfh->fileSize) {
+				/* This does not have a valid holes list */
+				rc = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
+				if (rc != EXIT_SUCCESS) {
+					error_print("\n Error : Could not send ERR Response to TNC \n");
+					//exit(EXIT_FAILURE);
+				}
+				return EXIT_FAILURE;
+			}
+		}
 		if (pb_add_request(from_callsign, PB_FILE_REQUEST_TYPE, node, file_header->file_id, 0, holes, num_of_holes) == EXIT_SUCCESS) {
 			// ACK the station
 			rc = pb_send_ok(from_callsign);
@@ -646,10 +658,11 @@ int pb_next_action() {
 
 	if (g_frames_queued > 5) return EXIT_SUCCESS; /* TNC is Busy */
 
+	/**
+	 *  Request to broadcast directory
+	 */
 	if (pb_list[current_station_on_pb].pb_type == PB_DIR_REQUEST_TYPE) {
-		/**
-		 *  Request to broadcast directory
-		 */
+
 		debug_print("Preparing DIR Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
 		if (pb_list[current_station_on_pb].hole_num < 1) {
 			/* This is not a valid DIR Request.  There is no hole list.  We should not get here because this
@@ -675,9 +688,8 @@ int pb_next_action() {
 				return EXIT_SUCCESS;
 			}
 
-			// TODO - What response if there were no PFHs at all for the request?  An error?
-
-			//////////////////////////// IS THIS NO -5???
+			// TODO - What response if there were no PFHs at all for the request?  An error? Or do nothing
+			// IS THIS NO -5???
 
 		}
 		else {
@@ -691,7 +703,7 @@ int pb_next_action() {
 			pfh_debug_print(node->pfh);
 			unsigned char data_bytes[AX25_MAX_DATA_LEN];
 
-			int data_len = pb_make_dir_broadcast(node, data_bytes);
+			int data_len = pb_make_dir_broadcast_packet(node, data_bytes);
 			if (data_len == 0) {printf("** Could not create the test DIR Broadcast frame\n"); return EXIT_FAILURE; }
 
 			/* Send the fill and finish */
@@ -715,101 +727,74 @@ int pb_next_action() {
 			}
 		}
 
+	/**
+	 *  Request to broadcast a file or parts of a file
+	 */
 	} else if (pb_list[current_station_on_pb].pb_type == PB_FILE_REQUEST_TYPE) {
 		debug_print("Preparing FILE Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
+
+		char psf_filename[MAX_FILE_PATH_LEN];
+		pfh_get_filename(pb_list[current_station_on_pb].node->pfh,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
+
 		if (pb_list[current_station_on_pb].hole_num == 0) {
-			/**
-			 *  Request to broadcast the whole file
-			 */
-
+			/* Request to broadcast the whole file */
 			/* SEND THE NEXT CHUNK OF THE FILE BASED ON THE OFFSET */
-			char psf_filename[MAX_FILE_PATH_LEN];
-			pfh_get_filename(pb_list[current_station_on_pb].node->pfh,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
-			FILE * f = fopen(psf_filename, "r");
-			if (f == NULL) {
-				/* Send an error because the file is not available or does not exist.  But also mark this as
-				 * done or we will continue to send this error */
-				rc = pb_send_err(pb_list[current_station_on_pb].callsign, PB_ERR_FILE_NOT_AVAILABLE); // missing file
-				if (rc != EXIT_SUCCESS) {
-					error_print("\n Error : Could not send ERR Response to TNC \n");
-					return EXIT_FAILURE;
-				}
-				pb_remove_request(current_station_on_pb);
-				return EXIT_SUCCESS;
-			}
-
-			// TODO - this is where the logic would go to check the block size that the client sends and potentially use that
-			unsigned char buffer[PB_FILE_DEFAULT_BLOCK_SIZE]; // This is the chunk we will send
-			int chunk_includes_last_byte = false;
-
-//			if (pb_list[current_station_on_pb].offset == 0) {
-//				/* This is the first chunk of the file, which starts right after the Pacsat Header */
-//				pb_list[current_station_on_pb].offset = pb_list[current_station_on_pb].node->pfh->bodyOffset;
-//			}
-			if (fseek( f, pb_list[current_station_on_pb].offset, SEEK_SET ) != 0) {
-				/* Something went wrong with that.  Need to assume that we can't send the file */
-				rc = pb_send_err(pb_list[current_station_on_pb].callsign, PB_ERR_FILE_NOT_AVAILABLE); // missing file
-				if (rc != EXIT_SUCCESS) {
-					error_print("\n Error : Could not send ERR Response to TNC \n");
-					return EXIT_FAILURE;
-				}
-				pb_remove_request(current_station_on_pb);
-				return EXIT_SUCCESS;
-			}
-			int number_of_bytes_read = fread(buffer, sizeof(char), PB_FILE_DEFAULT_BLOCK_SIZE, f);
-			debug_print("Read %d bytes from %s\n", number_of_bytes_read, psf_filename);
-			fclose(f);
-
-			/* Store offset of the next chunk to send */
-			if (pb_list[current_station_on_pb].offset + number_of_bytes_read >= pb_list[current_station_on_pb].node->pfh->fileSize)
-				chunk_includes_last_byte = true;
-
-			debug_print("FILE BB to send: ");
-			pfh_debug_print(pb_list[current_station_on_pb].node->pfh);
-			unsigned char data_bytes[AX25_MAX_DATA_LEN];
-
-			int data_len = pb_make_file_broadcast(pb_list[current_station_on_pb].node->pfh, data_bytes, buffer,
-					number_of_bytes_read, pb_list[current_station_on_pb].offset, chunk_includes_last_byte);
-			if (data_len == 0) {
-				/* Hmm, something went badly wrong here.  We better remove this request or we will keep
-				 * hitting this error.  It's unclear what went wrong do we mark the file as not available?
-				 * Or just remove this request without an error?  But then the client will automatically
-				 * request this file again.. */
-				error_print("** Could not create the test DIR Broadcast frame\n");
-				rc = pb_send_err(pb_list[current_station_on_pb].callsign, PB_ERR_FILE_NOT_AVAILABLE); // missing file
-				if (rc != EXIT_SUCCESS) {
-					error_print("\n Error : Could not send ERR Response to TNC \n");
-					return EXIT_FAILURE;
-				}
-				pb_remove_request(current_station_on_pb);
-				return EXIT_SUCCESS;
-			}
-
-			/* Send the fill and finish */
-			int rc = send_raw_packet(g_bbs_callsign, QST, PID_FILE, data_bytes, data_len);
-			if (rc != EXIT_SUCCESS) {
-				error_print("Could not send broadcast packet to TNC \n");
-				return EXIT_FAILURE;
-			}
-			//sleep(1);
-
+			int number_of_bytes_read = pb_broadcast_next_file_chunk(pb_list[current_station_on_pb].node->pfh, psf_filename,
+					pb_list[current_station_on_pb].offset, PB_FILE_DEFAULT_BLOCK_SIZE, pb_list[current_station_on_pb].node->pfh->fileSize);
 			pb_list[current_station_on_pb].offset += number_of_bytes_read;
-
-			/* If we are done then remove this request */
-			if (chunk_includes_last_byte) {
+			if (number_of_bytes_read == 0) {
 				pb_remove_request(current_station_on_pb);
 				/* If we removed a station then we don't want/need to increment the current station pointer */
 				return EXIT_SUCCESS;
 			}
-		} else {
-			/**
-			 *  Request to fill holes in the file
-			 */
 
-			debug_print("Holes File Fill Not yet supported: %s\n", pb_list[current_station_on_pb].callsign);
-			pb_remove_request(current_station_on_pb);
-			/* If we removed a station then we don't want/need to increment the current station pointer */
-			return EXIT_SUCCESS;
+			/* If we are done then remove this request */
+			if (pb_list[current_station_on_pb].offset >= pb_list[current_station_on_pb].node->pfh->fileSize) {
+				pb_remove_request(current_station_on_pb);
+				/* If we removed a station then we don't want/need to increment the current station pointer */
+				return EXIT_SUCCESS;
+			}
+		} else { // there is a hole list
+
+			/* Request to fill holes in the file */
+			int current_hole_num = pb_list[current_station_on_pb].current_hole_num;
+			debug_print("Preparing Fill %d of %d from FILE %04x for %s --",current_hole_num, pb_list[current_station_on_pb].hole_num,
+					pb_list[current_station_on_pb].file_id, pb_list[current_station_on_pb].callsign);
+
+			FILE_DATE_PAIR *holes = pb_list[current_station_on_pb].hole_list;
+
+			if (pb_list[current_station_on_pb].offset == 0) {
+				/* Then this is probablly a new hole, initialize to the start of it */
+				pb_list[current_station_on_pb].offset = holes[current_hole_num].offset;
+			}
+			debug_print("  Chunk from %d length %d at offset %d\n",holes[current_hole_num].offset, holes[current_hole_num].length, pb_list[current_station_on_pb].offset);
+
+			/* We are currently at byte pb_list[current_station_on_pb].offset for this request.  So this hole
+			 * still has the following remaining bytes */
+			int remaining_length_of_hole = holes[current_hole_num].offset + holes[current_hole_num].length - pb_list[current_station_on_pb].offset;
+
+			int number_of_bytes_read = pb_broadcast_next_file_chunk(pb_list[current_station_on_pb].node->pfh, psf_filename,
+					pb_list[current_station_on_pb].offset, remaining_length_of_hole, pb_list[current_station_on_pb].node->pfh->fileSize);
+			pb_list[current_station_on_pb].offset += number_of_bytes_read;
+			if (number_of_bytes_read == 0) {
+				pb_remove_request(current_station_on_pb);
+				/* If we removed a station then we don't want/need to increment the current station pointer */
+				return EXIT_SUCCESS;
+			}
+			if (pb_list[current_station_on_pb].offset >= holes[current_hole_num].offset + holes[current_hole_num].length
+					|| pb_list[current_station_on_pb].offset >= pb_list[current_station_on_pb].node->pfh->fileSize) {
+				/* We have finished this hole, or we are at the end of the file */
+				pb_list[current_station_on_pb].current_hole_num++;
+				if (pb_list[current_station_on_pb].current_hole_num == pb_list[current_station_on_pb].hole_num) {
+					/* We have finished the fole list */
+					pb_remove_request(current_station_on_pb);
+					/* If we removed a station then we don't want/need to increment the current station pointer */
+					return EXIT_SUCCESS;
+				} else {
+					/* Move the offset to the start of the next hole */
+					pb_list[current_station_on_pb].offset = holes[pb_list[current_station_on_pb].current_hole_num].offset;
+				}
+			}
 		}
 	}
 
@@ -821,7 +806,65 @@ int pb_next_action() {
 }
 
 /**
- * pb_make_dir_broadcast()
+ * pb_braodcast_next_file_chunk()
+ *
+ * Broadcast a chunk of a file at a given offset with a given length.
+ * At this point we already have the file on the PB, so we have validated
+ * that it exists.  Any errors at this point are unrecoverable and should
+ * result in the request being removed from the PB.
+ *
+ * Returns EXIT SUCCESS or the offset to be stored for the next transmission.
+ */
+int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, int length, int file_size) {
+	int rc = EXIT_SUCCESS;
+
+	FILE * f = fopen(psf_filename, "r");
+	if (f == NULL) {
+		return EXIT_SUCCESS;
+	}
+
+	// TODO - this is where the logic would go to check the block size that the client sends and potentially use that
+	unsigned char buffer[PB_FILE_DEFAULT_BLOCK_SIZE]; // This is the chunk we will send
+
+	if (fseek( f, offset, SEEK_SET ) != 0) {
+		return EXIT_SUCCESS;
+	}
+	int number_of_bytes_read = fread(buffer, sizeof(char), PB_FILE_DEFAULT_BLOCK_SIZE, f);
+	debug_print("Read %d bytes from %s\n", number_of_bytes_read, psf_filename);
+	fclose(f);
+
+	int chunk_includes_last_byte = false;
+
+	if (offset + number_of_bytes_read >= file_size)
+		chunk_includes_last_byte = true;
+
+	debug_print("FILE BB to send: ");
+	pfh_debug_print(pfh);
+	unsigned char data_bytes[AX25_MAX_DATA_LEN];
+
+	int data_len = pb_make_file_broadcast_packet(pfh, data_bytes, buffer,
+			number_of_bytes_read, offset, chunk_includes_last_byte);
+	if (data_len == 0) {
+		/* Hmm, something went badly wrong here.  We better remove this request or we will keep
+		 * hitting this error.  It's unclear what went wrong do we mark the file as not available?
+		 * Or just remove this request without an error?  But then the client will automatically
+		 * request this file again.. */
+		error_print("** Could not create the test DIR Broadcast frame\n");
+		return EXIT_SUCCESS;
+	}
+
+	/* Send the broadcast and finish */
+	rc = send_raw_packet(g_bbs_callsign, QST, PID_FILE, data_bytes, data_len);
+	if (rc != EXIT_SUCCESS) {
+		error_print("Could not send broadcast packet to TNC \n");
+		return EXIT_SUCCESS;
+	}
+
+	return number_of_bytes_read;
+}
+
+/**
+ * pb_make_dir_broadcast_packet()
  *
  * Generate the bytes needed for a dir broadcast based on a pacsat file header
  * Pass in the Pacsat file header, a pointer to the broadcast frame, the offset
@@ -875,7 +918,7 @@ int pb_next_action() {
       file.
 
  */
-int pb_make_dir_broadcast(DIR_NODE *node, unsigned char *data_bytes) {
+int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes) {
 	int length = 0;
 
 	PB_DIR_HEADER dir_broadcast;
@@ -953,7 +996,7 @@ int pb_make_dir_broadcast(DIR_NODE *node, unsigned char *data_bytes) {
 }
 
 /**
- * pb_make)file_broadcast()
+ * pb_make_file_broadcast_packet()
  *
  *
 
@@ -979,7 +1022,7 @@ E              1    Last byte of frame is the last byte of the file.
 
 *                   Reserved, must be 0.
  */
-int pb_make_file_broadcast(HEADER *pfh, unsigned char *data_bytes,
+int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
 		unsigned char *buffer, int number_of_bytes_read, int offset, int chunk_includes_last_byte) {
 	int length = 0;
 	PB_FILE_HEADER file_broadcast_header;
@@ -1016,6 +1059,7 @@ int pb_make_file_broadcast(HEADER *pfh, unsigned char *data_bytes,
 /*********************************************************************************************
  *
  * SELF TESTS FOLLOW
+ *
  */
 int test_pb_list() {
 	printf(" TEST PB LIST\n");

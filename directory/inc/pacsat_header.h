@@ -40,7 +40,7 @@
 // Extended Header
 #define  SOURCE 0x10
 #define  AX25_UPLOADER 0x11
-#define  UPLOAD_TIME 0x12
+#define  UPLOAD_TIME 0x12 /* Note that this is a Mandatory item on all files */
 #define  DOWNLOAD_COUNT 0x13
 #define  DESTINATION 0x14
 #define  AX25_DOWNLOADER 0x15
@@ -58,15 +58,11 @@
 #define  COMPRESSION_DESCRIPTION 0x25
 #define  USER_FILE_NAME 0x26
 
-// Header 2 test file has many more fields..
-
 // Compression types
 #define  BODY_NOT_COMPRESSED 0x00
 #define  BODY_COMPRESSED_PKARC 0x01
 #define  BODY_COMPRESSED_PKZIP 0x02
-//#define  BODY_COMPRESSED_GZIP 0x03
-
-	//char *compressions[3] = {"None","PKARC","PKZIP"};
+#define  BODY_COMPRESSED_GZIP 0x03
 
 #define PFH_TYPE_ASCII 0
 #define PFH_TYPE_WOD 3
@@ -95,7 +91,7 @@ typedef struct {
   /* Extended Header Information */
   char          source[33];          /* 0x10 */
   char          uploader[7];         /* 0x11 */
-  uint32_t uploadTime;          /* 0x12 */
+  uint32_t uploadTime;          /* 0x12 */   /* Note that this is a Mandatory item on all files */
   unsigned char downloadCount;       /* 0x13 */
   char          destination[33];     /* 0x14 */
   char          downloader[7];       /* 0x15 */

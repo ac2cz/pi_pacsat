@@ -16,5 +16,6 @@ SUBDIRS := \
 ax25/src \
 broadcast/src \
 directory/src \
+ftl0/src \
 src \
 

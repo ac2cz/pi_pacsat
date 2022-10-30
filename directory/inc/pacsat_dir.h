@@ -49,5 +49,6 @@ DIR_NODE * dir_get_node_by_id(int file_id);
 //void dir_get_filename(int file_id, char *filename, int max_len);
 int test_pacsat_dir();
 int test_pacsat_dir_one();
+int make_big_test_dir();
 
 #endif /* PACSAT_DIR_H_ */

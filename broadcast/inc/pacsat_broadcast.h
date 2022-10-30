@@ -42,6 +42,7 @@
 #define PB_ERR_FILE_NOT_DOWNLOADABLE 3
 #define PB_ERR_FILE_INVALID_PACKET 5
 
+#define EXIT_LAST_CHUNK_SENT 2 /* This exit code is used when we have sent the last chunk of a file */
 
 #define MAX_REQUEST_PACKETS 10 /* The maximum number of Dir Headers or File segments that will be sent in response to a request */
 #define MAX_BROADCAST_LENGTH 256 /* This was the limit on historical Pacsats. Can we make it longer? */
@@ -82,6 +83,7 @@ struct t_dir_header { // sent by Pacsat
 } __attribute__ ((__packed__));
 typedef struct t_dir_header PB_DIR_HEADER;
 
+
 /**
  * The client sends frames with these headers, which we need to parse
  */
@@ -96,7 +98,7 @@ typedef struct t_file_req_header FILE_REQ_HEADER;
 struct t_file_pair {
      unsigned int offset : 24;
      uint16_t length;
-     };
+     } __attribute__ ((__packed__));
 typedef struct t_file_pair FILE_DATE_PAIR;
 
 struct t_dir_req_header { // sent by client

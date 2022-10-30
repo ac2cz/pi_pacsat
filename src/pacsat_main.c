@@ -35,6 +35,7 @@
 #include "pacsat_header.h"
 #include "pacsat_dir.h"
 #include "pacsat_broadcast.h"
+#include "ftl0.h"
 
 /* Forward declarations */
 void process_frames_queued(char * data, int len);
@@ -145,8 +146,11 @@ int main(int argc, char *argv[]) {
 	 * New FILE requests are added to the Pacsat Broadcast (PB) queue unless it is full
 	 *
 	 * CONNECTION REQUEST
-	 * This launches a state machine to handle the connection request and the
-	 * messages.  A state machine is created for each connection request.
+	 * This launches an uplink state machine to handle the connection request and the
+	 * messages.  An uplink state machine is created for each connection request.
+	 *
+	 * CONNECTED DATA
+	 * Data that is passed to the Uplink State Machine.
 	 *
 	 */
 	int frame_num = 0;
@@ -167,33 +171,44 @@ int main(int argc, char *argv[]) {
 				process_frames_queued (frame.data, frame.header->data_len);
 				break;
 			case 'K': // Monitored frame
-				//debug_print("FRM:%d:",frame_num);
-				//print_header(frame.header);
-				//print_data(frame.data, frame.header->data_len);
-				//debug_print("\n");
+				debug_print("FRM:%d:",frame_num);
+				print_header(frame.header);
+				print_data(frame.data, frame.header->data_len);
+				debug_print("| %d bytes\n", frame.header->data_len);
 
 				pb_process_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
 				break;
 			case 'C': // Connected to a station
-				debug_print("FRM:%d:",frame_num);
+				debug_print("CON:%d:",frame_num);
 				print_header(frame.header);
 				print_data(frame.data, frame.header->data_len);
 				debug_print("\n");
 
 				if (strncmp(frame.data, "*** CONNECTED To Station", 24) == 0) {
 					// Incoming: Other station initiated the connect request.
-					connection_received (frame.header->call_from, frame.header->call_to, 1, frame.data);
+					ftl0_connection_received (frame.header->call_from, frame.header->call_to, 1, frame.data);
 				}
 				else if (strncmp(frame.data, "*** CONNECTED With Station", 26) == 0) {
 					// Outgoing: Other station accepted my connect request.
-					connection_received (frame.header->call_from, frame.header->call_to, 0, frame.data);
+					ftl0_connection_received (frame.header->call_from, frame.header->call_to, 0, frame.data);
 				}/* If we removed a station then we don't want/need to increment the current station pointer */
 				return EXIT_SUCCESS;
+				break;
+
+			case 'D': // Data from a connected station
+				debug_print("DATA:%d:",frame_num);
+				print_header(frame.header);
+				print_data(frame.data, frame.header->data_len);
+				debug_print("\n");
+				ftl0_process_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
 				break;
 			}
 		}
 
-		/* Don't take the next action until we know the state of the TNC frame queue */
+		/* Don't take the next action until we know the state of the TNC frame queue but NOTE that
+		 * this does not seem to work because DireWolf takes a long time to return the status.  In
+		 * that time we can add 100s of frames to the queue.  Instead we currently delay the sending
+		 * of frames in agw_tnc.c*/
 
 		if (frame_queue_status_known == true) {
 			pb_next_action();
@@ -220,24 +235,5 @@ void process_frames_queued(char * data, int len) {
 	//debug_print("Received y: %d\n", g_frames_queued);
 }
 
-/* TODO - move this to FTL0 */
-void connection_received(char *from_callsign, char *to_callsign, int incomming, char * data) {
-	debug_print("HANDLE CONNECTION FOR FILE UPLOAD\n");
-	unsigned char loggedin[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x00,
-			0xF0,0x05,0x02,0x34,0xC4,0xB9,0x5A,0x04};
-	send_raw_packet("PFS3-12", "AC2CZ", 0xf0, loggedin, sizeof(loggedin));
 
-	unsigned char go[] = {0x00,0x82,0x86,0x64,0x86,0xB4,0x40,0xE0,0xA0,0x8C,0xA6,0x66,0x40,0x40,0x79,0x22,
-			0xF0,0x08,0x04,0x4E,0x03,0x00,0x00,0x00,0x00,0x00,0x00};
-	send_raw_packet("PFS3-12", "AC2CZ", 0xf0, go, sizeof(go));
-
-	//Disconnect
-	//header.data_kind = 'd';
-	//header.data_len = 0;
-	//int err = send(sockfd, (char*)(&header), sizeof(header), MSG_NOSIGNAL);
-	//if (err == -1) {
-	//	printf ("Socket Send error with header, Terminating.\n");
-	//	exit (1);
-	//}
-}
 

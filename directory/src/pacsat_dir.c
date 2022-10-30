@@ -52,6 +52,9 @@
 #include <dirent.h>
 #include <assert.h>
 
+#include <fcntl.h>
+#include <errno.h>
+
 /* Program include files */
 #include "config.h"
 #include "pacsat_dir.h"
@@ -343,20 +346,105 @@ DIR_NODE * dir_get_node_by_id(int file_id) {
 	return NULL;
 }
 
-//void dir_get_filename(int file_id, char *filename, int max_len) {
-//	strlcpy(filename,dir_folder, max_len);
-//	strlcat(filename, "/", max_len);
-//	char file_id_str[5];
-//	snprintf(file_id_str, 5, "%04X",file_id);
-//	strlcat(filename,file_id_str, max_len);
-//	strlcat(filename,".", max_len);
-//	strlcat(filename, "/", max_len);
-//}
+/**
+ * Utility function to copy a file
+ * Based on stackoverflow answer: https://stackoverflow.com/questions/2180079/how-can-i-copy-a-file-on-unix-using-c
+ */
+int cp(const char *to, const char *from)
+{
+    int fd_to, fd_from;
+    char buf[4096];
+    ssize_t nread;
+    int saved_errno;
+
+    fd_from = open(from, O_RDONLY);
+    if (fd_from < 0)
+        return -1;
+
+    fd_to = open(to, O_WRONLY | O_CREAT | O_EXCL, 0666);
+    if (fd_to < 0)
+        goto out_error;
+
+    while (nread = read(fd_from, buf, sizeof buf), nread > 0)
+    {
+        char *out_ptr = buf;
+        ssize_t nwritten;
+
+        do {
+            nwritten = write(fd_to, out_ptr, nread);
+
+            if (nwritten >= 0)
+            {
+                nread -= nwritten;
+                out_ptr += nwritten;
+            }
+            else if (errno != EINTR)
+            {
+                goto out_error;
+            }
+        } while (nread > 0);
+    }
+
+    if (nread == 0)
+    {
+        if (close(fd_to) < 0)
+        {
+            fd_to = -1;
+            goto out_error;
+        }
+        close(fd_from);
+
+        /* Success! */
+        return 0;
+    }
+
+  out_error:
+    saved_errno = errno;
+
+    close(fd_from);
+    if (fd_to >= 0)
+        close(fd_to);
+
+    errno = saved_errno;
+    return -1;
+}
 
 /*********************************************************************************************
  *
  * SELF TESTS FOLLOW
  */
+
+int make_big_test_dir() {
+	int rc = EXIT_SUCCESS;
+
+	debug_print("TEST Create a file\n");
+
+	if (dir_init("./dir") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; };
+
+	for (int f=0; f<100; f++) {
+		char userfilename1[MAX_FILE_PATH_LEN];
+		char snum[5];
+		sprintf(snum, "%d",f);
+		strlcpy(userfilename1, "file", sizeof(userfilename1));
+		strlcat(userfilename1, snum, sizeof(userfilename1));
+		strlcat(userfilename1, ".txt", sizeof(userfilename1));
+
+		char title[30];
+		strlcpy(title, "Test Message ", sizeof(title));
+		strlcat(title, snum, sizeof(title));
+		char msg[50];
+		strlcpy(msg, "Hi there,\nThis is a test message\nNumber = ", sizeof(msg));
+		strlcat(msg, snum, sizeof(msg));
+
+		write_test_msg(dir_folder, userfilename1, msg, strlen(msg));
+		HEADER *pfh1 = make_test_header(f, snum, "ve2xyz", "g0kla", title, userfilename1);
+		rc = pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
+		/* Add to the dir */
+		DIR_NODE *p = dir_add_pfh(pfh1); if (p == NULL) { printf("** Could not add pfh1 to dir\n"); return EXIT_FAILURE; }
+		sleep(1);
+	}
+	return rc;
+}
 
 int make_three_test_entries() {
 	int rc = EXIT_SUCCESS;
@@ -391,7 +479,7 @@ int make_three_test_entries() {
 	rc = pfh_make_pacsat_file(pfh3,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file3\n"); return EXIT_FAILURE; }
 	p = dir_add_pfh(pfh3);  if (p == NULL) { printf("** Could not add pfh3 to dir\n"); return EXIT_FAILURE; }
 
-	/* TODO - This only works if the pfh spec is copied into the temp dir*/
+	/* TODO - This only works if the pfh spec is copied into the temp dir */
 	char *userfilename4 = "pfh_spec.txt";
 	HEADER *pfh4 = make_test_header(4, "4", "ac2cz", "g0kla", "Pacsat Header Definition", userfilename4);
 	rc = pfh_make_pacsat_file(pfh4,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file4\n"); return EXIT_FAILURE; }

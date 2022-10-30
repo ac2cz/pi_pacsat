@@ -76,6 +76,7 @@ HEADER *pfh_new_header() {
 	HEADER  *hdr;
 
 	if ((hdr = (HEADER *)malloc(sizeof(HEADER))) != NULL) {
+		/* Mandatory */
 		hdr->fileId             = 0;
 		hdr->fileName[0]        = '\0';
 		hdr->fileExt[0]         = '\0';
@@ -88,6 +89,7 @@ HEADER *pfh_new_header() {
 		hdr->headerCRC          = 0;
 		hdr->bodyOffset         = 0;
 
+		/* Extended */
 		hdr->source[0]          = '\0';
 		hdr->uploader[0]        = '\0';
 		hdr->uploadTime         = 0;
@@ -97,6 +99,8 @@ HEADER *pfh_new_header() {
 		hdr->downloadTime       = 0;
 		hdr->expireTime         = 0;
 		hdr->priority           = 0;
+
+		/* Optional */
 		hdr->compression        = 0;
 		hdr->BBSMessageType     = ' ';
 		hdr->BID[0]             = '\0';
