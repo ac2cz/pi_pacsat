@@ -32,8 +32,8 @@
 *.app
 
 # Binary
-Debug/Pacsat
-Release/Pacsat
+Debug/pi_pacsat
+Release/pi_pacsat
 
 # IDE files
 .settings

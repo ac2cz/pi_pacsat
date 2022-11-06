@@ -123,7 +123,7 @@ struct t_broadcast_request_header {
 typedef struct t_broadcast_request_header AX25_HEADER;
 
 int pb_next_action();
-void pb_process_frame(char *from_callsign, char *to_callsign, char *data, int len);
+void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len);
 int test_pb();
 int test_pb_list();
 int test_pb_file();

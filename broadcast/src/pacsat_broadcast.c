@@ -98,19 +98,19 @@ typedef struct pb_entry PB_ENTRY;
 /* Forward declarations */
 int pb_send_status();
 int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes);
-int pb_handle_dir_request(char *from_callsign, char *data, int len);
-int pb_handle_file_request(char *from_callsign, char *data, int len);
+int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len);
+int pb_handle_file_request(char *from_callsign, unsigned char *data, int len);
 void pb_make_list_str(char *buffer, int len);
 int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes);
-DIR_DATE_PAIR * get_dir_holes_list(char *data);
+DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data);
 int get_num_of_dir_holes(int request_len);
 int pb_broadcast_next_file_chunk(HEADER *psf, char * psf_filename, int offset, int length, int file_size);
 int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
 		unsigned char *buffer, int number_of_bytes_read, int offset, int chunk_includes_last_byte);
-FILE_DATE_PAIR * get_file_holes_list(char *data);
+FILE_DATE_PAIR * get_file_holes_list(unsigned char *data);
 int get_num_of_file_holes(int request_len);
 
-void pb_debug_print_dir_req(char *data, int len);
+void pb_debug_print_dir_req(unsigned char *data, int len);
 void pb_debug_print_dir_holes(DIR_DATE_PAIR *holes, int num_of_holes);
 void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes);
 void pb_debug_print_list_item(int i);
@@ -154,14 +154,14 @@ int pb_send_status() {
 		unsigned char shut[] = "PB Closed.";
 		int rc = send_raw_packet(g_broadcast_callsign, PBSHUT, PID_NO_PROTOCOL, shut, sizeof(shut));
 		return rc;
-//	} else if (number_on_pb == MAX_PB_LENGTH -1) {
+//	} else if (number_on_pb == MAX_PB_LENGTH) {
 //		char full[] = "PB Full.";
 //		int rc = send_ui_packet(g_bbs_callsign, PBFULL, 0xf0, full, sizeof(full));
 //		return rc;
 	} else  {
 		char buffer[256];
 		char * CALL = PBLIST;
-		if (number_on_pb == MAX_PB_LENGTH -1) {
+		if (number_on_pb == MAX_PB_LENGTH) {
 			CALL = PBFULL;
 		}
 		pb_make_list_str(buffer, sizeof(buffer));
@@ -220,13 +220,16 @@ int pb_send_err(char *from_callsign, int err) {
  *
  * Make a copy of all the data because the original packet will be purged soon from the
  * circular buffer
+ * Note that when we are adding an item the variable number_on_pb is pointing to the
+ * empty slot where we want to insert data because the number is one greater than the
+ * array index (which starts at 0)
  *
  * returns EXIT_SUCCESS it it succeeds or EXIT_FAILURE if the PB is shut or full
  *
  */
 int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes) {
 	if (pb_shut) return EXIT_FAILURE;
-	if (number_on_pb == MAX_PB_LENGTH -1) {
+	if (number_on_pb == MAX_PB_LENGTH) {
 		return EXIT_FAILURE; // PB full
 	}
 
@@ -275,35 +278,50 @@ int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, 
  * Remove the callsign at the designated position.  This is most likely the
  * head because we finished a request.
  *
+ * note that the variable number_on_pb is one greater than the last array position
+ * with data.
+ *
+ * Returns EXIT_SUCCESS if it can be removed or EXIT_FAILURE if there was
+ * no such item
+ *
  */
 int pb_remove_request(int pos) {
 	if (number_on_pb == 0) return EXIT_FAILURE;
-	if (pos > number_on_pb) return EXIT_FAILURE;
-	if (pos == number_on_pb) {
-		/* Remove the last item */
-		free(pb_list[pos].hole_list);
-		number_on_pb--;
-		return EXIT_SUCCESS;
+	if (pos >= number_on_pb) return EXIT_FAILURE;
+	if (pos != number_on_pb-1) {
+
+		/* Remove the item and shuffle all the other items to the left */
+		for (int i = pos + 1; i < number_on_pb; i++) {
+			strlcpy(pb_list[i-1].callsign, pb_list[i].callsign, MAX_CALLSIGN_LEN);
+			pb_list[i-1].pb_type = pb_list[i].pb_type;
+			pb_list[i-1].file_id = pb_list[i].file_id;
+			pb_list[i-1].offset = pb_list[i].offset;
+			pb_list[i-1].request_time = pb_list[i].request_time;
+			pb_list[i-1].hole_num = pb_list[i].hole_num;
+			pb_list[i-1].node = pb_list[i].node;
+			pb_list[i-1].current_hole_num = pb_list[i].current_hole_num;
+			pb_list[i-1].hole_list = pb_list[i].hole_list;
+		}
 	}
-	/* Otherwise remove the item and shuffle all the other items to the left */
-	for (int i = pos + 1; i < number_on_pb; i++) {
-		strlcpy(pb_list[i-1].callsign, pb_list[i].callsign, MAX_CALLSIGN_LEN);
-		pb_list[i-1].pb_type = pb_list[i].pb_type;
-		pb_list[i-1].file_id = pb_list[i].file_id;
-		pb_list[i-1].offset = pb_list[i].offset;
-		pb_list[i-1].request_time = pb_list[i].request_time;
-		pb_list[i-1].hole_num = pb_list[i].hole_num;
-		pb_list[i-1].node = pb_list[i].node;
-		pb_list[i-1].current_hole_num = pb_list[i].current_hole_num;
-		pb_list[i-1].hole_list = pb_list[i].hole_list;
-	}
-	free(pb_list[number_on_pb].hole_list);
+	/* We want to free the hole list from the last position in the list before we decrement the number on pb
+	 * number_on_pb is pointing to an empty position now. */
+	if (pb_list[pos].hole_num  > 0)
+		free(pb_list[number_on_pb].hole_list);
 	number_on_pb--;
 
-	if (pos <= current_station_on_pb)
+	/* We have to update the station we will next send data to.
+	 * If a station earlier in the list was removed, then this decrements by one.
+	 * If a station later in the list was remove we do nothing.
+	 * If the current station was removed then we do nothing because we are already
+	 * pointing to the next station, unless we are at the end of the list */
+	if (pos < current_station_on_pb) {
 		current_station_on_pb--;
-	if (current_station_on_pb < 0)
-		current_station_on_pb = 0;
+		if (current_station_on_pb < 0)
+			current_station_on_pb = 0;
+	} else if (pos == current_station_on_pb) {
+		if (current_station_on_pb >= number_on_pb)
+			current_station_on_pb = 0;
+	}
 	return EXIT_SUCCESS;
 }
 
@@ -337,7 +355,7 @@ void pb_debug_print_list() {
 }
 
 void pb_debug_print_list_item(int i) {
-	debug_print("%s Ty:%d File:%d Off:%d Holes:%d Cur:%d",pb_list[i].callsign,pb_list[i].pb_type,pb_list[i].file_id,
+	debug_print("--%s Ty:%d File:%d Off:%d Holes:%d Cur:%d",pb_list[i].callsign,pb_list[i].pb_type,pb_list[i].file_id,
 			pb_list[i].offset,pb_list[i].hole_num,pb_list[i].current_hole_num);
 	char buf[30];
 	time_t now = pb_list[i].request_time;
@@ -358,11 +376,10 @@ void pb_debug_print_list_item(int i) {
  * This is called from the main processing loop whenever a type K frame is received.
  *
  */
-void pb_process_frame(char *from_callsign, char *to_callsign, char *data, int len) {
+void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len) {
 	if (strncasecmp(to_callsign, g_bbs_callsign, 7) == 0) {
-		// this was sent to the BBS Callsign
-		debug_print("BBS Request - Ignored\n");
-
+		// this was sent to the BBS Callsign and we can ignore it
+		//debug_print("BBS Request - Ignored\n");
 	}
 	if (strncasecmp(to_callsign, g_broadcast_callsign, 7) == 0) {
 		// this was sent to the Broadcast Callsign
@@ -390,7 +407,7 @@ void pb_process_frame(char *from_callsign, char *to_callsign, char *data, int le
  * station was not added to the PB.  Only returns EXIT_FAILURE if there is
  * an unexpected error, such as the TNC is unavailable.
  */
-int pb_handle_dir_request(char *from_callsign, char *data, int len) {
+int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len) {
 	// Dir Request
 	int rc=EXIT_SUCCESS;
 	DIR_REQ_HEADER *dir_header;
@@ -447,7 +464,7 @@ int get_num_of_dir_holes(int request_len) {
 	return num_of_holes;
 }
 
-DIR_DATE_PAIR * get_dir_holes_list(char *data) {
+DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data) {
 	DIR_DATE_PAIR *holes = (DIR_DATE_PAIR *)(data + sizeof(AX25_HEADER) + sizeof(DIR_REQ_HEADER) );
 	return holes;
 }
@@ -458,7 +475,7 @@ int get_num_of_file_holes(int request_len) {
 	return num_of_holes;
 }
 
-FILE_DATE_PAIR * get_file_holes_list(char *data) {
+FILE_DATE_PAIR * get_file_holes_list(unsigned char *data) {
 	FILE_DATE_PAIR *holes = (FILE_DATE_PAIR *)(data + sizeof(AX25_HEADER) + sizeof(FILE_REQ_HEADER) );
 	return holes;
 }
@@ -485,7 +502,7 @@ void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes) {
 	debug_print("\n");
 }
 
-void pb_debug_print_dir_req(char *data, int len) {
+void pb_debug_print_dir_req(unsigned char *data, int len) {
 	DIR_REQ_HEADER *dir_header;
 	dir_header = (DIR_REQ_HEADER *)(data + sizeof(AX25_HEADER));
 	debug_print("DIR REQ: flags: %02x BLK_SIZE: %04x ", dir_header->flags & 0xff, dir_header->block_size &0xffff);
@@ -509,7 +526,7 @@ void pb_debug_print_dir_req(char *data, int len) {
  * Returns EXIT_SUCCESS if the station was added to the PB, otherwise it
  * returns EXIT_FAILURE
  */
-int pb_handle_file_request(char *from_callsign, char *data, int len) {
+int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 	// File Request
 	int rc=EXIT_SUCCESS;
 	int num_of_holes = 0;
@@ -575,18 +592,19 @@ int pb_handle_file_request(char *from_callsign, char *data, int len) {
 		}
 		FILE_DATE_PAIR * holes = get_file_holes_list(data);
 		pb_debug_print_file_holes(holes, num_of_holes);
-		/* Check the integrity of the holes list.  The offset has to be inside the file length */
-		for (int i=0; i < num_of_holes; i++) {
-			if (holes[i].offset >= node->pfh->fileSize) {
-				/* This does not have a valid holes list */
-				rc = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
-				if (rc != EXIT_SUCCESS) {
-					error_print("\n Error : Could not send ERR Response to TNC \n");
-					//exit(EXIT_FAILURE);
-				}
-				return EXIT_FAILURE;
-			}
-		}
+		/* We could check the integrity of the holes list.  The offset should be inside the file length
+		 * but note that the ground station can just give FFFF as the upper length for a hole*/
+//		for (int i=0; i < num_of_holes; i++) {
+//			if (holes[i].offset >= node->pfh->fileSize) {
+//				/* This does not have a valid holes list */
+//				rc = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
+//				if (rc != EXIT_SUCCESS) {
+//					error_print("\n Error : Could not send ERR Response to TNC \n");
+//					//exit(EXIT_FAILURE);
+//				}
+//				return EXIT_FAILURE;
+//			}
+//		}
 		if (pb_add_request(from_callsign, PB_FILE_REQUEST_TYPE, node, file_header->file_id, 0, holes, num_of_holes) == EXIT_SUCCESS) {
 			// ACK the station
 			rc = pb_send_ok(from_callsign);
@@ -639,12 +657,14 @@ int pb_next_action() {
 	}
 
 	/* Print debug info to the console */
-	if (now - last_pb_frames_queued_time > 2) {
+	if (now - last_pb_frames_queued_time > g_max_frames_in_tx_buffer) {
 		char buffer[256];
 		pb_make_list_str(buffer, sizeof(buffer));
 		debug_print("%s | %d frames queued\n", buffer, g_frames_queued);
 		last_pb_frames_queued_time = now;
 	}
+
+	//TODO - broadcast the number of bytes transmitted to BSTAT periodically so stations can calc efficiency
 
 	/* Now process the next station on the PB if there is one and take its action */
 	if (number_on_pb == 0) return EXIT_SUCCESS; // nothing to do
@@ -707,7 +727,7 @@ int pb_next_action() {
 			if (data_len == 0) {printf("** Could not create the test DIR Broadcast frame\n"); return EXIT_FAILURE; }
 
 			/* Send the fill and finish */
-			int rc = send_raw_packet(g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
+			int rc = send_raw_packet(g_broadcast_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			//int rc = send_raw_packet('K', g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			if (rc != EXIT_SUCCESS) {
 				error_print("Could not send broadcast packet to TNC \n");
@@ -734,7 +754,7 @@ int pb_next_action() {
 		debug_print("Preparing FILE Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
 
 		char psf_filename[MAX_FILE_PATH_LEN];
-		pfh_get_filename(pb_list[current_station_on_pb].node->pfh,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
+		pfh_make_filename(pb_list[current_station_on_pb].node->pfh->fileId,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
 
 		if (pb_list[current_station_on_pb].hole_num == 0) {
 			/* Request to broadcast the whole file */
@@ -758,7 +778,7 @@ int pb_next_action() {
 
 			/* Request to fill holes in the file */
 			int current_hole_num = pb_list[current_station_on_pb].current_hole_num;
-			debug_print("Preparing Fill %d of %d from FILE %04x for %s --",current_hole_num, pb_list[current_station_on_pb].hole_num,
+			debug_print("Preparing Fill %d of %d from FILE %04x for %s --",(current_hole_num+1), pb_list[current_station_on_pb].hole_num,
 					pb_list[current_station_on_pb].file_id, pb_list[current_station_on_pb].callsign);
 
 			FILE_DATE_PAIR *holes = pb_list[current_station_on_pb].hole_list;
@@ -814,6 +834,7 @@ int pb_next_action() {
  * result in the request being removed from the PB.
  *
  * Returns EXIT SUCCESS or the offset to be stored for the next transmission.
+ * // TODO - we cant return EXIT_FAILURE here, but could return -ve number..
  */
 int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, int length, int file_size) {
 	int rc = EXIT_SUCCESS;
@@ -854,7 +875,7 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
 	}
 
 	/* Send the broadcast and finish */
-	rc = send_raw_packet(g_bbs_callsign, QST, PID_FILE, data_bytes, data_len);
+	rc = send_raw_packet(g_broadcast_callsign, QST, PID_FILE, data_bytes, data_len);
 	if (rc != EXIT_SUCCESS) {
 		error_print("Could not send broadcast packet to TNC \n");
 		return EXIT_SUCCESS;
@@ -950,9 +971,8 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes) {
 
 	}
 
-	/* TODO - We could regenerate the PFH bytes here. That would save a disk access.  For now we load them from disk */
 	char psf_filename[MAX_FILE_PATH_LEN];
-	pfh_get_filename(node->pfh,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
+	pfh_make_filename(node->pfh->fileId,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
 	FILE * f = fopen(psf_filename, "r");
 	if (f == NULL) {
 		return 0;
@@ -998,7 +1018,7 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes) {
 /**
  * pb_make_file_broadcast_packet()
  *
- *
+ *  Returns packet in unsigned char *data_bytes
 
 flags          A bit field as follows:
 
@@ -1062,7 +1082,7 @@ int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
  *
  */
 int test_pb_list() {
-	printf(" TEST PB LIST\n");
+	printf("##### TEST PB LIST\n");
 	int rc = EXIT_SUCCESS;
 
 	char data[] = {0x25,0x9f,0x3d,0x63,0xff,0xff,0xff,0x7f};
@@ -1077,7 +1097,7 @@ int test_pb_list() {
 	if (strcmp(pb_list[1].callsign, "VE2XYZ") != 0) {printf("** Mismatched callsign 1\n"); return EXIT_FAILURE;}
 
 	// Now remove the head
-	debug_print("REMOVE head\n");
+	debug_print("REMOVE HEAD\n");
 	rc = pb_remove_request(0);
 	if (rc != EXIT_SUCCESS) {printf("** Could not remove request\n"); return EXIT_FAILURE; }
 	pb_debug_print_list();
@@ -1114,7 +1134,8 @@ int test_pb_list() {
 	if( pb_add_request("G1G", PB_FILE_REQUEST_TYPE, NULL, 3, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
 	if( pb_add_request("H1H", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
 	if( pb_add_request("I1I", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
-	if( pb_add_request("J1J", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_FAILURE) {debug_print("ERROR: Added call to FULL PB list\n");return EXIT_FAILURE; }
+	if( pb_add_request("J1J", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
+	if( pb_add_request("K1K", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_FAILURE) {debug_print("ERROR: Added call to FULL PB list\n");return EXIT_FAILURE; }
 
 	if (strcmp(pb_list[0].callsign, "A1A") != 0) {printf("** Mismatched callsign 0\n"); return EXIT_FAILURE;}
 	if (strcmp(pb_list[1].callsign, "B1B") != 0) {printf("** Mismatched callsign 1\n"); return EXIT_FAILURE;}
@@ -1125,6 +1146,7 @@ int test_pb_list() {
 	if (strcmp(pb_list[6].callsign, "G1G") != 0) {printf("** Mismatched callsign 6\n"); return EXIT_FAILURE;}
 	if (strcmp(pb_list[7].callsign, "H1H") != 0) {printf("** Mismatched callsign 7\n"); return EXIT_FAILURE;}
 	if (strcmp(pb_list[8].callsign, "I1I") != 0) {printf("** Mismatched callsign 8\n"); return EXIT_FAILURE;}
+	if (strcmp(pb_list[9].callsign, "J1J") != 0) {printf("** Mismatched callsign 9\n"); return EXIT_FAILURE;}
 
 	pb_debug_print_list();
 
@@ -1154,7 +1176,7 @@ int test_pb_list() {
 
 	pb_debug_print_list();
 
-	debug_print("Remove 5 stations\n");
+	debug_print("Remove 7 stations\n");
 	rc = pb_remove_request(current_station_on_pb);
 	if (rc != EXIT_SUCCESS) {printf("** Could not remove request\n"); return EXIT_FAILURE; }
 	rc = pb_remove_request(current_station_on_pb);
@@ -1167,18 +1189,19 @@ int test_pb_list() {
 	if (rc != EXIT_SUCCESS) {printf("** Could not remove request\n"); return EXIT_FAILURE; }
 	rc = pb_remove_request(current_station_on_pb);
 	if (rc != EXIT_SUCCESS) {printf("** Could not remove request\n"); return EXIT_FAILURE; }
-
+	rc = pb_remove_request(current_station_on_pb);
+	if (rc != EXIT_SUCCESS) {printf("** Could not remove request\n"); return EXIT_FAILURE; }
 	pb_debug_print_list();
 
 	if (rc == EXIT_SUCCESS)
-		printf(" TEST PB LIST: success\n");
+		printf("##### TEST PB LIST: success\n");
 	else
-		printf(" TEST PB LIST: fail\n");
+		printf("##### TEST PB LIST: fail\n");
 	return rc;
 }
 
 int test_pb() {
-	printf(" TEST PACSAT BROADCAST:\n");
+	printf("##### TEST PACSAT BROADCAST:\n");
 	int rc = EXIT_SUCCESS;
 
 	debug_print("LOAD DIR\n");
@@ -1189,7 +1212,7 @@ int test_pb() {
 	debug_print("ADD AC2CZ dir request\n");
 
 	/* Test frame from AC2CZ requesting the whole dir with one hole */
-	char data[] = {0x00,0xa0,0x8c,0xa6,0x66,0x40,0x40,0xf6,0x82,0x86,0x64,0x86,0xb4,0x40,
+	unsigned char data[] = {0x00,0xa0,0x8c,0xa6,0x66,0x40,0x40,0xf6,0x82,0x86,0x64,0x86,0xb4,0x40,
 			0x61,0x03,0xbd,0x10,0xf4,0x00,0x25,0x9f,0x3d,0x63,0xff,0xff,0xff,0x7f};
 
 	int num_of_holes = get_num_of_dir_holes(sizeof(data));
@@ -1208,17 +1231,17 @@ int test_pb() {
 	dir_free();
 
 	if (rc == EXIT_SUCCESS)
-		printf(" TEST PACSAT BROADCAST: success\n");
+		printf("##### TEST PACSAT BROADCAST: success\n");
 	else
-		printf(" TEST PACSAT BROADCAST: fail\n");
+		printf("##### TEST PACSAT BROADCAST: fail\n");
 	return rc;
 }
 
 int test_pb_file() {
-	printf(" TEST PACSAT FILE BB:\n");
+	printf("##### TEST PACSAT FILE BB:\n");
 	int rc = EXIT_SUCCESS;
 
-	char data[] = {0x00,0xa0,0x8c,0xa6,0x66,0x40,0x40,0xf6,0x82,0x86,0x64,0x86,
+	unsigned char data[] = {0x00,0xa0,0x8c,0xa6,0x66,0x40,0x40,0xf6,0x82,0x86,0x64,0x86,
 		0xb4,0x40,0x61,0x03,0xbb,0x10,0x01,0x00,0x00,0x00,0xf4,0x00};
 
 	debug_print("ADD AC2CZ file request when no file available\n");
@@ -1245,36 +1268,37 @@ int test_pb_file() {
 	dir_free();
 
 	if (rc == EXIT_SUCCESS)
-		printf(" TEST PACSAT FILE BB: success\n");
+		printf("##### TEST PACSAT FILE BB: success\n");
 	else
-		printf(" TEST PACSAT FILE BB: fail\n");
+		printf("##### TEST PACSAT FILE BB: fail\n");
 	return rc;
 }
 
 int test_pb_file_holes() {
-	printf(" TEST PACSAT FILE HOLES:\n");
+	printf("##### TEST PACSAT FILE HOLES:\n");
 		int rc = EXIT_SUCCESS;
 
-	char data[] = {0x00, 0xa0, 0x8c, 0xa6, 0x66, 0x40, 0x40, 0xf6, 0x82, 0x86, 0x64, 0x86, 0xb4, 0x40, 0x61, 0x03, 0xbb,
-	0x12, 0x01, 0x00, 0x00, 0x00, 0xf4, 0x00, 0x00, 0x00, 0x00, 0xa9, 0x00, 0xd0, 0x00, 0x00, 0x00, 0x02};
+	/* This is a File Request from AC2CZ for 2 holes in file 2*/
+	unsigned char data[] = {0x00, 0xa0, 0x8c, 0xa6, 0x66, 0x40, 0x40, 0xf6, 0x82, 0x86, 0x64, 0x86, 0xb4, 0x40, 0x61, 0x03, 0xbb,
+	0x12, 0x02, 0x00, 0x00, 0x00, 0xf4, 0x00, 0x00, 0x00, 0x00, 0xa9, 0x00, 0xd0, 0x00, 0x00, 0x00, 0x02};
 
 	debug_print("LOAD DIR\n");
 	if (dir_init("/tmp/test_dir") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 
-	pb_handle_file_request("AC2CZ", data, sizeof(data));
+	if (pb_handle_file_request("AC2CZ", data, sizeof(data))) { printf("** Could handle file hole request\n"); return EXIT_FAILURE;}
 	pb_debug_print_list();
 	if (strcmp(pb_list[0].callsign, "AC2CZ") != 0) {printf("** Mismatched callsign AC2CZ\n"); return EXIT_FAILURE;}
-	if (pb_list[0].file_id != 1) {printf("** Mismatched file id\n"); return EXIT_FAILURE;}
+	if (pb_list[0].file_id != 2) {printf("** Mismatched file id\n"); return EXIT_FAILURE;}
 	if (pb_list[0].pb_type != PB_FILE_REQUEST_TYPE) {printf("** Mismatched req type\n"); return EXIT_FAILURE;}
-	if (pb_list[0].hole_num != 1) {printf("** Mismatched offset\n"); return EXIT_FAILURE;}
+	if (pb_list[0].hole_num != 2) {printf("** Mismatched hole_num\n"); return EXIT_FAILURE;}
 	if (pb_list[0].current_hole_num != 0) {printf("** Mismatched offset\n"); return EXIT_FAILURE;}
 	if (pb_list[0].offset != 0) {printf("** Mismatched offset\n"); return EXIT_FAILURE;}
 
 	if (rc == EXIT_SUCCESS)
-		printf(" TEST PACSAT FILE HOLES: success\n");
+		printf("##### TEST PACSAT FILE HOLES: success\n");
 	else
-		printf(" TEST PACSAT FILE HOLES: fail\n");
+		printf("##### TEST PACSAT FILE HOLES: fail\n");
 	return rc;
 }
 

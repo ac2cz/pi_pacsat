@@ -108,13 +108,22 @@ typedef struct {
   char          file_description[33];     /* 0x24 */
   char          compressionDesc[33]; /* 0x25 */
   char          userFileName[33];    /* 0x26 */
+
+  char          other1[33];    /* 0x42 */
+  char          other2[33];    /* 0x43 */
+  char          other3[33];    /* 0x44 */
+
+
 }
 HEADER;
 
 void pfh_get_filename(HEADER *hdr, char *dir_name, char *filename, int max_len);
 void pfh_get_user_filename(HEADER *hdr,  char *dir_name, char *filename, int max_len);
+void pfh_make_filename(int file_id, char *dir_name, char *filename, int max_len);
+void pfh_make_tmp_filename(int file_id, char *dir_name, char *filename, int max_len);
 HEADER *pfh_new_header();
 HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *crc_passed);
+int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder, char *out_filename);
 int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder);
 HEADER * pfh_load_from_file(char *filename);
 void pfh_debug_print(HEADER *pfh);

@@ -64,15 +64,15 @@
 #include "debug.h"
 
 /* Forward declarations */
-DIR_NODE * dir_add_pfh(HEADER * new_pfh);
 void dir_free();
 void dir_debug_print(DIR_NODE *p);
-
+int dir_load_pacsat_file(char *psf_name);
 
 /* Dir variables */
 static DIR_NODE *dir_head = NULL;  // the head of the directory linked list
 static DIR_NODE *dir_tail = NULL;  // the tail of the directory linked list
 static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory folder
+static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
 
 /**
  * dir_init()
@@ -94,6 +94,20 @@ int dir_init(char *folder) {
 	}
 	debug_print("Directory Initialized: %s\n", dir_folder);
 	return EXIT_SUCCESS;
+}
+
+/**
+ * dir_next_file_number()
+ *
+ * This returns the next file number available for the upload process.
+ * TODO - this will not cope well with failed uploads.  Those ids will be lost and
+ * never used.  We are supposed to "reserve" the file number when a DATA command is
+ * received, but we need to allocate it before that.
+ *
+ */
+int dir_next_file_number() {
+	next_file_id++;
+	return next_file_id;
 }
 
 char *get_dir_folder() {
@@ -136,7 +150,7 @@ void insert_after(DIR_NODE *p, DIR_NODE *new_node) {
  * If the upload_time was modified then the pacsat file header is resaved to disk
  *
  */
-DIR_NODE * dir_add_pfh(HEADER * new_pfh) {
+DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 	int resave = false;
 	DIR_NODE *new_node = (DIR_NODE *)malloc(sizeof(DIR_NODE));
 	new_node->pfh = new_pfh;
@@ -185,9 +199,13 @@ DIR_NODE * dir_add_pfh(HEADER * new_pfh) {
 	}
 	// Now re-save the file with the new time if it changed, this recalculates the checksums
 	if (resave) {
-		int rc = pfh_make_pacsat_file(new_pfh, dir_folder);
+		//int rc = pfh_make_pacsat_file(new_pfh, dir_folder);
+		int rc = pfh_update_pacsat_header(new_pfh, get_dir_folder(), filename);
+
+
 		if (rc != EXIT_SUCCESS) {
 			// we could not save this
+			error_print("** Could not update the header for %s to dir\n",filename);
 			free(new_node);
 			return NULL;
 		} else {
@@ -263,6 +281,26 @@ void dir_debug_print(DIR_NODE *p) {
 	}
 }
 
+int dir_load_pacsat_file(char *psf_name) {
+	//debug_print("Loading: %s \n", psf_name);
+	HEADER *pfh = pfh_load_from_file(psf_name);
+	if (pfh == NULL)
+		return EXIT_FAILURE;
+	//pfh_debug_print(pfh);
+	DIR_NODE *p = dir_add_pfh(pfh, psf_name);
+	if (p == NULL) {
+		debug_print("** Could not add %s to dir\n",psf_name);
+		return EXIT_FAILURE;
+	} else {
+		if (pfh->fileId > next_file_id)
+			next_file_id = pfh->fileId;
+		return EXIT_SUCCESS;
+
+	}
+	return EXIT_SUCCESS;
+
+}
+
 /**
  * dir_load()
  *
@@ -279,15 +317,10 @@ int dir_load() {
 		strlcpy(psf_name, dir_folder, sizeof(psf_name));
 		strlcat(psf_name, "/", sizeof(psf_name));
 		strlcat(psf_name, de->d_name, sizeof(psf_name));
-		if (str_ends_with(de->d_name, PSF_FILE_EXT)) {
-			debug_print("Loading: %s ", psf_name);
-			HEADER *pfh = pfh_load_from_file(psf_name);
-			if (pfh != NULL) {
-				pfh_debug_print(pfh);
-				DIR_NODE *p = dir_add_pfh(pfh); if (p == NULL) { printf("** Could not add %s to dir\n",psf_name); return EXIT_FAILURE; }
+		if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0))
+			if (str_ends_with(de->d_name, PSF_FILE_EXT)) {
+				dir_load_pacsat_file(psf_name);
 			}
-			debug_print("\n");
-		}
 	}
 	closedir(d);
 	return EXIT_SUCCESS;
@@ -365,7 +398,7 @@ int cp(const char *to, const char *from)
     if (fd_to < 0)
         goto out_error;
 
-    while (nread = read(fd_from, buf, sizeof buf), nread > 0)
+    while ((nread = read(fd_from, buf, sizeof buf), nread) > 0)
     {
         char *out_ptr = buf;
         ssize_t nwritten;
@@ -423,6 +456,8 @@ int make_big_test_dir() {
 
 	for (int f=0; f<100; f++) {
 		char userfilename1[MAX_FILE_PATH_LEN];
+		char psf_name[MAX_FILE_PATH_LEN];
+		pfh_make_filename(f, get_dir_folder(), psf_name, MAX_FILE_PATH_LEN);
 		char snum[5];
 		sprintf(snum, "%d",f);
 		strlcpy(userfilename1, "file", sizeof(userfilename1));
@@ -440,7 +475,7 @@ int make_big_test_dir() {
 		HEADER *pfh1 = make_test_header(f, snum, "ve2xyz", "g0kla", title, userfilename1);
 		rc = pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
 		/* Add to the dir */
-		DIR_NODE *p = dir_add_pfh(pfh1); if (p == NULL) { printf("** Could not add pfh1 to dir\n"); return EXIT_FAILURE; }
+		DIR_NODE *p = dir_add_pfh(pfh1,psf_name); if (p == NULL) { printf("** Could not add pfh1 to dir\n"); return EXIT_FAILURE; }
 		sleep(1);
 	}
 	return rc;
@@ -449,17 +484,20 @@ int make_big_test_dir() {
 int make_three_test_entries() {
 	int rc = EXIT_SUCCESS;
 	/* Make three test files */
-	//char *filename1 = "test_dir/1.act";
+	char filename1[MAX_FILE_PATH_LEN];
+	pfh_make_filename(1, get_dir_folder(), filename1, MAX_FILE_PATH_LEN);
 	char *userfilename1 = "file1.txt";
 	char *msg = "Hi there,\nThis is a test message first\n";
 	write_test_msg(dir_folder, userfilename1, msg, strlen(msg));
 
-	//char *filename2 = "test_dir/2.act";
+	char filename2[MAX_FILE_PATH_LEN];
+	pfh_make_filename(2, get_dir_folder(), filename2, MAX_FILE_PATH_LEN);
 	char *userfilename2 = "file2.txt";
 	char *msg2 = "Hi again,\nThis is a test message as a follow up\nAll the best\nChris";
 	write_test_msg(dir_folder, userfilename2, msg2, strlen(msg2));
 
-	//char *filename3 = "test_dir/3.act";
+	char filename3[MAX_FILE_PATH_LEN];
+	pfh_make_filename(3, get_dir_folder(), filename3, MAX_FILE_PATH_LEN);
 	char *userfilename3 = "file3.txt";
 	char *msg3 = "Hi finally,\nThis is my last message\n";
 	write_test_msg(dir_folder, userfilename3, msg3, strlen(msg3));
@@ -467,23 +505,26 @@ int make_three_test_entries() {
 	HEADER *pfh1 = make_test_header(1, "1", "ve2xyz", "g0kla", "Test Msg 1", userfilename1);
 	rc = pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
 	/* Add to the dir */
-	DIR_NODE *p = dir_add_pfh(pfh1); if (p == NULL) { printf("** Could not add pfh1 to dir\n"); return EXIT_FAILURE; }
+	DIR_NODE *p = dir_add_pfh(pfh1,filename1); if (p == NULL) { printf("** Could not add pfh1 to dir\n"); return EXIT_FAILURE; }
 
 	sleep(2);
 	HEADER *pfh2 = make_test_header(2, "2", "ve2xyz", "g0kla", "Test Msg 2", userfilename2);
 	rc = pfh_make_pacsat_file(pfh2,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file2\n"); return EXIT_FAILURE; }
-	p = dir_add_pfh(pfh2); if (p == NULL) { printf("** Could not add pfh2 to dir\n"); return EXIT_FAILURE; }
+	p = dir_add_pfh(pfh2,filename2); if (p == NULL) { printf("** Could not add pfh2 to dir\n"); return EXIT_FAILURE; }
 
 	// no sleep between these adds to test the case where two files have same upload time
 	HEADER *pfh3 = make_test_header(3, "3", "ve2xyz", "g0kla", "Test Msg 3", userfilename3);
 	rc = pfh_make_pacsat_file(pfh3,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file3\n"); return EXIT_FAILURE; }
-	p = dir_add_pfh(pfh3);  if (p == NULL) { printf("** Could not add pfh3 to dir\n"); return EXIT_FAILURE; }
+	p = dir_add_pfh(pfh3,filename3);  if (p == NULL) { printf("** Could not add pfh3 to dir\n"); return EXIT_FAILURE; }
 
+	sleep(1);
 	/* TODO - This only works if the pfh spec is copied into the temp dir */
+	char filename4[MAX_FILE_PATH_LEN];
+	pfh_make_filename(4, get_dir_folder(), filename4, MAX_FILE_PATH_LEN);
 	char *userfilename4 = "pfh_spec.txt";
 	HEADER *pfh4 = make_test_header(4, "4", "ac2cz", "g0kla", "Pacsat Header Definition", userfilename4);
 	rc = pfh_make_pacsat_file(pfh4,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file4\n"); return EXIT_FAILURE; }
-	p = dir_add_pfh(pfh4);  if (p == NULL) { printf("** Could not add pfh4 to dir\n"); return EXIT_FAILURE; }
+	p = dir_add_pfh(pfh4,filename4);  if (p == NULL) { printf("** Could not add pfh4 to dir\n"); return EXIT_FAILURE; }
 
 	return rc;
 }
@@ -494,18 +535,19 @@ int make_three_test_entries() {
  *
  */
 int test_pacsat_dir_one() {
-	printf(" TEST PACSAT DIR 1 FILE:\n");
+	printf("##### TEST PACSAT DIR 1 FILE:\n");
 		int rc = EXIT_SUCCESS;
 	debug_print("TEST Create a file\n");
 
 	if (dir_init("/tmp/one") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; };
 
+	char filename1[MAX_FILE_PATH_LEN];
+	pfh_make_filename(1, get_dir_folder(), filename1, MAX_FILE_PATH_LEN);
 	char *userfilename1 = "file1.txt";
 	char *msg = "Hi there,\nThis is a test message first\n";
 	write_test_msg("/tmp/one", userfilename1, msg, strlen(msg));
 	HEADER *pfh1 = make_test_header(1, "1", "ve2xyz", "g0kla", "Test Msg 1", userfilename1);
-	//HEADER *pfh1= pfh_new_header();
-	//pfh_populate_test_header(pfh1, userfilename1);
+
 	pfh_debug_print(pfh1);
 	rc = pfh_make_pacsat_file(pfh1, "/tmp/one"); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
 	pfh_debug_print(pfh1);
@@ -515,7 +557,7 @@ int test_pacsat_dir_one() {
 	if (pfh2 == NULL) {printf("** Could not load load file\n"); return EXIT_FAILURE; }
 
 	debug_print(".. add to dir, which resaves it with new uptime and new CRC\n");
-	DIR_NODE * node = dir_add_pfh(pfh1);
+	DIR_NODE * node = dir_add_pfh(pfh1,filename1);
 	if (node == NULL) { printf("** Error creating dir node\n"); return EXIT_FAILURE; }
 	if (dir_head->pfh->fileId != 1) { printf("** Error creating file 1\n"); return EXIT_FAILURE; }
 
@@ -535,14 +577,14 @@ int test_pacsat_dir_one() {
 	dir_free();
 
 	if (rc == EXIT_SUCCESS)
-		printf(" TEST PACSAT DIR: success\n");
+		printf("##### TEST PACSAT DIR 1 FILE: success\n");
 	else
-		printf(" TEST PACSAT DIR: fail\n");
+		printf("##### TEST PACSAT DIR 1 FILE: fail\n");
 	return rc;
 }
 
 int test_pacsat_dir() {
-	printf(" TEST PACSAT DIR:\n");
+	printf("##### TEST PACSAT DIR:\n");
 	int rc = EXIT_SUCCESS;
 
 	/* Make test dir folder */
@@ -588,29 +630,36 @@ int test_pacsat_dir() {
 	 * the load order is file1, file3, file2
 	 */
 	debug_print("LOAD DIR\n");
-	dir_load();
+	//dir_load();
+	if (dir_load_pacsat_file("/tmp/test_dir/0001.act") != EXIT_SUCCESS) {  printf("** Could not load psf 1\n"); return EXIT_FAILURE; }
+	if (dir_load_pacsat_file("/tmp/test_dir/0002.act") != EXIT_SUCCESS) {  printf("** Could not load psf 2\n"); return EXIT_FAILURE; }
+	if (dir_load_pacsat_file("/tmp/test_dir/0003.act") != EXIT_SUCCESS) {  printf("** Could not load psf 3\n"); return EXIT_FAILURE; }
+	if (dir_load_pacsat_file("/tmp/test_dir/0004.act") != EXIT_SUCCESS) {  printf("** Could not load psf 4\n"); return EXIT_FAILURE; }
+
 	if (dir_head == NULL) {printf("** Could not load head\n"); return EXIT_FAILURE; }
 	if (dir_head->next == NULL) {printf("** Could not load head + 1\n"); return EXIT_FAILURE; }
 	if (dir_tail == NULL) {printf("** Could not load fail\n"); return EXIT_FAILURE; }
 
-	if (dir_head->pfh->fileId != 1) { printf("** Error loading file 1\n"); return EXIT_FAILURE; }
-	if (dir_head->next->pfh->fileId != 2) { printf("** Error loading file 2\n"); return EXIT_FAILURE; }
-	if (dir_tail->pfh->fileId != 4) { printf("** Error loading file 3\n"); return EXIT_FAILURE; }
+	if (dir_head->pfh->fileId != 1) { printf("** Error loading file 1 as head\n"); return EXIT_FAILURE; }
+	if (dir_head->next->pfh->fileId != 2) { printf("** Error loading file 2 as second entry\n"); return EXIT_FAILURE; }
+	if (dir_tail->pfh->fileId != 4) { printf("** Error loading file 4 as tail\n"); return EXIT_FAILURE; }
 	debug_print("LOADED DIR LIST\n");
 	dir_debug_print(dir_head);
-	debug_print("TEST DUPLICATE DIR LOAD - expecting load error\n");
-	if (dir_load() != EXIT_FAILURE) { printf("** Error testing duplicate insertion\n"); return EXIT_FAILURE; } // confirm duplicates not loaded
+	debug_print("TEST DUPLICATE DIR LOAD - expecting load errors, but exit success\n");
+	if (dir_load() != EXIT_SUCCESS) { printf("** Error testing duplicate insertion\n"); return EXIT_FAILURE; } // confirm duplicates not loaded
 
 	/* Test search for file */
-
 	if (dir_get_node_by_id(1) == NULL) { printf("** Error finding file 1\n"); return EXIT_FAILURE; }
+	DIR_NODE * last = dir_get_node_by_id(4);
+	if ( last == NULL) { printf("** Error finding file 4\n"); return EXIT_FAILURE; }
+	if ( last->next != NULL) { printf("** Error duplicate insert after file 4\n"); return EXIT_FAILURE; }
 	if (dir_get_node_by_id(9999) != NULL) { printf("** Error with search for missing file\n"); return EXIT_FAILURE; }
 
 	dir_free();
 
 	if (rc == EXIT_SUCCESS)
-		printf(" TEST PACSAT DIR: success\n");
+		printf("##### TEST PACSAT DIR: success\n");
 	else
-		printf(" TEST PACSAT DIR: fail\n");
+		printf("##### TEST PACSAT DIR: fail\n");
 	return rc;
 }

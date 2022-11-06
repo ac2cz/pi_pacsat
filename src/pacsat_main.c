@@ -27,6 +27,8 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
+#include <getopt.h>
+#include <signal.h>
 
 /* Program Include files */
 #include "config.h"
@@ -38,8 +40,10 @@
 #include "ftl0.h"
 
 /* Forward declarations */
-void process_frames_queued(char * data, int len);
-void connection_received(char *from_callsign, char *to_callsign, int incomming, char * data);
+//void process_frames_queued(char * data, int len);
+void help(void);
+void signal_handler (int sig) ;
+void process_frames_queued(unsigned char * data, int len);
 
 /*
  *  GLOBAL VARIABLES defined here.  They are declared in config.h
@@ -51,19 +55,85 @@ int g_verbose = false;
 int g_bit_rate = 1200;
 char g_bbs_callsign[10] = "PFS3-12";
 char g_broadcast_callsign[10] = "PFS3-11";
+char g_digi_callsign[10] = "PFS3-1";
 int g_frames_queued = 0;
+int g_max_number_on_uplink = 4;
+int g_max_frames_in_tx_buffer = 2;
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
 int g_run_self_test = false;
 int frame_queue_status_known = false;
 
+/**
+ * Print this help if the -h or --help command line options are used
+ */
+void help(void) {
+	printf(
+			"Usage: pacsat [OPTION]... \n"
+			"-h,--help                        help\n"
+			"-t,--test                        Run self test functions and exit\n"
+			"-v,--verbose                     print additional status and progress messages\n"
+
+	);
+	exit(EXIT_SUCCESS);
+}
+
+void signal_exit (int sig) {
+	debug_print (" Signal received, exiting ...\n");
+	// TODO - unregister the callsign and close connection to AGW
+	// TODO - need to make sure we are not in the middle of a file write for a received packet. Can corrupt a file.
+	exit (0);
+}
+
+void signal_load_config (int sig) {
+	error_print (" Signal received, updating config not yet implemented...\n");
+	// TODO SIHUP should reload the config perhaps
+}
+
 int main(int argc, char *argv[]) {
+	signal (SIGQUIT, signal_handler);
+	signal (SIGTERM, signal_handler);
+	signal (SIGHUP, signal_load_config);
+	signal (SIGINT, signal_handler);
+
+	struct option long_option[] = {
+			{"help", 0, NULL, 'h'},
+			{"test", 0, NULL, 't'},
+			{"verbose", 0, NULL, 'v'},
+			{NULL, 0, NULL, 0},
+	};
+
+	int more_help = false;
+	while (1) {
+		int c;
+		if ((c = getopt_long(argc, argv, "htv:", long_option, NULL)) < 0)
+			break;
+		switch (c) {
+		case 'h': // help
+			more_help = true;
+			break;
+		case 't': // self test
+			g_run_self_test = true;
+			break;
+		case 'v': // verbose
+			g_verbose = true;
+			break;
+		}
+	}
+
+	if (more_help) {
+		help();
+		return 0;
+	}
 
 	printf("PACSAT In-orbit Server\n");
 	printf("Build: %s\n", VERSION);
 
 	int rc = EXIT_SUCCESS;
+
+	/* Load configuration from the config file */
+	load_config();
 
 	rc = tnc_connect("127.0.0.1", AGW_PORT);
 	if (rc != EXIT_SUCCESS) {
@@ -71,8 +141,8 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	rc = tnc_start_monitoring('k'); // k monitors raw frames, m monitors normal frames
-//	rc = tnc_start_monitoring('m');
+	rc = tnc_start_monitoring('k'); // k monitors raw frames, required to process UI frames
+	rc = tnc_start_monitoring('m'); // monitors connected frames, also required to monitor T frames to manage the TX frame queue
 	if (rc != EXIT_SUCCESS) {
 		error_print("\n Error : Could not monitor TNC \n");
 		exit(EXIT_FAILURE);
@@ -80,6 +150,14 @@ int main(int argc, char *argv[]) {
 
 	if (g_run_self_test) {
 		debug_print("Running Self Tests..\n");
+		rc = test_ftl0_frame();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_ftl0_list();
+		if (rc != EXIT_SUCCESS) exit(rc);
+
+//		rc = test_ftl0_action();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+
 		rc = test_pfh_checksum();
 		if (rc != EXIT_SUCCESS) exit(rc);
 		rc = test_pacsat_header();
@@ -132,12 +210,10 @@ int main(int argc, char *argv[]) {
 	if (dir_init("./dir") != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 
-//	char command[] = "PB Empty.";
-
 	/**
 	 * RECEIVE LOOP
 	 * Each time there is a new frame available in the receive buffer, process it.
-	 * We expect only these types of frames:
+	 * We expect only these types of frames:If you have a signal generator then see if it works for frequencies close to 50Hz.  That is usually what gets filtered out.
 	 *
 	 * DIR REQUEST
 	 * New DIR requests are added to the Pacsat Broadcast (PB) queue unless it is full
@@ -166,17 +242,29 @@ int main(int argc, char *argv[]) {
 
 			switch (frame.header->data_kind) {
 			case 'X': // Response to callsign registration
+				debug_print("t:%d:\n",frame_num);
 				break;
-			case 'y': // Response to query of number of frames outstanding
+			case 'T': // Response to sending a UI frame
+				/* The T frame is a confirm that a frame was sent.  We use this event to query the TNC and ask how many
+				 * frames are outstanding.  Note that this process has a delay, so we actually increase the frame counter
+				 * whenever we send a UI frame. But the received y frame below will then set it to the right value.  We
+				 * can still get a bit ahead of ourselves and end up with more frames queued than expected. */
+				tnc_frames_queued();
+				break;
+			case 'y': // Response to query of number of frames outstanding -- but this does not work with DireWolf
 				process_frames_queued (frame.data, frame.header->data_len);
 				break;
+			case 'S': // Supervisory frame.  Only received if monitoring with 'm'.  Only needed for debugging
+				break;
 			case 'K': // Monitored frame
-				debug_print("FRM:%d:",frame_num);
-				print_header(frame.header);
-				print_data(frame.data, frame.header->data_len);
-				debug_print("| %d bytes\n", frame.header->data_len);
+//				debug_print("FRM:%d:",frame_num);
+//				print_header(frame.header);
+//				print_data(frame.data, frame.header->data_len);
+//				debug_print("| %d bytes\n", frame.header->data_len);
 
-				pb_process_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
+				/* Only send Broadcast UI frames to the PB */
+				if (strncasecmp(frame.header->call_to, g_broadcast_callsign, 7) == 0)
+					pb_process_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
 				break;
 			case 'C': // Connected to a station
 				debug_print("CON:%d:",frame_num);
@@ -184,15 +272,14 @@ int main(int argc, char *argv[]) {
 				print_data(frame.data, frame.header->data_len);
 				debug_print("\n");
 
-				if (strncmp(frame.data, "*** CONNECTED To Station", 24) == 0) {
+				if (strncmp((char *)frame.data, "*** CONNECTED To Station", 24) == 0) {
 					// Incoming: Other station initiated the connect request.
-					ftl0_connection_received (frame.header->call_from, frame.header->call_to, 1, frame.data);
+					ftl0_connection_received (frame.header->call_from, frame.header->call_to, frame.header->portx, 1, frame.data);
 				}
-				else if (strncmp(frame.data, "*** CONNECTED With Station", 26) == 0) {
+				else if (strncmp((char *)frame.data, "*** CONNECTED With Station", 26) == 0) {
 					// Outgoing: Other station accepted my connect request.
-					ftl0_connection_received (frame.header->call_from, frame.header->call_to, 0, frame.data);
-				}/* If we removed a station then we don't want/need to increment the current station pointer */
-				return EXIT_SUCCESS;
+					ftl0_connection_received (frame.header->call_from, frame.header->call_to, frame.header->portx, 0, frame.data);
+				}
 				break;
 
 			case 'D': // Data from a connected station
@@ -200,39 +287,39 @@ int main(int argc, char *argv[]) {
 				print_header(frame.header);
 				print_data(frame.data, frame.header->data_len);
 				debug_print("\n");
-				ftl0_process_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
+				ftl0_process_data(frame.header->call_from, frame.header->call_to, frame.header->portx, frame.data, frame.header->data_len);
+				break;
+
+			case 'd': // Disconnect from the TNC
+				debug_print("*** DISC:%d:",frame_num);
+				print_header(frame.header);
+				print_data(frame.data, frame.header->data_len);
+				debug_print("\n");
+				ftl0_disconnected(frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
 				break;
 			}
 		}
 
-		/* Don't take the next action until we know the state of the TNC frame queue but NOTE that
-		 * this does not seem to work because DireWolf takes a long time to return the status.  In
-		 * that time we can add 100s of frames to the queue.  Instead we currently delay the sending
-		 * of frames in agw_tnc.c*/
-
-		if (frame_queue_status_known == true) {
-			pb_next_action();
-			frame_queue_status_known = false;
-		}
-		tnc_frames_queued();
+		pb_next_action();
+		ftl0_next_action();
 
 		usleep(1000); // sleep 1ms
 
 	}
 
-	/* For testing wait until the TNC thread returns.  Otherwise the program just ends.
-	 * TODO - catch a signal and exit the TNC thread cleanly. */
+	/* Wait until the TNC thread returns.  Otherwise the program just ends.
+	 * Use a signal to end the program externally. */
 
 	pthread_join(tnc_listen_pthread, NULL);
 	exit(EXIT_SUCCESS);
 
 }
 
-void process_frames_queued(char * data, int len) {
+void process_frames_queued(unsigned char * data, int len) {
 	uint32_t *num = (uint32_t *)data;
 	g_frames_queued = *num;
 	frame_queue_status_known = true;
-	//debug_print("Received y: %d\n", g_frames_queued);
+//	debug_print("***** Received y: %d\n", g_frames_queued);
 }
 
 

@@ -33,12 +33,30 @@
 #define AX25_MAX_DATA_LEN 2048
 #define AGW_PORT 8000
 
-extern int g_verbose;          /* print verbose output when set */
-extern int g_bit_rate;		   /* the bit rate of the TNC - 1200 4800 9600 etc) */
+/* These global variables are not in the config file */
 extern int g_run_self_test;    /* true when the self test is running */
+extern int g_verbose;          /* print verbose output when set */
+extern int g_frames_queued; /* The number of frames waiting to be transmitted */
+/* Frames are queued by the TNC until they are transmitted.  Only hold this many before pausing
+ * the broadcasts. If set too high then stations wait to receive OK confirms or for their own
+ * broadcast to start */
+extern int g_max_frames_in_tx_buffer;
+
+/* Define paramaters for config file */
+#define MAX_CONFIG_LINE_LENGTH 128
+#define BIT_RATE "bit_rate"
+#define BBS_CALLSIGN "bbs_callsign"
+#define BROADCST_CALLSIGN "broadcast_callsign"
+#define DIGI_CALLSIGN "digi_callsign"
+#define MAX_NUMBER_ON_UPLINK "max_number_on_uplink"
+#define MAX_FRAMES_IN_TX_BUFFER "max_frames_in_tx_buffer"
+
+extern int g_bit_rate;		   /* the bit rate of the TNC - 1200 4800 9600 - this is only used to calculate delays.  Change actual value in DireWolf) */
 extern char g_bbs_callsign[MAX_CALLSIGN_LEN];
 extern char g_broadcast_callsign[MAX_CALLSIGN_LEN];
 extern char g_digi_callsign[MAX_CALLSIGN_LEN];
-extern int g_frames_queued; /* The number of frames waiting to be transmitted */
+extern int g_max_number_on_uplink;
+
+void load_config();
 
 #endif /* CONFIG_H_ */

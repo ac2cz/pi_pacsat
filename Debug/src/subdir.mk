@@ -5,18 +5,21 @@
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
 ../src/agw_tnc.c \
+../src/config.c \
 ../src/crc.c \
 ../src/pacsat_main.c \
 ../src/str_util.c 
 
 C_DEPS += \
 ./src/agw_tnc.d \
+./src/config.d \
 ./src/crc.d \
 ./src/pacsat_main.d \
 ./src/str_util.d 
 
 OBJS += \
 ./src/agw_tnc.o \
+./src/config.o \
 ./src/crc.o \
 ./src/pacsat_main.o \
 ./src/str_util.o 
@@ -34,7 +37,7 @@ src/%.o: ../src/%.c src/subdir.mk
 clean: clean-src
 
 clean-src:
-	-$(RM) ./src/agw_tnc.d ./src/agw_tnc.o ./src/crc.d ./src/crc.o ./src/pacsat_main.d ./src/pacsat_main.o ./src/str_util.d ./src/str_util.o
+	-$(RM) ./src/agw_tnc.d ./src/agw_tnc.o ./src/config.d ./src/config.o ./src/crc.d ./src/crc.o ./src/pacsat_main.d ./src/pacsat_main.o ./src/str_util.d ./src/str_util.o
 
 .PHONY: clean-src
 

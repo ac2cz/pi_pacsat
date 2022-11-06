@@ -39,12 +39,12 @@ struct t_agw_header {
 
 struct t_agw_frame {
 	struct t_agw_header header;
-	char data[AX25_MAX_DATA_LEN];
+	unsigned char data[AX25_MAX_DATA_LEN];
 };
 
 struct t_agw_frame_ptr {
 	struct t_agw_header *header;
-	char *data;
+	unsigned char *data;
 };
 
 #define MAX_RX_QUEUE_LEN 256
@@ -52,12 +52,14 @@ struct t_agw_frame_ptr {
 int tnc_connect(char *addr, int port);
 int tnc_start_monitoring(char type);
 int tnc_register_callsign(char *callsign);
+int tnc_send_connected_data(char *from_callsign, char *to_callsign, int channel, unsigned char *bytes, int len);
+int tnc_diconnect(char *from_callsign, char *to_callsign, int channel);
 int send_ui_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len);
 int send_raw_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len);
 int tnc_frames_queued();
 int tnc_receive_packet();
 void print_header(struct t_agw_header *header);
-void print_data(char *data, int len);
+void print_data(unsigned char *data, int len);
 
 /* Listen to the TNC and store any received packets in a queue. */
 void *tnc_listen_process(void * arg);

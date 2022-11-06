@@ -50,7 +50,7 @@ int listen_thread_called = 0;
 
 int next_frame_ptr = 0;
 struct t_agw_frame receive_circular_buffer[MAX_RX_QUEUE_LEN]; // buffer received frames
-int debug_tx_raw_frames = true;
+int debug_tx_raw_frames = false;
 int debug_rx_raw_frames = false;
 
 /* Forward declarations*/
@@ -112,6 +112,69 @@ int tnc_register_callsign(char *callsign) {
 	memset (&header, 0, sizeof(header));
 	header.data_kind = 'X'; // register callsign
 	strlcpy( header.call_from, callsign, sizeof(header.call_from) );
+	int err = 0;
+	err = send(sockfd, (char*)(&header), sizeof(header), MSG_NOSIGNAL);
+	if (err == -1) {
+		printf ("Socket Send error\n");
+		return EXIT_FAILURE;
+	}
+	return EXIT_SUCCESS;
+}
+
+/**
+ * Ask AGW to send connected data.  Must already have registered the from_callsign
+ *
+ * Returns EXIT_SUCCESS if successful otherwise EXIT_FAILURE
+ */
+int tnc_send_connected_data(char *from_callsign, char *to_callsign, int channel, unsigned char *bytes, int len) {
+	struct t_agw_header header;
+	memset (&header, 0, sizeof(header));
+	header.data_kind = 'D'; // disconnect
+	header.portx = channel; // channel
+	strlcpy( header.call_from, from_callsign, sizeof(header.call_from) );
+	strlcpy( header.call_to, to_callsign,sizeof(header.call_to)  );
+	header.data_len = len;
+	header.pid = 0xf0;
+
+	if (debug_tx_raw_frames) {
+		debug_print("SENDING: %s>%s: ", from_callsign, to_callsign);
+		for (int i=0; i < header.data_len; i++) {
+			debug_print("%02x ",bytes[i]);
+		}
+	}
+	debug_print(" .. %d bytes\n", header.data_len);
+
+if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mode */
+
+	int err = send(sockfd, (unsigned char*)(&header), sizeof(header), MSG_NOSIGNAL);
+	if (err == -1) {
+		printf ("Socket Send error with header, Terminating.\n");
+		return EXIT_FAILURE;
+	}
+	err = send(sockfd, bytes, len, MSG_NOSIGNAL);
+	if (err == -1) {
+		printf ("Socket Send error with data, Terminating.\n");
+		return EXIT_FAILURE;
+	}
+	float n = 8*(sizeof(header) + len ) / (float)g_bit_rate;
+//	debug_print(" .. wait %f secs ..\n",n);
+	usleep((int)(n * 1000000));
+
+	return EXIT_SUCCESS;
+ }
+/**
+ * Ask AGW to disconnect
+ * Returns 0 if successful otherwise 1
+ */
+int tnc_diconnect(char *from_callsign, char *to_callsign, int channel) {
+	struct t_agw_header header;
+	memset (&header, 0, sizeof(header));
+	header.data_kind = 'd'; // disconnect
+	header.portx = channel; // channel
+	strlcpy( header.call_from, from_callsign, sizeof(header.call_from) );
+	strlcpy( header.call_to, to_callsign,sizeof(header.call_to)  );
+	header.data_len = 0;
+	header.pid = 0xf0;
 	int err = 0;
 	err = send(sockfd, (char*)(&header), sizeof(header), MSG_NOSIGNAL);
 	if (err == -1) {
@@ -202,9 +265,12 @@ if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mod
 		printf ("Socket Send error with data, Terminating.\n");
 		return EXIT_FAILURE;
 	}
-	float n = 8*(sizeof(header) + len ) / (float)g_bit_rate;
-	debug_print(" .. wait %f secs ..\n",n);
-	usleep((int)(n * 1000000));
+
+	g_frames_queued++;
+//	debug_print("~~~~M Sent :%d\n", g_frames_queued);
+//	float n = 8*(sizeof(header) + len ) / (float)g_bit_rate;
+//	debug_print(" .. wait %f secs ..\n",n);
+////////////////	usleep((int)(n * 1000000));
 
 	return EXIT_SUCCESS;
 }
@@ -246,14 +312,21 @@ int send_raw_packet(char *from_callsign, char *to_callsign, char pid, unsigned c
 
 	if (debug_tx_raw_frames) {
 		for (int i=0; i< (len+sizeof(raw_hdr)); i++) {
+			if (isprint(raw_bytes[i]))
+				printf("%c",raw_bytes[i]);
+			else
+				printf(" ");
+		}
+		for (int i=0; i< (len+sizeof(raw_hdr)); i++) {
 			printf("%02x ",raw_bytes[i]);
 			if (i%40 == 0 && i!=0) printf("\n");
 		}
 	}
 
+	debug_print(" .. %d bytes\n", header.data_len);
+
 if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mode */
 
-	debug_print(" .. %d bytes\n", header.data_len);
 	int err = send(sockfd, (unsigned char*)(&header), sizeof(header), MSG_NOSIGNAL);
 	if (err == -1) {
 		error_print ("Socket Send error with header, Terminating.\n");
@@ -264,9 +337,15 @@ if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mod
 		error_print ("Socket Send error with data, Terminating.\n");
 		return EXIT_FAILURE;
 	}
-	float n = 8*(sizeof(header) + len+sizeof(raw_hdr) ) / (float)g_bit_rate;
-	debug_print(" .. wait %f secs ..\n",n);
-	usleep((int)(n * 1000000));
+
+	/* this gets overridden when we read the y frame from the TNC, but we increment it because the
+	 * y frame data lags.  This prevents us from sending too many frames before we know the status */
+	g_frames_queued++;
+//	debug_print("~~~~K Sent :%d\n", g_frames_queued);
+
+//	float n = 8*(sizeof(header) + len+sizeof(raw_hdr) ) / (float)g_bit_rate;
+//	debug_print(" .. wait %f secs ..\n",n);
+//////////////	usleep((int)(n * 1000000));
 
 	return EXIT_SUCCESS;
 }
@@ -307,10 +386,10 @@ void print_header(struct t_agw_header *header) {
 	debug_print(" Len:%d ||",header->data_len);
 }
 
-void print_data(char *data, int len) {
+void print_data(unsigned char *data, int len) {
 	for (int i=0; i < len; i++) {
 		if (isprint(data[i]))
-			debug_print("%c",data[i]);
+			debug_print("%c",(char)data[i]);
 		else
 			debug_print(" ");
 	}
@@ -334,9 +413,16 @@ int tnc_receive_packet() {
 	/* If this asset fails then we are likely receiving frames that are longer than AX25_MAX_DATA_LEN */
 	assert (header.data_len >= 0 && header.data_len < (int)(sizeof(receive_circular_buffer[next_frame_ptr].data)));
 
-	if (debug_rx_raw_frames) {
-		debug_print("RX :%d:", next_frame_ptr);
-		print_header(&header);
+	if (header.data_kind == 'T') {
+		//g_frames_queued--;
+		//debug_print("~~~~T Confirmed :%d  ", g_frames_queued);
+		//print_header(&header);
+		//debug_print("\n");
+	} else {
+		if (debug_rx_raw_frames) {
+			debug_print("RX :%d:", next_frame_ptr);
+			print_header(&header);
+		}
 	}
 
 	if (header.data_len > 0) {
@@ -346,10 +432,9 @@ int tnc_receive_packet() {
 			error_print ("Read error, client received %d data bytes when %d expected.  Terminating.\n", n, header.data_len);
 			exit (1);
 		}
-		if (debug_rx_raw_frames)
+		if (debug_rx_raw_frames && header.data_kind != 'T')
 			print_data(receive_circular_buffer[next_frame_ptr].data, header.data_len);
-
-		if (debug_rx_raw_frames)
+		if (debug_rx_raw_frames && header.data_kind != 'T')
 			debug_print("\n");
 
 		next_frame_ptr++;
@@ -370,7 +455,7 @@ int tnc_receive_packet() {
 int get_next_frame(int frame_num, struct t_agw_frame_ptr *frame) {
 	if (next_frame_ptr != frame_num) {
 		frame->header = &receive_circular_buffer[frame_num].header;
-		frame->data = &receive_circular_buffer[frame_num].data;
+		frame->data = (unsigned char *)&receive_circular_buffer[frame_num].data;
 		return EXIT_SUCCESS;
 	} else {
 		return EXIT_FAILURE;
