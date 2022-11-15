@@ -44,6 +44,7 @@ int dir_init(char *folder);
 char *get_dir_folder();
 int dir_next_file_number();
 int dir_load();
+int dir_validate_file(HEADER *pfh, char *filename);
 void dir_free();
 DIR_NODE * dir_add_pfh(HEADER * new_pfh, char *filename);
 DIR_NODE * dir_get_pfh_by_date(DIR_DATE_PAIR pair, DIR_NODE *p );

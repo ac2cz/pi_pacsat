@@ -210,6 +210,7 @@ void ftl0_make_list_str(char *buffer, int len) {
 			strlcat(buffer, " ", len);
 		}
 		// TODO - this does not print the right callsigns against the right channels!
+		// TODO - this truncates the last character i.e. the D.
 		strlcat(buffer, " BCD", len);
 	}
 }
@@ -292,7 +293,7 @@ int ftl0_connection_received(char *from_callsign, char *to_callsign, int channel
 	FTL0_LOGIN_DATA login_data;
 	unsigned char data_bytes[sizeof(login_data)+2];
 
-	time_t now = time(0); // TODO - we don't really need to call this again, we could use the time in the uplink_list for the station
+	time_t now = time(0); // TODO - we don't really need to call this again, we should use the time in the uplink_list for the station
 	unsigned char flag = 0;
 	flag |= 1UL << FTL0_VERSION_BIT1;
 	flag |= 1UL << FTL0_VERSION_BIT2;
@@ -394,7 +395,6 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 		/* Process the EVENT through the UPLINK STATE MACHINE */
 		switch (ftl0_type) {
 		case UPLOAD_CMD :
-			FTL0_UPLOAD_CMD *upload_cmd = (FTL0_UPLOAD_CMD *)(data + 2);
 			/* if OK to upload send UL_GO_RESP.  We determine if it is OK by checking if we have space
 			 * and that it is a valid continue of file_id != 0
 			 * This will send UL_GO_DATA packet if checks pass
@@ -591,7 +591,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		ul_go_data.byte_offset = 0;
 		/* Initialize the empty file */
 		char tmp_filename[MAX_FILE_PATH_LEN];
-		pfh_make_tmp_filename(ul_go_data.server_file_no, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
+		ftl0_make_tmp_filename(ul_go_data.server_file_no, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
 		FILE * f = fopen(tmp_filename, "w");
 		if (f == NULL) {
 			error_print("Can't initilize new file %s\n",tmp_filename);
@@ -602,7 +602,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		/* Is this a valid continue? Check to see if there is a tmp file and read its length */
 
 		char tmp_filename[MAX_FILE_PATH_LEN];
-		pfh_make_tmp_filename(file_no, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
+		ftl0_make_tmp_filename(file_no, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
 		debug_print("Checking continue file: %s\n",tmp_filename);
 		FILE * f = fopen(tmp_filename, "rb");
 		if (f == NULL) {
@@ -617,7 +617,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		/* if <continue_file_no> is not 0 and the <file_length> does not
 			agree with the <file_length> previously associated with the file identified by
 			<continue_file_no>.  Continue is not possible.*/
-		// TODO - code this error check
+		// code this error check
 
 		ul_go_data.server_file_no = file_no;
 		ul_go_data.byte_offset = offset; // this is the end of the file so far
@@ -657,7 +657,7 @@ int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel
 	unsigned char * data_bytes = (unsigned char *)data + 2; /* Point to the data just past the header */
 
 	char tmp_filename[MAX_FILE_PATH_LEN];
-	pfh_make_tmp_filename(uplink_list[selected_station].file_id, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
+	ftl0_make_tmp_filename(uplink_list[selected_station].file_id, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
 	debug_print("Saving data to file: %s\n",tmp_filename);
 	FILE * f = fopen(tmp_filename, "ab"); /* Open the file for append of data to the end */
 	if (f == NULL) {
@@ -686,34 +686,31 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 	}
 
 	char tmp_filename[MAX_FILE_PATH_LEN];
-	pfh_make_tmp_filename(uplink_list[selected_station].file_id, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
-	debug_print("Data_end: Checking data in file: %s\n",tmp_filename);
-	/* First check the header */
+	ftl0_make_tmp_filename(uplink_list[selected_station].file_id, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
+
+	/* We can't call dir_load_pacsat_file() here because we want to check the tmp file but then
+	 * add the file after we rename it. So we validate it first. */
+
+	/* First check the header.  We must free the pfh memory if it is not added to the dir */
 	HEADER *pfh = pfh_load_from_file(tmp_filename);
 	if (pfh == NULL) {
 		/* Header is invalid */
 		error_print("** Header check failed for %s\n",tmp_filename);
+		if (remove(tmp_filename) != 0) {
+			error_print("Could not remove the temp file: %s\n", tmp_filename);
+		}
 		return ER_BAD_HEADER;
 	}
-	/* Now check the body */
-	// TODO - it would be more efficient to check the body when we are saving it to disk in next step
-	short int body_checksum = 0;
-	unsigned int body_size = 0;
 
-	FILE *infile = fopen(tmp_filename, "rb");
-	if (infile == NULL) return ER_NO_SUCH_FILE_NUMBER;
-	fseek(infile, pfh->bodyOffset, SEEK_SET);
-	int ch=fgetc(infile);
-	while (ch!=EOF) {
-		body_checksum += ch & 0xff;
-		body_size++;
-		ch=fgetc(infile);
+	int rc = dir_validate_file(pfh, tmp_filename);
+	if (rc != ER_NONE) {
+		free(pfh);
+		if (remove(tmp_filename) != 0) {
+			error_print("Could not remove the temp file: %s\n", tmp_filename);
+		}
+		return rc;
 	}
-	fclose(infile);
-	if (pfh->bodyCRC != body_checksum) {
-		error_print("** Body check failed for %s\n",tmp_filename);
-		return ER_BODY_CHECK;
-	}
+
 	/* Otherwise this looks good.  Rename the file and add it to the directory. */
 	char new_filename[MAX_FILE_PATH_LEN];
 	pfh_make_filename(uplink_list[selected_station].file_id, get_dir_folder(), new_filename, MAX_FILE_PATH_LEN);
@@ -726,13 +723,31 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 		DIR_NODE *p = dir_add_pfh(pfh, new_filename);
 		if (p == NULL) {
 			error_print("** Could not add %s to dir\n",new_filename);
-			return ER_BAD_HEADER;
+			free(pfh);
+			if (remove(tmp_filename) != 0) {
+				error_print("Could not remove the temp file: %s\n", new_filename);
+			}
+			return ER_NO_ROOM; /* This is a bit of a guess at the error, but it is unclear why else this would fail. */
 		}
 	} else {
 		/* This looks like an io error and we can't rename the file.  Send error to the ground */
+		free(pfh);
+		if (remove(tmp_filename) != 0) {
+			error_print("Could not remove the temp file: %s\n", tmp_filename);
+		}
 		return ER_NO_ROOM;
 	}
 	return ER_NONE;
+}
+
+void ftl0_make_tmp_filename(int file_id, char *dir_name, char *filename, int max_len) {
+	char file_id_str[5];
+	snprintf(file_id_str, 5, "%04x",file_id);
+	strlcpy(filename, dir_name, MAX_FILE_PATH_LEN);
+	strlcat(filename, "/", MAX_FILE_PATH_LEN);
+	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
+	strlcat(filename, ".", MAX_FILE_PATH_LEN);
+	strlcat(filename, "upload", MAX_FILE_PATH_LEN);
 }
 
 /*
@@ -751,28 +766,30 @@ int ftl0_next_action() {
 
 	/* First see if we need to send the status */
 	time_t now = time(0);
-	if (now - last_uplink_status_time > UPLINK_STATUS_PERIOD_IN_SECONDS) {
+	if (last_uplink_status_time == 0) last_uplink_status_time = now; // initialize at start
+	if (now - last_uplink_status_time > g_uplink_status_period_in_seconds) {
 		// then send the status
 		rc = ftl0_send_status();
 		if (rc != EXIT_SUCCESS) {
 			error_print("Could not send PB status to TNC \n");
 		}
+		ftl0_debug_print_list();
 		last_uplink_status_time = now;
 
 	}
 
 	/* Print debug info to the console */
-	if (now - last_uplink_frames_queued_time > 5) {
-		//			char buffer[256];
-		//			ftl0_make_list_str(buffer, sizeof(buffer));
-		//			debug_print("%s\n", buffer);
-		ftl0_debug_print_list();
-		last_uplink_frames_queued_time = now;
-	}
+//	if (now - last_uplink_frames_queued_time > 5) {
+//		//			char buffer[256];
+//		//			ftl0_make_list_str(buffer, sizeof(buffer));
+//		//			debug_print("%s\n", buffer);
+//		ftl0_debug_print_list();
+//		last_uplink_frames_queued_time = now;
+//	}
 
 	if (number_on_uplink == 0) return EXIT_SUCCESS; // nothing to do
 
-	if (now - uplink_list[current_station_on_uplink].request_time > UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS) {
+	if (now - uplink_list[current_station_on_uplink].request_time > g_uplink_max_period_for_client_in_seconds) {
 		/* This station has exceeded the time allowed on the PB */
 		debug_print("%s: UPLINK TIMEOUT\n",uplink_list[current_station_on_uplink].callsign);
 		ftl0_disconnect(uplink_list[current_station_on_uplink].callsign, uplink_list[current_station_on_uplink].channel);

@@ -39,3 +39,4 @@ Release/pi_pacsat
 .settings
 .cproject
 .project
+/Debug/

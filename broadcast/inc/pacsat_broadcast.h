@@ -29,9 +29,6 @@
 #define PID_DIRECTORY	0xBD
 #define PID_NO_PROTOCOL	0xF0
 
-// TODO - this should be in the CONFIG file
-#define PB_STATUS_PERIOD_IN_SECONDS 30
-#define PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS 36000 // This is 10 mins in the spec 10*60*60 seconds
 #define MAX_PB_LENGTH 10 /* This is the maximum number of stations that can be on the PB at one time */
 #define PB_DIR_REQUEST_TYPE 1
 #define PB_FILE_REQUEST_TYPE 2
@@ -45,7 +42,10 @@
 #define EXIT_LAST_CHUNK_SENT 2 /* This exit code is used when we have sent the last chunk of a file */
 
 #define MAX_REQUEST_PACKETS 10 /* The maximum number of Dir Headers or File segments that will be sent in response to a request */
-#define MAX_BROADCAST_LENGTH 256 /* This was the limit on historical Pacsats. Can we make it longer? */
+#define MAX_DIR_PFH_LENGTH 182 /* Shorten this for FX25? BD header is 9 longer than file header */
+//#define MAX_BROADCAST_LENGTH 254 /* This was the limit on historical Pacsats. Can we make it longer? */
+#define PB_FILE_DEFAULT_BLOCK_SIZE 191 /* 191 seems to be the MAX for FX25. This must be assuming 32 header bytes and 32 check bytes. AX25 Header is 17.  File Broadcast header is 9.*/
+//#define PB_FILE_DEFAULT_BLOCK_SIZE 0xF4
 
 #define PBLIST "PBLIST" // destination for PB Status when open
 #define PBFULL "PBFULL" // destination for PB status when list is full
@@ -59,8 +59,6 @@
 #define PB_START_SENDING_FILE 0b00
 #define PB_STOP_SENDING_FILE 0b01
 #define PB_FILE_HOLE_LIST 0b10
-
-#define PB_FILE_DEFAULT_BLOCK_SIZE 0xF4
 
 /**
  *  The Server Sends frames with these headers

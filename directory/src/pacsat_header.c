@@ -146,17 +146,6 @@ void pfh_make_filename(int file_id, char *dir_name, char *filename, int max_len)
 	strlcat(filename, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
 }
 
-
-void pfh_make_tmp_filename(int file_id, char *dir_name, char *filename, int max_len) {
-	char file_id_str[5];
-	snprintf(file_id_str, 5, "%04x",file_id);
-	strlcpy(filename, dir_name, MAX_FILE_PATH_LEN);
-	strlcat(filename, "/", MAX_FILE_PATH_LEN);
-	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
-	strlcat(filename, ".", MAX_FILE_PATH_LEN);
-	strlcat(filename, "tmp", MAX_FILE_PATH_LEN);
-}
-
 /**
  * pfh_extract_header()
  *
@@ -414,6 +403,8 @@ int pfh_generate_header_bytes(HEADER *pfh, int body_size, unsigned char *header_
  * TODO - this does not preserve any PFH fields that we do not know about. It
  * would be better to update fields in place.
  *
+ * TODO - it seems that this does not work for ZIP files.  Which relies on both the filename and user file name perhaps??
+ *
  *
  */
 int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder, char *out_filename) {
@@ -426,7 +417,7 @@ int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder, char *out_filename) 
 	char tmp_filename[MAX_FILE_PATH_LEN];
 	strlcpy(tmp_filename, out_filename, MAX_FILE_PATH_LEN);
 	strlcat(tmp_filename, ".", MAX_FILE_PATH_LEN);
-	strlcat(tmp_filename, "tmp", MAX_FILE_PATH_LEN);
+	strlcat(tmp_filename, "tmp", MAX_FILE_PATH_LEN); /* This will give it a name like 0005.act.tmp */
 
 	if (rename(out_filename, tmp_filename) != EXIT_SUCCESS) {
 		return EXIT_FAILURE;
@@ -549,9 +540,9 @@ HEADER * pfh_load_from_file(char *filename) {
 	pfh = pfh_extract_header(buffer, 1025, &size, &crc_passed);
 	//debug_print("Read: %d Header size: %d\n",num, size);
 
-	// TODO - if we load from the file and the CRC does not pass then this was corrupted
 	if (!crc_passed) {
 		//debug_print("CRC failed when loading PFH from file\n");
+		free(pfh);
 		return NULL;
 	}
 

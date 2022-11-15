@@ -230,7 +230,8 @@ int tnc_frames_queued() {
 int send_ui_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len) {
 	struct t_agw_header header;
 
-	debug_print("SENDING: ");
+	if (debug_tx_raw_frames)
+		debug_print("SENDING: ");
 
 	memset (&header, 0, sizeof(header));
 	header.pid = pid;
@@ -251,6 +252,7 @@ int send_ui_packet(char *from_callsign, char *to_callsign, char pid, unsigned ch
 			debug_print("%02x ",bytes[i]);
 		}
 	}
+	if (debug_tx_raw_frames)
 	debug_print(" .. %d bytes\n", header.data_len);
 
 if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mode */
@@ -278,7 +280,8 @@ if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mod
 int send_raw_packet(char *from_callsign, char *to_callsign, char pid, unsigned char *bytes, int len) {
 	struct t_agw_header header;
 
-	debug_print("SENDING: ");
+	if (debug_tx_raw_frames)
+		debug_print("SENDING: ");
 
 	memset (&header, 0, sizeof(header));
 	header.pid = pid;
@@ -323,7 +326,8 @@ int send_raw_packet(char *from_callsign, char *to_callsign, char pid, unsigned c
 		}
 	}
 
-	debug_print(" .. %d bytes\n", header.data_len);
+	if (debug_tx_raw_frames)
+		debug_print(" .. %d bytes\n", header.data_len);
 
 if (g_run_self_test) return EXIT_SUCCESS; /* Dont transmit the bytes in test mode */
 
@@ -450,6 +454,8 @@ int tnc_receive_packet() {
  * not equal to this number
  * TODO - this fails if we have wrapped all the way around the circular buffer. Need
  * to print a warning.  But then we are way behind and probably in trouble anyway.
+ *
+ * Returns EXIT_SUCCESS if there is a new frame otherwise EXIT_FAILURE
  *
  */
 int get_next_frame(int frame_num, struct t_agw_frame_ptr *frame) {

@@ -63,12 +63,22 @@ void load_config() {
 					strlcpy(g_broadcast_callsign, value,sizeof(g_broadcast_callsign));
 				} else if (strcmp(key, DIGI_CALLSIGN) == 0) {
 					strlcpy(g_digi_callsign, value,sizeof(g_digi_callsign));
-				} else if (strcmp(key, MAX_NUMBER_ON_UPLINK) == 0) {
-					int n = atoi(value);
-					g_max_number_on_uplink = n;
 				} else if (strcmp(key, MAX_FRAMES_IN_TX_BUFFER) == 0) {
 					int n = atoi(value);
 					g_max_frames_in_tx_buffer = n;
+				} else if (strcmp(key, PB_STATUS_PERIOD_IN_SECONDS) == 0) {
+					int n = atoi(value);
+					g_pb_status_period_in_seconds = n;
+				} else if (strcmp(key, PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS) == 0) {
+					int n = atoi(value);
+					g_pb_max_period_for_client_in_seconds = n;
+				} else if (strcmp(key, UPLINK_STATUS_PERIOD_IN_SECONDS) == 0) {
+					int n = atoi(value);
+					g_uplink_status_period_in_seconds = n;
+				} else if (strcmp(key, UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS) == 0) {
+					int n = atoi(value);
+					g_uplink_max_period_for_client_in_seconds = n;
+
 				} else {
 					error_print("Unknown key in %s file: %s\n",filename, key);
 				}

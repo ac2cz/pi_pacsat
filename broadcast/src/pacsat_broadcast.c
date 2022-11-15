@@ -87,7 +87,7 @@ struct pb_entry {
 	DIR_NODE *node; /* Pointer to the node that we should broadcast next if this is a DIR request */
 	int file_id; /* File id of the file we are broadcasting if this is a file request */
 	int offset; /* The current offset in the file we are broadcasting or the PFH we are transmitting */
-	int block_size; /* The maximum size of broadcasts. THIS IS CURRENTLY IGNORED */
+	int block_size; /* The maximum size of broadcasts. THIS IS CURRENTLY IGNORED but in theory is sent from the ground for file requests */
 	void *hole_list; /* This is a DIR or FILE hole list */
 	int hole_num; /* The number of holes from the request */
 	int current_hole_num; /* The next hole number from the request that we should process when this one is done */
@@ -101,7 +101,7 @@ int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, 
 int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len);
 int pb_handle_file_request(char *from_callsign, unsigned char *data, int len);
 void pb_make_list_str(char *buffer, int len);
-int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes);
+int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int *offset);
 DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data);
 int get_num_of_dir_holes(int request_len);
 int pb_broadcast_next_file_chunk(HEADER *psf, char * psf_filename, int offset, int length, int file_size);
@@ -533,7 +533,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 	FILE_REQ_HEADER *file_header;
 	file_header = (FILE_REQ_HEADER *)(data + sizeof(AX25_HEADER));
 
-	debug_print("FILE REQUEST: flags: %02x file: %04x BLK_SIZE: %04x", file_header->flags & 0xff, file_header->file_id &0xffff, file_header->block_size &0xffff);
+	debug_print("FILE REQUEST: flags: %02x file: %04x BLK_SIZE: %04x\n", file_header->flags & 0xff, file_header->file_id &0xffff, file_header->block_size &0xffff);
 
 	/* First, does the file exist */
 	DIR_NODE * node = dir_get_node_by_id(file_header->file_id);
@@ -585,7 +585,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 			/* This does not have a valid holes list */
 			rc = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 			if (rc != EXIT_SUCCESS) {
-				error_print("\n Error : Could not send ERR Response to TNC \n");
+				error_print("Error : Could not send ERR Response to TNC \n");
 				//exit(EXIT_FAILURE);
 			}
 			return EXIT_FAILURE;
@@ -609,7 +609,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 			// ACK the station
 			rc = pb_send_ok(from_callsign);
 			if (rc != EXIT_SUCCESS) {
-				error_print("\n Error : Could not send OK Response to TNC \n");
+				error_print("Error : Could not send OK Response to TNC \n");
 				//exit(EXIT_FAILURE);
 			}
 		} else {
@@ -621,7 +621,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 	default :
 		rc = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 		if (rc != EXIT_SUCCESS) {
-			error_print("\n Error : Could not send ERR Response to TNC \n");
+			error_print("Error : Could not send ERR Response to TNC \n");
 			//exit(EXIT_FAILURE);
 		}
 		return EXIT_FAILURE;
@@ -646,30 +646,37 @@ int pb_next_action() {
 
 	/* First see if we need to send the status */
 	time_t now = time(0);
-	if (now - last_pb_status_time > PB_STATUS_PERIOD_IN_SECONDS) {
+	if (last_pb_status_time == 0) last_pb_status_time = now; // Initialize at startup
+
+	if (now - last_pb_status_time > g_pb_status_period_in_seconds) {
 		// then send the status
 		rc = pb_send_status();
 		if (rc != EXIT_SUCCESS) {
 			error_print("Could not send PB status to TNC \n");
 		}
+		char buffer[256];
+		pb_make_list_str(buffer, sizeof(buffer));
+		debug_print("%s | %d frames queued\n", buffer, g_frames_queued);
 		last_pb_status_time = now;
 		sent_pb_status = true;
 	}
 
-	/* Print debug info to the console */
-	if (now - last_pb_frames_queued_time > g_max_frames_in_tx_buffer) {
-		char buffer[256];
-		pb_make_list_str(buffer, sizeof(buffer));
-		debug_print("%s | %d frames queued\n", buffer, g_frames_queued);
-		last_pb_frames_queued_time = now;
-	}
+	/* Print debug info to the console more ofter */
+//	if (now - last_pb_frames_queued_time > g_max_frames_in_tx_buffer) {
+//		char buffer[256];
+//		pb_make_list_str(buffer, sizeof(buffer));
+//		debug_print("%s | %d frames queued\n", buffer, g_frames_queued);
+//		last_pb_frames_queued_time = now;
+//	}
 
 	//TODO - broadcast the number of bytes transmitted to BSTAT periodically so stations can calc efficiency
+
+	//TODO - DIR maintenance.  Daily scan the dir for corrupt or expired files and delete them.  This could run slowly, 1 file scan per pb_action.  But what if we remove a file we are broadcasting?
 
 	/* Now process the next station on the PB if there is one and take its action */
 	if (number_on_pb == 0) return EXIT_SUCCESS; // nothing to do
 
-	if (now - pb_list[current_station_on_pb].request_time > PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS) {
+	if (now - pb_list[current_station_on_pb].request_time > g_pb_max_period_for_client_in_seconds) {
 		/* This station has exceeded the time allowed on the PB */
 		pb_remove_request(current_station_on_pb);
 		/* If we removed a station then we don't want/need to increment the current station pointer */
@@ -679,7 +686,7 @@ int pb_next_action() {
 	if (g_frames_queued > 5) return EXIT_SUCCESS; /* TNC is Busy */
 
 	/**
-	 *  Request to broadcast directory
+	 *  Process Request to broadcast directory
 	 */
 	if (pb_list[current_station_on_pb].pb_type == PB_DIR_REQUEST_TYPE) {
 
@@ -714,16 +721,16 @@ int pb_next_action() {
 		}
 		else {
 			/* We found a dir header */
-			pb_list[current_station_on_pb].node = node->next; /* Store where we are in this broadcast of DIR fills */
-			if (node->next == NULL) {
-				/* There are no more records, we are at the end of the list */
-				////// TODO set the bit saying this is the last record in the dir AND remove station from PB?
-			}
-			debug_print("DIR BD to send: ");
+
+			debug_print("DIR BD Offset %d: ", pb_list[current_station_on_pb].offset);
 			pfh_debug_print(node->pfh);
 			unsigned char data_bytes[AX25_MAX_DATA_LEN];
 
-			int data_len = pb_make_dir_broadcast_packet(node, data_bytes);
+			/* Store the offset and pass it into the function that makes the broadcast packet.  The offset after
+			 * the broadcast is returned in this offset variable.  It equals the length of the PFH if the whole header
+			 * has been broadcast. */
+			int offset = pb_list[current_station_on_pb].offset;
+			int data_len = pb_make_dir_broadcast_packet(node, data_bytes, &offset);
 			if (data_len == 0) {printf("** Could not create the test DIR Broadcast frame\n"); return EXIT_FAILURE; }
 
 			/* Send the fill and finish */
@@ -731,24 +738,36 @@ int pb_next_action() {
 			//int rc = send_raw_packet('K', g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			if (rc != EXIT_SUCCESS) {
 				error_print("Could not send broadcast packet to TNC \n");
+				// TODO - we shoud remove the request here?
 				return EXIT_FAILURE;
 			}
-			//sleep(1);
-			if (node->next == NULL) {
-				/* There are no more records, we are at the end of the list, move to next hole if there is one */
-				pb_list[current_station_on_pb].current_hole_num++;
-				if (pb_list[current_station_on_pb].current_hole_num == pb_list[current_station_on_pb].hole_num) {
-					/* We have finished this hole list */
-					debug_print("Added last hole for request from %s\n", pb_list[current_station_on_pb].callsign);
-					pb_remove_request(current_station_on_pb);
-					/* If we removed a station then we don't want/need to increment the current station pointer */
-					return EXIT_SUCCESS;
+
+			/* check if we sent the whole PFH or if it is split into more than one broadcast */
+			if (offset == node->pfh->bodyOffset) {
+				/* Then we have sent this whole PFH */
+				pb_list[current_station_on_pb].node = node->next; /* Store where we are in this broadcast of DIR fills */
+				pb_list[current_station_on_pb].offset = 0; /* Reset this ready to send the next one */
+
+				if (node->next == NULL) {
+					/* There are no more records, we are at the end of the list, move to next hole if there is one */
+					pb_list[current_station_on_pb].current_hole_num++;
+					if (pb_list[current_station_on_pb].current_hole_num == pb_list[current_station_on_pb].hole_num) {
+						/* We have finished this hole list */
+						debug_print("Added last hole for request from %s\n", pb_list[current_station_on_pb].callsign);
+						pb_remove_request(current_station_on_pb);
+						/* If we removed a station then we don't want/need to increment the current station pointer */
+						return EXIT_SUCCESS;
+					}
 				}
+			} else {
+				pb_list[current_station_on_pb].offset = offset; /* Store the offset so we send the next part of the PFH next time */
 			}
+
+
 		}
 
 	/**
-	 *  Request to broadcast a file or parts of a file
+	 *  Process Request to broadcast a file or parts of a file
 	 */
 	} else if (pb_list[current_station_on_pb].pb_type == PB_FILE_REQUEST_TYPE) {
 		debug_print("Preparing FILE Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
@@ -938,16 +957,19 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
       this directory broadcast frame contains the entire PFH for the identified
       file.
 
+      RETURNS the length of the data packet created
+
  */
-int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes) {
+int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int *offset) {
 	int length = 0;
 
 	PB_DIR_HEADER dir_broadcast;
 	char flag = 0;
 	///////////////////////// TODO - some logic here to set the E bit if this is the entire PFH otherwise deal with offset etc
-	flag |= 1UL << E_BIT; // Set the E bit, All of this header is contained in the broadcast frame
-
-	dir_broadcast.offset = 0;
+	if (node->pfh->bodyOffset < MAX_DIR_PFH_LENGTH) {
+		flag |= 1UL << E_BIT; // Set the E bit, All of this header is contained in the broadcast frame
+	}
+	dir_broadcast.offset = *offset;
 	dir_broadcast.flags = flag;
 	dir_broadcast.file_id = node->pfh->fileId;
 
@@ -968,7 +990,6 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes) {
 	else {
 		dir_broadcast.t_new = node->pfh->uploadTime; // no files past this one so use its own uptime for now
 		flag |= 1UL << N_BIT; /* Set the N bit to say this is the newest file on the server */
-
 	}
 
 	char psf_filename[MAX_FILE_PATH_LEN];
@@ -977,14 +998,25 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes) {
 	if (f == NULL) {
 		return 0;
 	}
-	unsigned char buffer[node->pfh->bodyOffset]; // This incluces the whole PFH
-	// TODO - if this is too large for a Broadcast Response we are supposed to split into two
-	int num = fread(buffer, sizeof(char), node->pfh->bodyOffset, f);
-	if (num != node->pfh->bodyOffset) {
+	int buffer_size = node->pfh->bodyOffset - *offset;  /* This is how much we have left to read */
+	if (buffer_size <= 0) return 0; /* This is a failure as we return length 0 */
+	if (buffer_size >= MAX_DIR_PFH_LENGTH) {
+		/* If we have an offset then we have already sent part of this, send the next part */
+		// TODO - pass the offset into this function..
+		buffer_size = MAX_DIR_PFH_LENGTH;
+	}
+	unsigned char buffer[buffer_size];
+	if (*offset != 0)
+		if (fseek( f, *offset, SEEK_SET ) != 0) {
+			return 0; /* This is a failure as we return length 0 */
+		}
+	int num = fread(buffer, sizeof(char), buffer_size, f);
+	if (num != buffer_size) {
 		fclose(f);
 		return 0; // Error with the read
 	}
 	fclose(f);
+	*offset = *offset + num;
 	/* Copy the bytes into the frame */
 	unsigned char *header = (unsigned char *)&dir_broadcast;
 	for (int i=0; i<sizeof(PB_DIR_HEADER);i++ )
@@ -1227,6 +1259,9 @@ int test_pb() {
 	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
 	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
 	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+
+	if (number_on_pb > 0) { printf("** Request left on PB after processing it\n"); return EXIT_FAILURE; }
 
 	dir_free();
 
@@ -1261,8 +1296,11 @@ int test_pb_file() {
 	if (pb_list[0].pb_type != PB_FILE_REQUEST_TYPE) {printf("** Mismatched req type\n"); return EXIT_FAILURE;}
 	if (pb_list[0].offset != 0) {printf("** Mismatched offset\n"); return EXIT_FAILURE;}
 
+	/* One or two chunks to send the file */
+	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
 	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
 	pb_debug_print_list();
+	if (number_on_pb > 0) { printf("** Request left on PB after processing it\n"); return EXIT_FAILURE; }
 	//unsigned char data_bytes[AX25_MAX_DATA_LEN];
 
 	dir_free();

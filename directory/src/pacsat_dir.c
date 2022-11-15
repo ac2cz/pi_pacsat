@@ -60,6 +60,7 @@
 #include "pacsat_dir.h"
 #include "pacsat_header.h"
 #include "pacsat_broadcast.h"
+#include "ftl0.h"
 #include "str_util.h"
 #include "debug.h"
 
@@ -281,15 +282,27 @@ void dir_debug_print(DIR_NODE *p) {
 	}
 }
 
+/**
+ * dir_load_pacsat_file()
+ *
+ * Load a PACSAT file from disk and store it in the directory
+ */
 int dir_load_pacsat_file(char *psf_name) {
 	//debug_print("Loading: %s \n", psf_name);
 	HEADER *pfh = pfh_load_from_file(psf_name);
 	if (pfh == NULL)
 		return EXIT_FAILURE;
+	int err = dir_validate_file(pfh,psf_name);
+	if (err != ER_NONE) {
+		free(pfh);
+		error_print("Err: %d - validating: %s\n", err, psf_name);
+		return EXIT_FAILURE;
+	}
 	//pfh_debug_print(pfh);
 	DIR_NODE *p = dir_add_pfh(pfh, psf_name);
 	if (p == NULL) {
 		debug_print("** Could not add %s to dir\n",psf_name);
+		if (pfh != NULL) free(pfh);
 		return EXIT_FAILURE;
 	} else {
 		if (pfh->fileId > next_file_id)
@@ -319,11 +332,47 @@ int dir_load() {
 		strlcat(psf_name, de->d_name, sizeof(psf_name));
 		if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0))
 			if (str_ends_with(de->d_name, PSF_FILE_EXT)) {
-				dir_load_pacsat_file(psf_name);
+				int rc = dir_load_pacsat_file(psf_name);
+				if (rc != EXIT_SUCCESS) {
+					debug_print("May need to remove potentially corrupt or duplicate PACSAT file: %s\n", psf_name);
+					/* Don't automatically remove here, otherwise loading the dir twice actually deletes all the
+					 * files! */
+				}
 			}
 	}
 	closedir(d);
 	return EXIT_SUCCESS;
+}
+
+int dir_validate_file(HEADER *pfh, char *filename) {
+	//debug_print("DIR: Checking data in file: %s\n",filename);
+
+	/* Now check the body */
+	short int body_checksum = 0;
+	unsigned int body_size = 0;
+
+	FILE *infile = fopen(filename, "rb");
+	if (infile == NULL) {
+		return ER_NO_SUCH_FILE_NUMBER;
+	}
+	fseek(infile, pfh->bodyOffset, SEEK_SET);
+	int ch=fgetc(infile);
+	while (ch!=EOF) {
+		body_checksum += ch & 0xff;
+		body_size++;
+		ch=fgetc(infile);
+	}
+	fclose(infile);
+	if (pfh->bodyCRC != body_checksum) {
+		error_print("** Body check failed for %s\n",filename);
+		return ER_BODY_CHECK;
+	}
+	if (pfh->fileSize != pfh->bodyOffset + body_size) {
+		error_print("** Body check failed for %s\n",filename);
+		return ER_FILE_COMPLETE;
+	}
+
+	return ER_NONE;
 }
 
 /**

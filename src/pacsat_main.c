@@ -52,13 +52,18 @@ void process_frames_queued(unsigned char * data, int len);
  *
  */
 int g_verbose = false;
+int g_frames_queued = 0;
+
+/* These global variables are in the config file */
 int g_bit_rate = 1200;
 char g_bbs_callsign[10] = "PFS3-12";
 char g_broadcast_callsign[10] = "PFS3-11";
 char g_digi_callsign[10] = "PFS3-1";
-int g_frames_queued = 0;
-int g_max_number_on_uplink = 4;
 int g_max_frames_in_tx_buffer = 2;
+int g_pb_status_period_in_seconds = 30;
+int g_pb_max_period_for_client_in_seconds = 36000; // This is 10 mins in the spec 10*60*60 seconds
+int g_uplink_status_period_in_seconds = 30;
+int g_uplink_max_period_for_client_in_seconds = 36000; // This is 10 mins in the spec 10*60*60 seconds
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
@@ -82,7 +87,7 @@ void help(void) {
 void signal_exit (int sig) {
 	debug_print (" Signal received, exiting ...\n");
 	// TODO - unregister the callsign and close connection to AGW
-	// TODO - need to make sure we are not in the middle of a file write for a received packet. Can corrupt a file.
+
 	exit (0);
 }
 
@@ -92,10 +97,11 @@ void signal_load_config (int sig) {
 }
 
 int main(int argc, char *argv[]) {
-	signal (SIGQUIT, signal_handler);
-	signal (SIGTERM, signal_handler);
+	// TODO - use POSIX sigaction rather than signal because it is more reliable
+	signal (SIGQUIT, signal_exit);
+	signal (SIGTERM, signal_exit);
 	signal (SIGHUP, signal_load_config);
-	signal (SIGINT, signal_handler);
+	signal (SIGINT, signal_exit);
 
 	struct option long_option[] = {
 			{"help", 0, NULL, 'h'},
@@ -155,8 +161,8 @@ int main(int argc, char *argv[]) {
 		rc = test_ftl0_list();
 		if (rc != EXIT_SUCCESS) exit(rc);
 
-//		rc = test_ftl0_action();
-//		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_ftl0_action();
+		if (rc != EXIT_SUCCESS) exit(rc);
 
 		rc = test_pfh_checksum();
 		if (rc != EXIT_SUCCESS) exit(rc);
@@ -197,7 +203,6 @@ int main(int argc, char *argv[]) {
 	 * The receive loop reads frames from the buffer and processes
 	 * them when we have time.
 	 */
-	printf("Start listen thread.\n");
 	char *name = "TNC Listen Thread";
 	rc = pthread_create( &tnc_listen_pthread, NULL, tnc_listen_process, (void*) name);
 	if (rc != EXIT_SUCCESS) {
@@ -206,7 +211,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Initialize the directory */
-	debug_print("LOAD DIR\n");
 	if (dir_init("./dir") != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 
@@ -235,14 +239,13 @@ int main(int argc, char *argv[]) {
 		int rc = get_next_frame(frame_num, &frame);
 
 		if (rc == EXIT_SUCCESS) {
-
 			frame_num++;
 			if (frame_num == MAX_RX_QUEUE_LEN)
 				frame_num=0;
 
 			switch (frame.header->data_kind) {
 			case 'X': // Response to callsign registration
-				debug_print("t:%d:\n",frame_num);
+				debug_print("Set BBS Callsign: %s:\n",frame.header->call_from);
 				break;
 			case 'T': // Response to sending a UI frame
 				/* The T frame is a confirm that a frame was sent.  We use this event to query the TNC and ask how many
@@ -283,6 +286,7 @@ int main(int argc, char *argv[]) {
 				break;
 
 			case 'D': // Data from a connected station
+				// TODO - we might want to block signals here so we don't exit in the middle of a file write
 				debug_print("DATA:%d:",frame_num);
 				print_header(frame.header);
 				print_data(frame.data, frame.header->data_len);
@@ -298,12 +302,12 @@ int main(int argc, char *argv[]) {
 				ftl0_disconnected(frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
 				break;
 			}
+		} else {
+			usleep(10000); // sleep 10ms
 		}
 
 		pb_next_action();
 		ftl0_next_action();
-
-		usleep(1000); // sleep 1ms
 
 	}
 
@@ -312,7 +316,6 @@ int main(int argc, char *argv[]) {
 
 	pthread_join(tnc_listen_pthread, NULL);
 	exit(EXIT_SUCCESS);
-
 }
 
 void process_frames_queued(unsigned char * data, int len) {
