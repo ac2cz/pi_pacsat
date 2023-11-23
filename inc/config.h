@@ -41,6 +41,7 @@ extern int g_frames_queued; /* The number of frames waiting to be transmitted */
  * the broadcasts. If set too high then stations wait to receive OK confirms or for their own
  * broadcast to start */
 extern int g_max_frames_in_tx_buffer;
+extern int g_serial_fd; // file handle for the serial port for Rig control
 
 /* Define paramaters for config file */
 #define MAX_CONFIG_LINE_LENGTH 128

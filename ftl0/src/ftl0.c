@@ -161,6 +161,9 @@ int ftl0_add_request(char *from_callsign, int channel, int file_id) {
  *
  */
 int ftl0_remove_request(int pos) {
+	time_t now = time(0);
+	int duration = (int)(now - uplink_list[pos].request_time);
+	debug_print("SESSION TIME: %s connected for %d seconds\n",uplink_list[number_on_uplink].callsign, duration);
 	if (number_on_uplink == 0) return EXIT_FAILURE;
 	if (pos >= number_on_uplink) return EXIT_FAILURE;
 	if (pos != number_on_uplink-1) {
@@ -228,9 +231,12 @@ void ftl0_debug_print_list_item(int i) {
 	debug_print("--%s Ch:%d File:%d State: %d",uplink_list[i].callsign,uplink_list[i].channel,uplink_list[i].file_id,
 			uplink_list[i].state);
 	char buf[30];
-	time_t now = uplink_list[i].request_time;
-	strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&now));
-	debug_print(" at:%s\n", buf);
+	time_t now = time(0);
+	int duration = (int)(now - uplink_list[i].request_time);
+	debug_print(" for %d secs ",duration);
+	time_t since = uplink_list[i].request_time;
+	strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&since));
+	debug_print(" since:%s\n", buf);
 }
 
 /**
@@ -325,7 +331,7 @@ void ftl0_disconnect(char *to_callsign, int channel) {
 int ftl0_get_list_number_by_callsign(char *from_callsign) {
 	int selected_station = -1; /* The station that this event is for */
 	for (int i=0; i < number_on_uplink; i++) {
-		if (strncasecmp(from_callsign, uplink_list[i].callsign, 7) == 0) {
+		if (strncasecmp(from_callsign, uplink_list[i].callsign, MAX_CALLSIGN_LEN) == 0) {
 			selected_station = i;
 			break;
 		}
@@ -351,12 +357,12 @@ int ftl0_disconnected(char *from_callsign, char *to_callsign, unsigned char *dat
 }
 
 int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsigned char *data, int len) {
-	if (strncasecmp(to_callsign, g_broadcast_callsign, 7) == 0) {
+	if (strncasecmp(to_callsign, g_broadcast_callsign, MAX_CALLSIGN_LEN) == 0) {
 		// this was sent to the Broadcast Callsign
 		debug_print("Broadcast Request - Ignored\n");
 		return EXIT_SUCCESS;
 	}
-	if (strncasecmp(to_callsign, g_bbs_callsign, 7) != 0) return EXIT_SUCCESS;
+	if (strncasecmp(to_callsign, g_bbs_callsign, MAX_CALLSIGN_LEN) != 0) return EXIT_SUCCESS;
 		// this was sent to the Broadcast Callsign
 
 	/* Now process the next station on the PB if there is one and take its action */
@@ -600,7 +606,8 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		fclose(f);
 	} else {
 		/* Is this a valid continue? Check to see if there is a tmp file and read its length */
-
+		// TODO - we also need to check the situation where we have the complete file but the ground station never received the ACK.
+		//        So an atttempt to upload a finished file that belongs to this station, that has the right length, should get an ACK to finish upload off
 		char tmp_filename[MAX_FILE_PATH_LEN];
 		ftl0_make_tmp_filename(file_no, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
 		debug_print("Checking continue file: %s\n",tmp_filename);
@@ -712,6 +719,7 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 	}
 
 	/* Otherwise this looks good.  Rename the file and add it to the directory. */
+	//TODO - note that we are renaming the file before we know that the ground station has received an ACK
 	char new_filename[MAX_FILE_PATH_LEN];
 	pfh_make_filename(uplink_list[selected_station].file_id, get_dir_folder(), new_filename, MAX_FILE_PATH_LEN);
 	if (rename(tmp_filename, new_filename) == EXIT_SUCCESS) {

@@ -377,11 +377,11 @@ void pb_debug_print_list_item(int i) {
  *
  */
 void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len) {
-	if (strncasecmp(to_callsign, g_bbs_callsign, 7) == 0) {
+	if (strncasecmp(to_callsign, g_bbs_callsign, MAX_CALLSIGN_LEN) == 0) {
 		// this was sent to the BBS Callsign and we can ignore it
 		//debug_print("BBS Request - Ignored\n");
 	}
-	if (strncasecmp(to_callsign, g_broadcast_callsign, 7) == 0) {
+	if (strncasecmp(to_callsign, g_broadcast_callsign, MAX_CALLSIGN_LEN) == 0) {
 		// this was sent to the Broadcast Callsign
 
 		struct t_broadcast_request_header *broadcast_request_header;

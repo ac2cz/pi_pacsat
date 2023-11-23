@@ -39,6 +39,7 @@
 #include "pacsat_broadcast.h"
 #include "ftl0.h"
 
+
 /* Forward declarations */
 //void process_frames_queued(char * data, int len);
 void help(void);
@@ -64,10 +65,12 @@ int g_pb_status_period_in_seconds = 30;
 int g_pb_max_period_for_client_in_seconds = 36000; // This is 10 mins in the spec 10*60*60 seconds
 int g_uplink_status_period_in_seconds = 30;
 int g_uplink_max_period_for_client_in_seconds = 36000; // This is 10 mins in the spec 10*60*60 seconds
+int g_serial_fd = -1;
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
-int g_run_self_test = false;
+int g_run_self_test = false
+		;
 int frame_queue_status_known = false;
 
 /**
@@ -95,6 +98,8 @@ void signal_load_config (int sig) {
 	error_print (" Signal received, updating config not yet implemented...\n");
 	// TODO SIHUP should reload the config perhaps
 }
+
+
 
 int main(int argc, char *argv[]) {
 	// TODO - use POSIX sigaction rather than signal because it is more reliable
@@ -133,7 +138,7 @@ int main(int argc, char *argv[]) {
 		return 0;
 	}
 
-	printf("PACSAT In-orbit Server\n");
+	printf("PI-ARISS In-orbit File Server\n");
 	printf("Build: %s\n", VERSION);
 
 	int rc = EXIT_SUCCESS;
@@ -266,7 +271,7 @@ int main(int argc, char *argv[]) {
 //				debug_print("| %d bytes\n", frame.header->data_len);
 
 				/* Only send Broadcast UI frames to the PB */
-				if (strncasecmp(frame.header->call_to, g_broadcast_callsign, 7) == 0)
+				if (strncasecmp(frame.header->call_to, g_broadcast_callsign, MAX_CALLSIGN_LEN) == 0)
 					pb_process_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
 				break;
 			case 'C': // Connected to a station
@@ -310,6 +315,8 @@ int main(int argc, char *argv[]) {
 		ftl0_next_action();
 
 	}
+
+
 
 	/* Wait until the TNC thread returns.  Otherwise the program just ends.
 	 * Use a signal to end the program externally. */
