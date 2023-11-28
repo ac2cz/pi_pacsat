@@ -34,8 +34,12 @@
 # Binary
 Debug/pi_pacsat
 Release/pi_pacsat
+pacsat.config
+/dir/
+/dir_test/
 
 # IDE files
 .settings
 .cproject
 .project
+/Debug/

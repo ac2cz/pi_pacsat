@@ -22,25 +22,16 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
-#include "debug.h"
+#include "common_config.h"
 
 #define VERSION __DATE__ " PARISS - Version 0.5"
-#define DEBUG 1
-#define true 1
-#define false 0
-#define MAX_CALLSIGN_LEN 10
-#define MAX_FILE_PATH_LEN 256
-#define AX25_MAX_DATA_LEN 2048
-#define AGW_PORT 8000
 
 /* These global variables are not in the config file */
 extern int g_run_self_test;    /* true when the self test is running */
 extern int g_verbose;          /* print verbose output when set */
-extern int g_frames_queued; /* The number of frames waiting to be transmitted */
 /* Frames are queued by the TNC until they are transmitted.  Only hold this many before pausing
  * the broadcasts. If set too high then stations wait to receive OK confirms or for their own
  * broadcast to start */
-extern int g_max_frames_in_tx_buffer;
 extern int g_serial_fd; // file handle for the serial port for Rig control
 
 /* Define paramaters for config file */

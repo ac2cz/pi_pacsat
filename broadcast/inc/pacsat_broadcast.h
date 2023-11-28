@@ -111,14 +111,6 @@ struct t_dir_pair {
 } __attribute__ ((__packed__));
 typedef struct t_dir_pair DIR_DATE_PAIR;
 
-struct t_broadcast_request_header {
-	unsigned char flag;
-	unsigned char to_callsign[7];
-	unsigned char from_callsign[7];
-	unsigned char control_byte;
-	unsigned char pid;
-} __attribute__ ((__packed__));
-typedef struct t_broadcast_request_header AX25_HEADER;
 
 int pb_next_action();
 void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len);

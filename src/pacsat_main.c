@@ -27,11 +27,11 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
-#include <getopt.h>
 #include <signal.h>
 
 /* Program Include files */
 #include "config.h"
+#include "common_config.h"
 #include "agw_tnc.h"
 #include "str_util.h"
 #include "pacsat_header.h"
@@ -43,7 +43,8 @@
 /* Forward declarations */
 //void process_frames_queued(char * data, int len);
 void help(void);
-void signal_handler (int sig) ;
+void signal_exit (int sig);
+void signal_load_config (int sig);
 void process_frames_queued(unsigned char * data, int len);
 
 /*
@@ -53,7 +54,6 @@ void process_frames_queued(unsigned char * data, int len);
  *
  */
 int g_verbose = false;
-int g_frames_queued = 0;
 
 /* These global variables are in the config file */
 int g_bit_rate = 1200;
@@ -69,8 +69,7 @@ int g_serial_fd = -1;
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
-int g_run_self_test = false
-		;
+int g_run_self_test = false;
 int frame_queue_status_known = false;
 
 /**
@@ -146,9 +145,9 @@ int main(int argc, char *argv[]) {
 	/* Load configuration from the config file */
 	load_config();
 
-	rc = tnc_connect("127.0.0.1", AGW_PORT);
+	rc = tnc_connect("127.0.0.1", AGW_PORT, g_bit_rate, g_max_frames_in_tx_buffer);
 	if (rc != EXIT_SUCCESS) {
-		error_print("\n Error : Could not connect to TNC \n");
+		error_print("\n Error : Could not connect to TNC on port: %d\n",IORS_PORT);
 		exit(EXIT_FAILURE);
 	}
 
@@ -222,7 +221,7 @@ int main(int argc, char *argv[]) {
 	/**
 	 * RECEIVE LOOP
 	 * Each time there is a new frame available in the receive buffer, process it.
-	 * We expect only these types of frames:If you have a signal generator then see if it works for frequencies close to 50Hz.  That is usually what gets filtered out.
+	 * We expect only these types of frames:
 	 *
 	 * DIR REQUEST
 	 * New DIR requests are added to the Pacsat Broadcast (PB) queue unless it is full
@@ -327,7 +326,7 @@ int main(int argc, char *argv[]) {
 
 void process_frames_queued(unsigned char * data, int len) {
 	uint32_t *num = (uint32_t *)data;
-	g_frames_queued = *num;
+	g_common_frames_queued = *num;
 	frame_queue_status_known = true;
 //	debug_print("***** Received y: %d\n", g_frames_queued);
 }

@@ -79,6 +79,7 @@ packet: NO
 #include "pacsat_dir.h"
 #include "str_util.h"
 #include "crc.h"
+#include "ax25_tools.h"
 
 /* An entry on the PB list keeps track of the requester and where we are in the request process */
 struct pb_entry {
@@ -384,9 +385,10 @@ void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *dat
 	if (strncasecmp(to_callsign, g_broadcast_callsign, MAX_CALLSIGN_LEN) == 0) {
 		// this was sent to the Broadcast Callsign
 
-		struct t_broadcast_request_header *broadcast_request_header;
-		broadcast_request_header = (struct t_broadcast_request_header *)data;
-		debug_print("Broadcast Request: pid: %02x \n", broadcast_request_header->pid & 0xff);
+		struct t_ax25_header *broadcast_request_header;
+		broadcast_request_header = (struct t_ax25_header *)data;
+
+		//debug_print("Broadcast Request: pid: %02x \n", broadcast_request_header->pid & 0xff);
 		if ((broadcast_request_header->pid & 0xff) == PID_DIRECTORY) {
 			pb_handle_dir_request(from_callsign, data, len);
 		}
@@ -656,7 +658,7 @@ int pb_next_action() {
 		}
 		char buffer[256];
 		pb_make_list_str(buffer, sizeof(buffer));
-		debug_print("%s | %d frames queued\n", buffer, g_frames_queued);
+		debug_print("%s | %d frames queued\n", buffer, tnc_get_frames_queued());
 		last_pb_status_time = now;
 		sent_pb_status = true;
 	}
@@ -683,7 +685,7 @@ int pb_next_action() {
 		return EXIT_SUCCESS;
 	}
 
-	if (g_frames_queued > 5) return EXIT_SUCCESS; /* TNC is Busy */
+	if (tnc_busy()) return EXIT_SUCCESS; /* TNC is Busy */
 
 	/**
 	 *  Process Request to broadcast directory
