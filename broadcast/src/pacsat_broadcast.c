@@ -380,7 +380,7 @@ void pb_debug_print_list_item(int i) {
 void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len) {
 	if (strncasecmp(to_callsign, g_bbs_callsign, MAX_CALLSIGN_LEN) == 0) {
 		// this was sent to the BBS Callsign and we can ignore it
-		//debug_print("BBS Request - Ignored\n");
+		debug_print("BBS Request - Ignored\n");
 	}
 	if (strncasecmp(to_callsign, g_broadcast_callsign, MAX_CALLSIGN_LEN) == 0) {
 		// this was sent to the Broadcast Callsign
@@ -547,6 +547,25 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 		}
 		return EXIT_FAILURE;
 	}
+//	else {
+//	        // confirm it is really in MRAM and we can read the size
+//	        char file_name_with_path[MAX_FILENAME_WITH_PATH_LEN];
+//	        strlcpy(file_name_with_path, DIR_FOLDER, sizeof(file_name_with_path));
+//	        strlcat(file_name_with_path, node->filename, sizeof(file_name_with_path));
+//
+//	        file_size = dir_fs_get_file_size(file_name_with_path);
+//	        if (file_size == -1) {
+//	            // We could not get the file size
+//	            // TODO - we should either remove the file from the directory as well, or send a temporary error
+//	            //        This will permanently mark the file as unavailable at the ground station, but it is still
+//	            //        in the DIR.  Most likely the disk was full or another process held a lock
+//	            rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+//	            if (rc != TRUE) {
+//	                debug_print("\n Error : Could not send ERR Response to TNC \n");
+//	            }
+//	            return FALSE;
+//	        }
+//	    }
 
 	switch ((file_header->flags & 0b11)) {
 
@@ -646,6 +665,8 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 int pb_next_action() {
 	int rc = EXIT_SUCCESS;
 
+	//TODO - broadcast the number of bytes transmitted to BSTAT periodically so stations can calc efficiency
+
 	/* First see if we need to send the status */
 	time_t now = time(0);
 	if (last_pb_status_time == 0) last_pb_status_time = now; // Initialize at startup
@@ -716,7 +737,12 @@ int pb_next_action() {
 				/* If we removed a station then we don't want/need to increment the current station pointer */
 				return EXIT_SUCCESS;
 			}
-
+#ifdef CODE_ADDED_TO_PACSAT
+			else {
+				// debug_print("PB: No more files for this hole for request from %s\n", pb_list[current_station_on_pb].callsign);
+				pb_list[current_station_on_pb].node = NULL; // next search will be from start of the DIR as we have no idea what the next hole may be
+			}
+#endif
 			// TODO - What response if there were no PFHs at all for the request?  An error? Or do nothing
 			// IS THIS NO -5???
 
@@ -733,14 +759,22 @@ int pb_next_action() {
 			 * has been broadcast. */
 			int offset = pb_list[current_station_on_pb].offset;
 			int data_len = pb_make_dir_broadcast_packet(node, data_bytes, &offset);
-			if (data_len == 0) {printf("** Could not create the test DIR Broadcast frame\n"); return EXIT_FAILURE; }
+			if (data_len == 0) {
+				debug_print("ERROR: ** Could not create the test DIR Broadcast frame\n");
+				/* To avoid a loop where we keep hitting this error, we remove the station from the PB */
+				// TODO - this only occirs if we cant read from file system, so requested file is corrupt perhaps.  Mark as unavailable?
+				pb_remove_request(current_station_on_pb);
+				return EXIT_FAILURE;
+			}
 
 			/* Send the fill and finish */
 			int rc = send_raw_packet(g_broadcast_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			//int rc = send_raw_packet('K', g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			if (rc != EXIT_SUCCESS) {
 				error_print("Could not send broadcast packet to TNC \n");
-				// TODO - we shoud remove the request here?
+				/* To avoid a loop where we keep hitting this error, we remove the station from the PB */
+				// TODO - we could not send the packet.  We should log/report it in telemetry
+				pb_remove_request(current_station_on_pb);
 				return EXIT_FAILURE;
 			}
 
@@ -859,6 +893,9 @@ int pb_next_action() {
  */
 int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, int length, int file_size) {
 	int rc = EXIT_SUCCESS;
+
+	if (length > PB_FILE_DEFAULT_BLOCK_SIZE)
+		length = PB_FILE_DEFAULT_BLOCK_SIZE;
 
 	FILE * f = fopen(psf_filename, "r");
 	if (f == NULL) {
@@ -1004,7 +1041,6 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int 
 	if (buffer_size <= 0) return 0; /* This is a failure as we return length 0 */
 	if (buffer_size >= MAX_DIR_PFH_LENGTH) {
 		/* If we have an offset then we have already sent part of this, send the next part */
-		// TODO - pass the offset into this function..
 		buffer_size = MAX_DIR_PFH_LENGTH;
 	}
 	unsigned char buffer[buffer_size];

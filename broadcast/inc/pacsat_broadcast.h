@@ -44,6 +44,7 @@
 #define MAX_REQUEST_PACKETS 10 /* The maximum number of Dir Headers or File segments that will be sent in response to a request */
 #define MAX_DIR_PFH_LENGTH 182 /* Shorten this for FX25? BD header is 9 longer than file header */
 //#define MAX_BROADCAST_LENGTH 254 /* This was the limit on historical Pacsats. Can we make it longer? */
+#define MAX_PB_HOLES_LIST_BYTES 222 /* The max number of bytes for the hole list in a packet */
 #define PB_FILE_DEFAULT_BLOCK_SIZE 191 /* 191 seems to be the MAX for FX25. This must be assuming 32 header bytes and 32 check bytes. AX25 Header is 17.  File Broadcast header is 9.*/
 //#define PB_FILE_DEFAULT_BLOCK_SIZE 0xF4
 
