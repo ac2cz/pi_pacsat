@@ -72,7 +72,7 @@ pthread_t tnc_listen_pthread;
 int g_run_self_test = false;
 int frame_queue_status_known = false;
 char config_file_name[MAX_FILE_PATH_LEN] = "pi_pacsat.config";
-char dir_path[MAX_FILE_PATH_LEN] = "/mnt/usb-disk/ariss/pacsat";
+char dir_path[MAX_FILE_PATH_LEN] = "./pacsat";
 
 /**
  * Print this help if the -h or --help command line options are used
