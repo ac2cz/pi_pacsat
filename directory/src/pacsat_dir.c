@@ -183,6 +183,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 			if (p->pfh->uploadTime == new_pfh->uploadTime) {
 				debug_print("ERROR: Attempt to insert duplicate PFH: ");
 				pfh_debug_print(new_pfh);
+				free(new_node);
 				return NULL; // this is a duplicate
 			} else if (p->pfh->uploadTime < new_pfh->uploadTime) {
 				insert_after(p, new_node);
@@ -207,7 +208,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 		if (rc != EXIT_SUCCESS) {
 			// we could not save this
 			error_print("** Could not update the header for %s to dir\n",filename);
-			free(new_node);
+			dir_delete_node(new_node);
 			return NULL;
 		} else {
 			debug_print("Saved:");
@@ -288,7 +289,7 @@ void dir_debug_print(DIR_NODE *p) {
  * Load a PACSAT file from disk and store it in the directory
  */
 int dir_load_pacsat_file(char *psf_name) {
-	//debug_print("Loading: %s \n", psf_name);
+	debug_print("Loading: %s \n", psf_name);
 	HEADER *pfh = pfh_load_from_file(psf_name);
 	if (pfh == NULL)
 		return EXIT_FAILURE;
@@ -298,7 +299,7 @@ int dir_load_pacsat_file(char *psf_name) {
 		error_print("Err: %d - validating: %s\n", err, psf_name);
 		return EXIT_FAILURE;
 	}
-	//pfh_debug_print(pfh);
+	pfh_debug_print(pfh);
 	DIR_NODE *p = dir_add_pfh(pfh, psf_name);
 	if (p == NULL) {
 		debug_print("** Could not add %s to dir\n",psf_name);
@@ -308,7 +309,6 @@ int dir_load_pacsat_file(char *psf_name) {
 		if (pfh->fileId > next_file_id)
 			next_file_id = pfh->fileId;
 		return EXIT_SUCCESS;
-
 	}
 	return EXIT_SUCCESS;
 
@@ -319,11 +319,11 @@ int dir_load_pacsat_file(char *psf_name) {
  *
  * Load the directory from the dir_folder, which must have been previously set by calling
  * dir_init().  For every file that ends with PSF_FILE_EXT (.act) we attempt to extract a
- * pacsat file header and add it to disk.
+ * pacsat file header and add it to dir.
  */
 int dir_load() {
 	DIR * d = opendir(dir_folder);
-	if (d == NULL) { printf("** Could not open test dir\n"); return EXIT_FAILURE; }
+	if (d == NULL) { error_print("** Could not open dir: %s\n",dir_folder); return EXIT_FAILURE; }
 	struct dirent *de;
 	for (de = readdir(d); de != NULL; de = readdir(d)) {
 		char psf_name[MAX_FILE_PATH_LEN];
@@ -336,7 +336,8 @@ int dir_load() {
 				if (rc != EXIT_SUCCESS) {
 					debug_print("May need to remove potentially corrupt or duplicate PACSAT file: %s\n", psf_name);
 					/* Don't automatically remove here, otherwise loading the dir twice actually deletes all the
-					 * files! */
+					 * files! BUT - if we clean dir before loading it should be safe. There is danger they will not
+					 * be expired if not loaded into dir */
 				}
 			}
 	}
@@ -432,7 +433,7 @@ DIR_NODE * dir_get_node_by_id(int file_id) {
  * Utility function to copy a file
  * Based on stackoverflow answer: https://stackoverflow.com/questions/2180079/how-can-i-copy-a-file-on-unix-using-c
  */
-int cp(const char *to, const char *from)
+int cp(const char *from, const char *to)
 {
     int fd_to, fd_from;
     char buf[4096];
@@ -477,7 +478,7 @@ int cp(const char *to, const char *from)
         close(fd_from);
 
         /* Success! */
-        return 0;
+        return EXIT_SUCCESS;
     }
 
   out_error:
@@ -571,6 +572,14 @@ int make_three_test_entries() {
 	char filename4[MAX_FILE_PATH_LEN];
 	pfh_make_filename(4, get_dir_folder(), filename4, MAX_FILE_PATH_LEN);
 	char *userfilename4 = "pfh_spec.txt";
+	char *target = "/tmp/test_dir/pfh_spec.txt";
+	FILE *file;
+	if ((file = fopen(target, "r"))) {
+		fclose(file);
+	} else {
+		int c = cp(userfilename4, target);
+		if (c != EXIT_SUCCESS) { printf("** Could not copy pfh_spec.txt to dir. Rc %d errno %d\n",c,errno); return EXIT_FAILURE; }
+	}
 	HEADER *pfh4 = make_test_header(4, "4", "ac2cz", "g0kla", "Pacsat Header Definition", userfilename4);
 	rc = pfh_make_pacsat_file(pfh4,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file4\n"); return EXIT_FAILURE; }
 	p = dir_add_pfh(pfh4,filename4);  if (p == NULL) { printf("** Could not add pfh4 to dir\n"); return EXIT_FAILURE; }
@@ -602,7 +611,7 @@ int test_pacsat_dir_one() {
 	pfh_debug_print(pfh1);
 
 	debug_print(".. then load it\n");
-	HEADER *pfh2 = pfh_load_from_file("/tmp/one/1.act");
+	HEADER *pfh2 = pfh_load_from_file("/tmp/one/0001.act");
 	if (pfh2 == NULL) {printf("** Could not load load file\n"); return EXIT_FAILURE; }
 
 	debug_print(".. add to dir, which resaves it with new uptime and new CRC\n");
@@ -613,7 +622,7 @@ int test_pacsat_dir_one() {
 	dir_free();
 
 	debug_print(".. Now TEST Load the file\n");
-	HEADER *pfh3 = pfh_load_from_file("/tmp/one/1.act");
+	HEADER *pfh3 = pfh_load_from_file("/tmp/one/0001.act");
 	if (pfh3 == NULL) {printf("** Could not load load file\n"); return EXIT_FAILURE; }
 
 	debug_print(".. TEST Load the dir\n");

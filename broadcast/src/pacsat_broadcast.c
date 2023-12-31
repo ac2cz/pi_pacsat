@@ -153,7 +153,9 @@ int sent_pb_status = false;
 int pb_send_status() {
 	if (pb_shut) {
 		unsigned char shut[] = "PB Closed.";
-		int rc = send_raw_packet(g_broadcast_callsign, PBSHUT, PID_NO_PROTOCOL, shut, sizeof(shut));
+		int rc = EXIT_SUCCESS;
+		if (!g_run_self_test)
+			send_raw_packet(g_broadcast_callsign, PBSHUT, PID_NO_PROTOCOL, shut, sizeof(shut));
 		return rc;
 //	} else if (number_on_pb == MAX_PB_LENGTH) {
 //		char full[] = "PB Full.";
@@ -168,7 +170,9 @@ int pb_send_status() {
 		pb_make_list_str(buffer, sizeof(buffer));
 		unsigned char command[strlen(buffer)]; // now put the list in a buffer of the right size
 		strlcpy((char *)command, (char *)buffer,sizeof(command));
-		int rc = send_raw_packet(g_broadcast_callsign, CALL, PID_NO_PROTOCOL, command, sizeof(command));
+		int rc = EXIT_SUCCESS;
+		if (!g_run_self_test)
+			send_raw_packet(g_broadcast_callsign, CALL, PID_NO_PROTOCOL, command, sizeof(command));
 		return rc;
 	}
 }
@@ -184,7 +188,8 @@ int pb_send_ok(char *from_callsign) {
 	char buffer[4 + strlen(from_callsign)]; // OK + 10 char for callsign with SSID
 	strlcpy(buffer,"OK ", sizeof(buffer));
 	strlcat(buffer, from_callsign, sizeof(buffer));
-	rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
+	if (!g_run_self_test)
+		rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
 
 	return rc;
 }
@@ -209,7 +214,8 @@ int pb_send_err(char *from_callsign, int err) {
 	strlcat(buffer," ", sizeof(buffer));
 	strlcat(buffer, from_callsign, sizeof(buffer));
 	strncat(buffer,&CR,1); // very specifically add just one char to the end of the string for the CR
-	rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
+	if (!g_run_self_test)
+		rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
 
 	return rc;
 }
@@ -706,7 +712,8 @@ int pb_next_action() {
 		return EXIT_SUCCESS;
 	}
 
-	if (tnc_busy()) return EXIT_SUCCESS; /* TNC is Busy */
+	if (!g_run_self_test)
+		if (tnc_busy()) return EXIT_SUCCESS; /* TNC is Busy */
 
 	/**
 	 *  Process Request to broadcast directory
@@ -768,7 +775,9 @@ int pb_next_action() {
 			}
 
 			/* Send the fill and finish */
-			int rc = send_raw_packet(g_broadcast_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
+			int rc = EXIT_SUCCESS;
+			if (!g_run_self_test)
+				send_raw_packet(g_broadcast_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			//int rc = send_raw_packet('K', g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			if (rc != EXIT_SUCCESS) {
 				error_print("Could not send broadcast packet to TNC \n");
@@ -933,7 +942,8 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
 	}
 
 	/* Send the broadcast and finish */
-	rc = send_raw_packet(g_broadcast_callsign, QST, PID_FILE, data_bytes, data_len);
+	if (!g_run_self_test)
+		rc = send_raw_packet(g_broadcast_callsign, QST, PID_FILE, data_bytes, data_len);
 	if (rc != EXIT_SUCCESS) {
 		error_print("Could not send broadcast packet to TNC \n");
 		return EXIT_SUCCESS;
@@ -1290,15 +1300,23 @@ int test_pb() {
 	DIR_DATE_PAIR * holes = get_dir_holes_list(data);
 
 	rc = pb_add_request("AC2CZ", PB_DIR_REQUEST_TYPE, NULL, 0, 0, holes, num_of_holes);
+	debug_print("List at start:\n");
 	pb_debug_print_list();
 
-	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+	int i;
+	for (i=0; i<10; i++) {
+		debug_print("ACTION: %d\n",i);
+		if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+	}
+//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
+//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
 
+	debug_print("List at end of actions:\n");
+	pb_debug_print_list();
 	if (number_on_pb > 0) { printf("** Request left on PB after processing it\n"); return EXIT_FAILURE; }
 
 	dir_free();

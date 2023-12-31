@@ -365,7 +365,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 	if (strncasecmp(to_callsign, g_bbs_callsign, MAX_CALLSIGN_LEN) != 0) return EXIT_SUCCESS;
 		// this was sent to the Broadcast Callsign
 
-	/* Now process the next station on the PB if there is one and take its action */
+	/* Now process the next station if there is one and take its action */
 	if (number_on_uplink == 0) return EXIT_SUCCESS; // nothing to do
 
 	int selected_station = ftl0_get_list_number_by_callsign(from_callsign); /* The station that this event is for */
@@ -505,7 +505,6 @@ int ftl0_send_err(char *from_callsign, int channel, int err) {
 int ftl0_send_ack(char *from_callsign, int channel) {
 	int frame_type = UL_ACK_RESP;
 	unsigned char data_bytes[2];
-
 
 	int rc = ftl0_make_packet(data_bytes, (unsigned char *)NULL, 0, frame_type);
 
@@ -674,7 +673,7 @@ int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel
 		int c = fputc((unsigned int)data_bytes[i],f);
 		if (c == EOF) {
 			fclose(f);
-			return ER_NO_SUCH_FILE_NUMBER; // we could not write to the file, assume it is not valid, was it purged?
+			return ER_NO_ROOM; // This is most likely caused by running out of file ids or space
 		}
 	}
 	fclose(f);
@@ -719,7 +718,11 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 	}
 
 	/* Otherwise this looks good.  Rename the file and add it to the directory. */
-	//TODO - note that we are renaming the file before we know that the ground station has received an ACK
+	/* TODO - note that we are renaming the file before we know that the ground station has received an ACK
+	 *  That is OK as long as we handle the situation where the ground station tries to finish the upload
+           and we no longer have the tmp file.  This is handled in process_upload_command() where ER_FILE_COMPLETE
+           is sent.
+	 */
 	char new_filename[MAX_FILE_PATH_LEN];
 	pfh_make_filename(uplink_list[selected_station].file_id, get_dir_folder(), new_filename, MAX_FILE_PATH_LEN);
 	if (rename(tmp_filename, new_filename) == EXIT_SUCCESS) {
