@@ -596,7 +596,7 @@ int make_three_test_entries() {
 	char filename4[MAX_FILE_PATH_LEN];
 	pfh_make_filename(4, get_dir_folder(), filename4, MAX_FILE_PATH_LEN);
 	char *userfilename4 = "pfh_spec.txt";
-	char *target = "/tmp/test_dir/pfh_spec.txt";
+	char *target = "/tmp/test_dir/dir/pfh_spec.txt";
 	FILE *file;
 	if ((file = fopen(target, "r"))) {
 		fclose(file);
@@ -627,15 +627,15 @@ int test_pacsat_dir_one() {
 	pfh_make_filename(1, get_dir_folder(), filename1, MAX_FILE_PATH_LEN);
 	char *userfilename1 = "file1.txt";
 	char *msg = "Hi there,\nThis is a test message first\n";
-	write_test_msg("/tmp/one", userfilename1, msg, strlen(msg));
+	write_test_msg(dir_folder, userfilename1, msg, strlen(msg));
 	HEADER *pfh1 = make_test_header(1, "1", "ve2xyz", "g0kla", "Test Msg 1", userfilename1);
 
 	pfh_debug_print(pfh1);
-	rc = pfh_make_pacsat_file(pfh1, "/tmp/one"); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
+	rc = pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
 	pfh_debug_print(pfh1);
 
 	debug_print(".. then load it\n");
-	HEADER *pfh2 = pfh_load_from_file("/tmp/one/0001.act");
+	HEADER *pfh2 = pfh_load_from_file("/tmp/one/dir/0001.act");
 	if (pfh2 == NULL) {printf("** Could not load load file\n"); return EXIT_FAILURE; }
 
 	debug_print(".. add to dir, which resaves it with new uptime and new CRC\n");
@@ -646,7 +646,7 @@ int test_pacsat_dir_one() {
 	dir_free();
 
 	debug_print(".. Now TEST Load the file\n");
-	HEADER *pfh3 = pfh_load_from_file("/tmp/one/0001.act");
+	HEADER *pfh3 = pfh_load_from_file("/tmp/one/dir/0001.act");
 	if (pfh3 == NULL) {printf("** Could not load load file\n"); return EXIT_FAILURE; }
 
 	debug_print(".. TEST Load the dir\n");
@@ -713,10 +713,10 @@ int test_pacsat_dir() {
 	 */
 	debug_print("LOAD DIR\n");
 	//dir_load();
-	if (dir_load_pacsat_file("/tmp/test_dir/0001.act") != EXIT_SUCCESS) {  printf("** Could not load psf 1\n"); return EXIT_FAILURE; }
-	if (dir_load_pacsat_file("/tmp/test_dir/0002.act") != EXIT_SUCCESS) {  printf("** Could not load psf 2\n"); return EXIT_FAILURE; }
-	if (dir_load_pacsat_file("/tmp/test_dir/0003.act") != EXIT_SUCCESS) {  printf("** Could not load psf 3\n"); return EXIT_FAILURE; }
-	if (dir_load_pacsat_file("/tmp/test_dir/0004.act") != EXIT_SUCCESS) {  printf("** Could not load psf 4\n"); return EXIT_FAILURE; }
+	if (dir_load_pacsat_file("/tmp/test_dir/dir/0001.act") != EXIT_SUCCESS) {  printf("** Could not load psf 1\n"); return EXIT_FAILURE; }
+	if (dir_load_pacsat_file("/tmp/test_dir/dir/0002.act") != EXIT_SUCCESS) {  printf("** Could not load psf 2\n"); return EXIT_FAILURE; }
+	if (dir_load_pacsat_file("/tmp/test_dir/dir/0003.act") != EXIT_SUCCESS) {  printf("** Could not load psf 3\n"); return EXIT_FAILURE; }
+	if (dir_load_pacsat_file("/tmp/test_dir/dir/0004.act") != EXIT_SUCCESS) {  printf("** Could not load psf 4\n"); return EXIT_FAILURE; }
 
 	if (dir_head == NULL) {printf("** Could not load head\n"); return EXIT_FAILURE; }
 	if (dir_head->next == NULL) {printf("** Could not load head + 1\n"); return EXIT_FAILURE; }

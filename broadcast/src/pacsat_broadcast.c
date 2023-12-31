@@ -133,7 +133,7 @@ static PB_ENTRY pb_list[MAX_PB_LENGTH];
  */
 //static DATE_PAIR hole_lists[MAX_PB_LENGTH][AX25_MAX_DATA_LEN/8]; /* The holes lists */
 
-
+static char pb_status_buffer[135]; // 10 callsigns * 13 bytes + 4 + nul
 static int number_on_pb = 0; /* This keeps track of how many stations are in the pb_list array */
 static int current_station_on_pb = 0; /* This keeps track of which station we will send data to next */
 int pb_shut = false;
@@ -157,19 +157,14 @@ int pb_send_status() {
 		if (!g_run_self_test)
 			send_raw_packet(g_broadcast_callsign, PBSHUT, PID_NO_PROTOCOL, shut, sizeof(shut));
 		return rc;
-//	} else if (number_on_pb == MAX_PB_LENGTH) {
-//		char full[] = "PB Full.";
-//		int rc = send_ui_packet(g_bbs_callsign, PBFULL, 0xf0, full, sizeof(full));
-//		return rc;
 	} else  {
-		char buffer[256];
 		char * CALL = PBLIST;
 		if (number_on_pb == MAX_PB_LENGTH) {
 			CALL = PBFULL;
 		}
-		pb_make_list_str(buffer, sizeof(buffer));
-		unsigned char command[strlen(buffer)]; // now put the list in a buffer of the right size
-		strlcpy((char *)command, (char *)buffer,sizeof(command));
+		pb_make_list_str(pb_status_buffer, sizeof(pb_status_buffer));
+		unsigned char command[strlen(pb_status_buffer)]; // now put the list in a buffer of the right size
+		strlcpy((char *)command, (char *)pb_status_buffer,sizeof(command));
 		int rc = EXIT_SUCCESS;
 		if (!g_run_self_test)
 			send_raw_packet(g_broadcast_callsign, CALL, PID_NO_PROTOCOL, command, sizeof(command));
@@ -188,6 +183,8 @@ int pb_send_ok(char *from_callsign) {
 	char buffer[4 + strlen(from_callsign)]; // OK + 10 char for callsign with SSID
 	strlcpy(buffer,"OK ", sizeof(buffer));
 	strlcat(buffer, from_callsign, sizeof(buffer));
+    int len = 3 + strlen(from_callsign);
+    buffer[len] = 0x0D; // this replaces the string termination
 	if (!g_run_self_test)
 		rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
 
