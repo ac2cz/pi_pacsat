@@ -73,8 +73,23 @@ int dir_load_pacsat_file(char *psf_name);
 /* Dir variables */
 static DIR_NODE *dir_head = NULL;  // the head of the directory linked list
 static DIR_NODE *dir_tail = NULL;  // the tail of the directory linked list
+static char data_folder[MAX_FILE_PATH_LEN]; // Directory path of the data folder
 static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory folder
+static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
+static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
 static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
+
+int dir_make_dir(char * folder) {
+	struct stat st = {0};
+	if (stat(folder, &st) == -1) {
+		if (mkdir(folder, 0700) == -1) {
+			printf("** Could not make pacsat folder %s\n",folder);
+			return EXIT_FAILURE;
+		}
+		debug_print("Created: %s\n", folder);
+	}
+	return EXIT_SUCCESS;
+}
 
 /**
  * dir_init()
@@ -85,16 +100,22 @@ static uint32_t next_file_id = 0; // This is incremented when we add files for u
  *
  */
 int dir_init(char *folder) {
-	strlcpy(dir_folder, folder, sizeof(dir_folder));
-	struct stat st = {0};
-	if (stat(dir_folder, &st) == -1) {
-		if (mkdir(dir_folder, 0700) == -1) {
-			printf("** Could not make test dir folder\n");
-			return EXIT_FAILURE;
-		}
-		debug_print("Created: %s\n", dir_folder);
-	}
-	debug_print("Directory Initialized: %s\n", dir_folder);
+	strlcpy(data_folder, folder, sizeof(data_folder));
+	if (dir_make_dir(data_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	strlcpy(dir_folder, data_folder, sizeof(dir_folder));
+	strlcat(dir_folder, "/dir", sizeof(dir_folder));
+	if (dir_make_dir(dir_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	strlcpy(wod_folder, data_folder, sizeof(wod_folder));
+	strlcat(wod_folder, "/wod", sizeof(wod_folder));
+	if (dir_make_dir(wod_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	strlcpy(upload_folder, data_folder, sizeof(upload_folder));
+	strlcat(upload_folder, "/upload", sizeof(upload_folder));
+	if (dir_make_dir(upload_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	debug_print("Pacsat Initialized in: %s\n", data_folder);
 	return EXIT_SUCCESS;
 }
 
@@ -290,7 +311,8 @@ void dir_debug_print(DIR_NODE *p) {
  * Load a PACSAT file from disk and store it in the directory
  */
 int dir_load_pacsat_file(char *psf_name) {
-	debug_print("Loading: %s \n", psf_name);
+	if (g_run_self_test)
+		debug_print("Loading: %s \n", psf_name);
 	HEADER *pfh = pfh_load_from_file(psf_name);
 	if (pfh == NULL)
 		return EXIT_FAILURE;
@@ -300,7 +322,8 @@ int dir_load_pacsat_file(char *psf_name) {
 		error_print("Err: %d - validating: %s\n", err, psf_name);
 		return EXIT_FAILURE;
 	}
-	pfh_debug_print(pfh);
+	if (g_run_self_test)
+		pfh_debug_print(pfh);
 	DIR_NODE *p = dir_add_pfh(pfh, psf_name);
 	if (p == NULL) {
 		debug_print("** Could not add %s to dir\n",psf_name);

@@ -57,6 +57,6 @@ extern int g_pb_max_period_for_client_in_seconds;
 extern int g_uplink_status_period_in_seconds;
 extern int g_uplink_max_period_for_client_in_seconds;
 
-void load_config();
+void load_config(char *filename);
 
 #endif /* CONFIG_H_ */

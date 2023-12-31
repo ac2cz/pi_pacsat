@@ -71,6 +71,8 @@ int g_serial_fd = -1;
 pthread_t tnc_listen_pthread;
 int g_run_self_test = false;
 int frame_queue_status_known = false;
+char config_file_name[MAX_FILE_PATH_LEN] = "pi_pacsat.config";
+char dir_path[MAX_FILE_PATH_LEN] = "/mnt/usb-disk/ariss/pacsat";
 
 /**
  * Print this help if the -h or --help command line options are used
@@ -79,9 +81,10 @@ void help(void) {
 	printf(
 			"Usage: pacsat [OPTION]... \n"
 			"-h,--help                        help\n"
+			"-c,--config                      use config file specified\n"
+			"-d,--dir                         use this data directory, rather than default\n"
 			"-t,--test                        Run self test functions and exit\n"
 			"-v,--verbose                     print additional status and progress messages\n"
-
 	);
 	exit(EXIT_SUCCESS);
 }
@@ -98,8 +101,6 @@ void signal_load_config (int sig) {
 	// TODO SIHUP should reload the config perhaps
 }
 
-
-
 int main(int argc, char *argv[]) {
 	// TODO - use POSIX sigaction rather than signal because it is more reliable
 	signal (SIGQUIT, signal_exit);
@@ -108,16 +109,20 @@ int main(int argc, char *argv[]) {
 	signal (SIGINT, signal_exit);
 
 	struct option long_option[] = {
-			{"help", 0, NULL, 'h'},
-			{"test", 0, NULL, 't'},
-			{"verbose", 0, NULL, 'v'},
+			{"help", no_argument, NULL, 'h'},
+			{"dir", required_argument, NULL, 'd'},
+			{"config", required_argument, NULL, 'c'},
+			{"test", no_argument, NULL, 't'},
+			{"verbose", no_argument, NULL, 'v'},
 			{NULL, 0, NULL, 0},
 	};
 
 	int more_help = false;
+	strlcpy(config_file_name, "pacsat.config", sizeof(config_file_name));
+
 	while (1) {
 		int c;
-		if ((c = getopt_long(argc, argv, "htv:", long_option, NULL)) < 0)
+		if ((c = getopt_long(argc, argv, "htvc:d:", long_option, NULL)) < 0)
 			break;
 		switch (c) {
 		case 'h': // help
@@ -128,6 +133,12 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'v': // verbose
 			g_verbose = true;
+			break;
+		case 'c': // config file name
+			strlcpy(config_file_name, optarg, sizeof(config_file_name));
+			break;
+		case 'd': // directory
+			strlcpy(dir_path, optarg, sizeof(dir_path));
 			break;
 		}
 	}
@@ -143,7 +154,7 @@ int main(int argc, char *argv[]) {
 	int rc = EXIT_SUCCESS;
 
 	/* Load configuration from the config file */
-	load_config();
+	load_config(config_file_name);
 
 	rc = tnc_connect("127.0.0.1", AGW_PORT, g_bit_rate, g_max_frames_in_tx_buffer);
 	if (rc != EXIT_SUCCESS) {
@@ -215,7 +226,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Initialize the directory */
-	if (dir_init("./dir") != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
+	if (dir_init(dir_path) != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 
 	/**
