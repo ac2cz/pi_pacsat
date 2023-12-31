@@ -66,6 +66,7 @@
 
 /* Forward declarations */
 void dir_free();
+void dir_delete_node(DIR_NODE *node);
 void dir_debug_print(DIR_NODE *p);
 int dir_load_pacsat_file(char *psf_name);
 
