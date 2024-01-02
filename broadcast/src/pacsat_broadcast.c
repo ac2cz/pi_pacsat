@@ -141,6 +141,7 @@ static PB_ENTRY pb_list[MAX_PB_LENGTH];
 static char pb_status_buffer[135]; // 10 callsigns * 13 bytes + 4 + nul
 unsigned char broadcast_buffer[PB_FILE_DEFAULT_BLOCK_SIZE]; // This is the chunk we will send
 unsigned char packet_buffer[AX25_MAX_DATA_LEN];
+unsigned char packet_data_bytes[AX25_MAX_DATA_LEN];
 static int number_on_pb = 0; /* This keeps track of how many stations are in the pb_list array */
 static int current_station_on_pb = 0; /* This keeps track of which station we will send data to next */
 time_t last_pb_status_time;
@@ -710,10 +711,12 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 		switch (sw_command->comArg.command) {
 			case SWCmdPacsatEnablePB: {
 				debug_print("Enable PB Command\n");
-				if (sw_command->comArg.arguments[0]) {
-					g_state_pb_open = true;
-				} else {
-					g_state_pb_open = false;
+				g_state_pb_open = sw_command->comArg.arguments[0];
+				if (sw_command->comArg.arguments[1]) {
+					g_pb_status_period_in_seconds = sw_command->comArg.arguments[1];
+				}
+				if (sw_command->comArg.arguments[2]) {
+					g_pb_max_period_for_client_in_seconds = sw_command->comArg.arguments[2];
 				}
 				save_state();
 				break;
@@ -721,6 +724,12 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			case SWCmdPacsatEnableUplink: {
 				debug_print("Enable Uplink Command\n");
 				g_state_uplink_open = sw_command->comArg.arguments[0];
+				if (sw_command->comArg.arguments[1]) {
+					g_uplink_status_period_in_seconds = sw_command->comArg.arguments[1];
+				}
+				if (sw_command->comArg.arguments[2]) {
+					g_uplink_max_period_for_client_in_seconds = sw_command->comArg.arguments[2];
+				}
 				save_state();
 				break;
 			}
@@ -752,7 +761,7 @@ int pb_next_action() {
 	time_t now = time(0);
 	if (last_pb_status_time == 0) last_pb_status_time = now; // Initialize at startup
 
-	if (now - last_pb_status_time > g_pb_status_period_in_seconds) {
+	if ((now - last_pb_status_time) > g_pb_status_period_in_seconds) {
 		// then send the status
 		rc = pb_send_status();
 		if (rc != EXIT_SUCCESS) {
@@ -772,7 +781,7 @@ int pb_next_action() {
 	/* Now process the next station on the PB if there is one and take its action */
 	if (number_on_pb == 0) return EXIT_SUCCESS; // nothing to do
 
-	if (now - pb_list[current_station_on_pb].request_time > g_pb_max_period_for_client_in_seconds) {
+	if ((now - pb_list[current_station_on_pb].request_time) > g_pb_max_period_for_client_in_seconds) {
 		/* This station has exceeded the time allowed on the PB */
 		pb_remove_request(current_station_on_pb);
 		/* If we removed a station then we don't want/need to increment the current station pointer */
@@ -810,13 +819,10 @@ int pb_next_action() {
 				pb_remove_request(current_station_on_pb);
 				/* If we removed a station then we don't want/need to increment the current station pointer */
 				return EXIT_SUCCESS;
-			}
-#ifdef CODE_ADDED_TO_PACSAT
-			else {
+			} else {
 				// debug_print("PB: No more files for this hole for request from %s\n", pb_list[current_station_on_pb].callsign);
 				pb_list[current_station_on_pb].node = NULL; // next search will be from start of the DIR as we have no idea what the next hole may be
 			}
-#endif
 			// TODO - What response if there were no PFHs at all for the request?  An error? Or do nothing
 			// IS THIS NO -5???
 
@@ -826,17 +832,17 @@ int pb_next_action() {
 
 			debug_print("DIR BD Offset %d: ", pb_list[current_station_on_pb].offset);
 			pfh_debug_print(node->pfh);
-			unsigned char data_bytes[AX25_MAX_DATA_LEN];
 
 			/* Store the offset and pass it into the function that makes the broadcast packet.  The offset after
 			 * the broadcast is returned in this offset variable.  It equals the length of the PFH if the whole header
 			 * has been broadcast. */
 			int offset = pb_list[current_station_on_pb].offset;
-			int data_len = pb_make_dir_broadcast_packet(node, data_bytes, &offset);
+			int data_len = pb_make_dir_broadcast_packet(node, packet_data_bytes, &offset);
 			if (data_len == 0) {
 				debug_print("ERROR: ** Could not create the test DIR Broadcast frame\n");
 				/* To avoid a loop where we keep hitting this error, we remove the station from the PB */
-				// TODO - this only occirs if we cant read from file system, so requested file is corrupt perhaps.  Mark as unavailable?
+				// TODO - this only occirs if we cant read from file system, so requested file is corrupt perhaps.
+				// We can't now send ER as we already sent OK.  But can remove the entry from the dir and Mark as unavailable?
 				pb_remove_request(current_station_on_pb);
 				return EXIT_FAILURE;
 			}
@@ -844,7 +850,7 @@ int pb_next_action() {
 			/* Send the fill and finish */
 			int rc = EXIT_SUCCESS;
 			if (!g_run_self_test)
-				send_raw_packet(g_broadcast_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
+				send_raw_packet(g_broadcast_callsign, QST, PID_DIRECTORY, packet_data_bytes, data_len);
 			//int rc = send_raw_packet('K', g_bbs_callsign, QST, PID_DIRECTORY, data_bytes, data_len);
 			if (rc != EXIT_SUCCESS) {
 				error_print("Could not send broadcast packet to TNC \n");
@@ -874,8 +880,6 @@ int pb_next_action() {
 			} else {
 				pb_list[current_station_on_pb].offset = offset; /* Store the offset so we send the next part of the PFH next time */
 			}
-
-
 		}
 
 	/**

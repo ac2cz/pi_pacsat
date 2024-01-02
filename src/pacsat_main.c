@@ -63,10 +63,6 @@ char g_bbs_callsign[10] = "PFS3-12";
 char g_broadcast_callsign[10] = "PFS3-11";
 char g_digi_callsign[10] = "PFS3-1";
 int g_max_frames_in_tx_buffer = 2;
-int g_pb_status_period_in_seconds = 30;
-int g_pb_max_period_for_client_in_seconds = 36000; // This is 10 mins in the spec 10*60*60 seconds
-int g_uplink_status_period_in_seconds = 30;
-int g_uplink_max_period_for_client_in_seconds = 36000; // This is 10 mins in the spec 10*60*60 seconds
 int g_serial_fd = -1;
 char g_iors_last_command_time_path[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";
 
@@ -74,6 +70,10 @@ char g_iors_last_command_time_path[MAX_FILE_PATH_LEN] = "pacsat_last_command_tim
  * overwritten when the state file is loaded */
 int g_state_pb_open = false;
 int g_state_uplink_open = false;
+int g_pb_status_period_in_seconds = 30;
+int g_pb_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds
+int g_uplink_status_period_in_seconds = 30;
+int g_uplink_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds
 
 /* Local variables */
 pthread_t tnc_listen_pthread;

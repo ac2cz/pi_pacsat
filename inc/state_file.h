@@ -27,9 +27,18 @@
 /* Define paramaters for state file */
 #define STATE_PB_OPEN "pb_open"
 #define STATE_UPLINK_OPEN "uplink_open"
+#define PB_STATUS_PERIOD_IN_SECONDS "pb_status_period_in_seconds"
+#define PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS "pb_max_period_for_client_in_seconds"
+#define UPLINK_STATUS_PERIOD_IN_SECONDS "uplink_status_period_in_seconds"
+#define UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS "uplink_max_period_for_client_in_seconds"
+
 
 extern int g_state_pb_open;
 extern int g_state_uplink_open;
+extern int g_pb_status_period_in_seconds;
+extern int g_pb_max_period_for_client_in_seconds;
+extern int g_uplink_status_period_in_seconds;
+extern int g_uplink_max_period_for_client_in_seconds;
 
 void load_state(char *filename);
 void save_state();

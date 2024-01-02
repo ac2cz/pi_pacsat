@@ -60,6 +60,14 @@ void load_state(char *filepath) {
 					g_state_pb_open = atoi(value);
 				} else if (strcmp(key, STATE_UPLINK_OPEN) == 0) {
 					g_state_uplink_open = atoi(value);
+				} else if (strcmp(key, PB_STATUS_PERIOD_IN_SECONDS) == 0) {
+					g_pb_status_period_in_seconds = atoi(value);
+				} else if (strcmp(key, PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS) == 0) {
+					g_pb_max_period_for_client_in_seconds = atoi(value);
+				} else if (strcmp(key, UPLINK_STATUS_PERIOD_IN_SECONDS) == 0) {
+					g_uplink_status_period_in_seconds = atoi(value);
+				} else if (strcmp(key, UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS) == 0) {
+					g_uplink_max_period_for_client_in_seconds = atoi(value);
 				} else {
 					error_print("Unknown key in state file: %s : %s\n",filename, key);
 				}
@@ -77,6 +85,10 @@ void save_state() {
 	if ( file != NULL ) {
 		save_int_key_value(STATE_PB_OPEN, g_state_pb_open, file);
 		save_int_key_value(STATE_UPLINK_OPEN, g_state_uplink_open, file);
+		save_int_key_value(PB_STATUS_PERIOD_IN_SECONDS, g_pb_status_period_in_seconds, file);
+		save_int_key_value(PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_pb_max_period_for_client_in_seconds, file);
+		save_int_key_value(UPLINK_STATUS_PERIOD_IN_SECONDS, g_uplink_status_period_in_seconds, file);
+		save_int_key_value(UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_uplink_max_period_for_client_in_seconds, file);
 	}
 	fclose(file);
 }
@@ -88,6 +100,5 @@ void save_int_key_value(char * key, int val, FILE *file) {
 	char int_str[25];
 	snprintf(int_str, 25, "%d\n",val);
 	strlcat(buf, int_str, sizeof(buf));
-
 	fputs(buf, file);
 }
