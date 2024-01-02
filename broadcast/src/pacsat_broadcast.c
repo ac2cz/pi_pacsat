@@ -384,32 +384,25 @@ void pb_debug_print_list_item(int i) {
  *
  * process a UI frame received from a ground station.  This may contain a Pacsat Broadcast request,
  * otherwise it can be ignored.
- * This is called from the main processing loop whenever a type K frame is received.
+ * This is called from the main processing loop whenever a type K frame is sent to the broadcast
+ * callsign.
  *
  */
 void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len) {
-	if (strncasecmp(to_callsign, g_bbs_callsign, MAX_CALLSIGN_LEN) == 0) {
-		// this was sent to the BBS Callsign and we can ignore it
-		debug_print("BBS Request - Ignored\n");
+	struct t_ax25_header *broadcast_request_header;
+	broadcast_request_header = (struct t_ax25_header *)data;
+
+	//debug_print("Broadcast Request: pid: %02x \n", broadcast_request_header->pid & 0xff);
+	if ((broadcast_request_header->pid & 0xff) == PID_DIRECTORY) {
+		pb_handle_dir_request(from_callsign, data, len);
 	}
-	if (strncasecmp(to_callsign, g_broadcast_callsign, MAX_CALLSIGN_LEN) == 0) {
-		// this was sent to the Broadcast Callsign
-
-		struct t_ax25_header *broadcast_request_header;
-		broadcast_request_header = (struct t_ax25_header *)data;
-
-		//debug_print("Broadcast Request: pid: %02x \n", broadcast_request_header->pid & 0xff);
-		if ((broadcast_request_header->pid & 0xff) == PID_DIRECTORY) {
-			pb_handle_dir_request(from_callsign, data, len);
-		}
-		if ((broadcast_request_header->pid & 0xff) == PID_FILE) {
-			// File Request
-			pb_handle_file_request(from_callsign, data, len);
-		}
-		if ((broadcast_request_header->pid & 0xff) == PID_COMMAND) {
-			// Command Request
-			pb_handle_command(from_callsign, data, len);
-		}
+	if ((broadcast_request_header->pid & 0xff) == PID_FILE) {
+		// File Request
+		pb_handle_file_request(from_callsign, data, len);
+	}
+	if ((broadcast_request_header->pid & 0xff) == PID_COMMAND) {
+		// Command Request
+		pb_handle_command(from_callsign, data, len);
 	}
 }
 
@@ -561,25 +554,34 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 		}
 		return EXIT_FAILURE;
 	}
-//	else {
-//	        // confirm it is really in MRAM and we can read the size
-//	        char file_name_with_path[MAX_FILENAME_WITH_PATH_LEN];
-//	        strlcpy(file_name_with_path, DIR_FOLDER, sizeof(file_name_with_path));
-//	        strlcat(file_name_with_path, node->filename, sizeof(file_name_with_path));
-//
-//	        file_size = dir_fs_get_file_size(file_name_with_path);
-//	        if (file_size == -1) {
-//	            // We could not get the file size
-//	            // TODO - we should either remove the file from the directory as well, or send a temporary error
-//	            //        This will permanently mark the file as unavailable at the ground station, but it is still
-//	            //        in the DIR.  Most likely the disk was full or another process held a lock
-//	            rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
-//	            if (rc != TRUE) {
-//	                debug_print("\n Error : Could not send ERR Response to TNC \n");
-//	            }
-//	            return FALSE;
-//	        }
-//	    }
+	else {
+	    // confirm it is really on Disk and we can read the size
+		char file_name_with_path[MAX_FILE_PATH_LEN];
+		pfh_make_filename(file_header->file_id,get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
+		FILE * f = fopen(file_name_with_path, "rb");
+		if (f == NULL) {
+			error_print("No file on disk, node in dir is wrong\n");
+			rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+			if (rc != EXIT_SUCCESS) {
+				error_print("\n Error : Could not send ERR Response to TNC \n");
+			}
+			return EXIT_FAILURE;
+		}
+		fseek(f, 0L, SEEK_END);
+		int file_size = ftell(f);
+		fclose(f);
+		if (file_size == -1) {
+			// We could not get the file size
+			// TODO - we should either remove the file from the directory as well, or send a temporary error
+			//        This will permanently mark the file as unavailable at the ground station, but it is still
+			//        in the DIR.  Most likely the disk was full or another process held a lock
+			rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+			if (rc != EXIT_SUCCESS) {
+				debug_print("\n Error : Could not send ERR Response to TNC \n");
+			}
+			return EXIT_FAILURE;
+		}
+	}
 
 	switch ((file_header->flags & 0b11)) {
 
