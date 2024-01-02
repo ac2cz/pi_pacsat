@@ -30,6 +30,7 @@
 
 /* Program Include files */
 #include "config.h"
+#include "state_file.h"
 #include "agw_tnc.h"
 #include "str_util.h"
 #include "pacsat_header.h"
@@ -58,7 +59,6 @@ static UPLINK_ENTRY uplink_list[MAX_UPLINK_LIST_LENGTH];
 
 static int number_on_uplink = 0; /* This keeps track of how many stations are connected */
 static int current_station_on_uplink = 0; /* This keeps track of which station we will send data to next */
-int uplink_closed = false; /* Is the uplink open */
 
 time_t last_uplink_status_time;
 time_t last_uplink_frames_queued_time;
@@ -91,7 +91,7 @@ int ftl0_parse_packet_length(unsigned char * data);
  *
  */
 int ftl0_send_status() {
-	if (uplink_closed) {
+	if (!g_state_uplink_open) {
 		unsigned char shut[] = "Shut: ABCD";
 		int rc = send_raw_packet(g_bbs_callsign, BBSTAT, PID_NO_PROTOCOL, shut, sizeof(shut));
 		return rc;
@@ -102,6 +102,8 @@ int ftl0_send_status() {
 	} else  {
 		char buffer[256];
 		char * CALL = BBSTAT;
+		if (g_state_uplink_open == 2)
+			CALL = BBCOM;
 
 		ftl0_make_list_str(buffer, sizeof(buffer));
 		unsigned char command[strlen(buffer)]; // now put the list in a buffer of the right size
@@ -125,7 +127,7 @@ int ftl0_send_status() {
  *
  */
 int ftl0_add_request(char *from_callsign, int channel, int file_id) {
-	if (uplink_closed) return EXIT_FAILURE;
+	if (!g_state_uplink_open) return EXIT_FAILURE;
 	if (number_on_uplink == MAX_UPLINK_LIST_LENGTH) {
 		return EXIT_FAILURE; // Uplink full
 	}
@@ -204,10 +206,15 @@ int ftl0_remove_request(int pos) {
  * The *buffer to receive the string and its length len should be passed in.
  */
 void ftl0_make_list_str(char *buffer, int len) {
+	if (g_state_uplink_open == 2)
+		strlcpy(buffer, "Command: ", len);
+	else
+		strlcpy(buffer, "Open: ", len);
+
 	if (number_on_uplink == 0)
-		strlcpy(buffer, "Open: ABCD.", len);
+		strlcat(buffer, "ABCD.", len);
 	else {
-		strlcpy(buffer, "Open: A ", len);
+		strlcat(buffer, "A ", len);
 		for (int i=0; i < number_on_uplink; i++) {
 			strlcat(buffer, uplink_list[i].callsign, len);
 			strlcat(buffer, " ", len);
@@ -784,7 +791,7 @@ int ftl0_next_action() {
 		if (rc != EXIT_SUCCESS) {
 			error_print("Could not send PB status to TNC \n");
 		}
-		ftl0_debug_print_list();
+		//ftl0_debug_print_list();
 		last_uplink_status_time = now;
 
 	}

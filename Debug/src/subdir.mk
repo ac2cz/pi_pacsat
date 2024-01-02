@@ -5,15 +5,18 @@
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
 ../src/config.c \
-../src/pacsat_main.c 
+../src/pacsat_main.c \
+../src/state_file.c 
 
 C_DEPS += \
 ./src/config.d \
-./src/pacsat_main.d 
+./src/pacsat_main.d \
+./src/state_file.d 
 
 OBJS += \
 ./src/config.o \
-./src/pacsat_main.o 
+./src/pacsat_main.o \
+./src/state_file.o 
 
 
 # Each subdirectory must supply rules for building sources it contributes
@@ -28,7 +31,7 @@ src/%.o: ../src/%.c src/subdir.mk
 clean: clean-src
 
 clean-src:
-	-$(RM) ./src/config.d ./src/config.o ./src/pacsat_main.d ./src/pacsat_main.o
+	-$(RM) ./src/config.d ./src/config.o ./src/pacsat_main.d ./src/pacsat_main.o ./src/state_file.d ./src/state_file.o
 
 .PHONY: clean-src
 

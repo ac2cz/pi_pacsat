@@ -32,6 +32,8 @@
 /* Program Include files */
 #include "config.h"
 #include "common_config.h"
+#include "state_file.h"
+#include "iors_command.h"
 #include "agw_tnc.h"
 #include "str_util.h"
 #include "pacsat_header.h"
@@ -66,6 +68,12 @@ int g_pb_max_period_for_client_in_seconds = 36000; // This is 10 mins in the spe
 int g_uplink_status_period_in_seconds = 30;
 int g_uplink_max_period_for_client_in_seconds = 36000; // This is 10 mins in the spec 10*60*60 seconds
 int g_serial_fd = -1;
+char g_iors_last_command_time_path[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";
+
+/* These global variables are in the state file and are resaved when changed.  These default values are
+ * overwritten when the state file is loaded */
+int g_state_pb_open = false;
+int g_state_uplink_open = false;
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
@@ -155,6 +163,7 @@ int main(int argc, char *argv[]) {
 
 	/* Load configuration from the config file */
 	load_config(config_file_name);
+	load_state("pacsat.state");
 
 	rc = tnc_connect("127.0.0.1", AGW_PORT, g_bit_rate, g_max_frames_in_tx_buffer);
 	if (rc != EXIT_SUCCESS) {
@@ -228,6 +237,7 @@ int main(int argc, char *argv[]) {
 	/* Initialize the directory */
 	if (dir_init(dir_path) != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
+	init_commanding(g_iors_last_command_time_path);
 
 	/**
 	 * RECEIVE LOOP

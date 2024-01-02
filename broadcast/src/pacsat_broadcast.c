@@ -72,6 +72,8 @@ packet: NO
 
 /* Program Include Files */
 #include "config.h"
+#include "iors_command.h"
+#include "state_file.h"
 #include "debug.h"
 #include "agw_tnc.h"
 #include "pacsat_header.h"
@@ -86,7 +88,7 @@ struct pb_entry {
 	int pb_type; /* DIR or FILE request */
 	char callsign[MAX_CALLSIGN_LEN];
 	DIR_NODE *node; /* Pointer to the node that we should broadcast next if this is a DIR request */
-	int file_id; /* File id of the file we are broadcasting if this is a file request */
+//	int file_id; /* File id of the file we are broadcasting if this is a file request */
 	int offset; /* The current offset in the file we are broadcasting or the PFH we are transmitting */
 	int block_size; /* The maximum size of broadcasts. THIS IS CURRENTLY IGNORED but in theory is sent from the ground for file requests */
 	void *hole_list; /* This is a DIR or FILE hole list */
@@ -101,6 +103,7 @@ int pb_send_status();
 int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes);
 int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len);
 int pb_handle_file_request(char *from_callsign, unsigned char *data, int len);
+int pb_handle_command(char *from_callsign, unsigned char *data, int len);
 void pb_make_list_str(char *buffer, int len);
 int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int *offset);
 DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data);
@@ -115,6 +118,8 @@ void pb_debug_print_dir_req(unsigned char *data, int len);
 void pb_debug_print_dir_holes(DIR_DATE_PAIR *holes, int num_of_holes);
 void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes);
 void pb_debug_print_list_item(int i);
+
+/* Local Variables */
 
 /**
  * pb_list
@@ -134,10 +139,10 @@ static PB_ENTRY pb_list[MAX_PB_LENGTH];
 //static DATE_PAIR hole_lists[MAX_PB_LENGTH][AX25_MAX_DATA_LEN/8]; /* The holes lists */
 
 static char pb_status_buffer[135]; // 10 callsigns * 13 bytes + 4 + nul
+unsigned char broadcast_buffer[PB_FILE_DEFAULT_BLOCK_SIZE]; // This is the chunk we will send
+unsigned char packet_buffer[AX25_MAX_DATA_LEN];
 static int number_on_pb = 0; /* This keeps track of how many stations are in the pb_list array */
 static int current_station_on_pb = 0; /* This keeps track of which station we will send data to next */
-int pb_shut = false;
-
 time_t last_pb_status_time;
 time_t last_pb_frames_queued_time;
 int sent_pb_status = false;
@@ -151,7 +156,7 @@ int sent_pb_status = false;
  *
  */
 int pb_send_status() {
-	if (pb_shut) {
+	if (!g_state_pb_open) {
 		unsigned char shut[] = "PB Closed.";
 		int rc = EXIT_SUCCESS;
 		if (!g_run_self_test)
@@ -232,7 +237,7 @@ int pb_send_err(char *from_callsign, int err) {
  *
  */
 int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes) {
-	if (pb_shut) return EXIT_FAILURE;
+	if (!g_state_pb_open) return EXIT_FAILURE;
 	if (number_on_pb == MAX_PB_LENGTH) {
 		return EXIT_FAILURE; // PB full
 	}
@@ -246,7 +251,7 @@ int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, 
 
 	strlcpy(pb_list[number_on_pb].callsign, from_callsign, MAX_CALLSIGN_LEN);
 	pb_list[number_on_pb].pb_type = type;
-	pb_list[number_on_pb].file_id = file_id;
+//	pb_list[number_on_pb].file_id = file_id;
 	pb_list[number_on_pb].offset = offset;
 	pb_list[number_on_pb].request_time = time(0);
 	pb_list[number_on_pb].hole_num = num_of_holes;
@@ -298,7 +303,7 @@ int pb_remove_request(int pos) {
 		for (int i = pos + 1; i < number_on_pb; i++) {
 			strlcpy(pb_list[i-1].callsign, pb_list[i].callsign, MAX_CALLSIGN_LEN);
 			pb_list[i-1].pb_type = pb_list[i].pb_type;
-			pb_list[i-1].file_id = pb_list[i].file_id;
+//			pb_list[i-1].file_id = pb_list[i].file_id;
 			pb_list[i-1].offset = pb_list[i].offset;
 			pb_list[i-1].request_time = pb_list[i].request_time;
 			pb_list[i-1].hole_num = pb_list[i].hole_num;
@@ -359,8 +364,10 @@ void pb_debug_print_list() {
 }
 
 void pb_debug_print_list_item(int i) {
-	debug_print("--%s Ty:%d File:%d Off:%d Holes:%d Cur:%d",pb_list[i].callsign,pb_list[i].pb_type,pb_list[i].file_id,
-			pb_list[i].offset,pb_list[i].hole_num,pb_list[i].current_hole_num);
+	debug_print("--%s Ty:%d ",pb_list[i].callsign,pb_list[i].pb_type);
+	if (pb_list[i].node != NULL)
+		debug_print("File:%d ",pb_list[i].node->pfh->fileId);
+	debug_print("Off:%d Holes:%d Cur:%d",pb_list[i].offset,pb_list[i].hole_num,pb_list[i].current_hole_num);
 	char buf[30];
 	time_t now = pb_list[i].request_time;
 	strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&now));
@@ -398,6 +405,10 @@ void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *dat
 		if ((broadcast_request_header->pid & 0xff) == PID_FILE) {
 			// File Request
 			pb_handle_file_request(from_callsign, data, len);
+		}
+		if ((broadcast_request_header->pid & 0xff) == PID_COMMAND) {
+			// Command Request
+			pb_handle_command(from_callsign, data, len);
 		}
 	}
 }
@@ -656,6 +667,71 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 }
 
 /**
+ * pb_handle_command()
+ *
+ * Send a received command to the command task.
+ *
+ * Returns EXIT_SUCCESS if it could be processed, otherwise it returns EXIT_FAILURE
+ *
+ */
+int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
+		struct t_ax25_header *ax25_header;
+		ax25_header = (struct t_ax25_header *)data;
+		if ((ax25_header->pid & 0xff) != PID_COMMAND) {
+			return EXIT_FAILURE;
+		}
+		SWCmdUplink *sw_command;
+		sw_command = (SWCmdUplink *)(data + sizeof(AX25_HEADER));
+
+		if(sw_command->namespaceNumber != SWCmdNSPacsat) return EXIT_SUCCESS; // This was not for us, ignore
+
+		debug_print("Received PACSAT Command %04x addr: %d names: %d cmd %d from %s length %d\n",(sw_command->dateTime),
+				sw_command->address, sw_command->namespaceNumber, (sw_command->comArg.command), from_callsign, len);
+
+		//	int i;
+	//	for (i=0; i<4; i++)
+	//		debug_print("arg:%d %d\n",i,sw_command->comArg.arguments[i]);
+		/* Pass the data to the command processor */
+		if(!AuthenticateSoftwareCommand(sw_command)){
+			int r = pb_send_err(from_callsign, 5);
+			if (r != EXIT_SUCCESS) {
+				debug_print("\n Error : Could not send ERR Response to TNC \n");
+			}
+			return EXIT_FAILURE;
+		}
+		int rc = pb_send_ok(from_callsign);
+		if (rc != EXIT_SUCCESS) {
+			debug_print("\n Error : Could not send OK Response to TNC \n");
+		}
+//		debug_print("Auth Command\n");
+
+		switch (sw_command->comArg.command) {
+			case SWCmdPacsatEnablePB: {
+				debug_print("Enable PB Command\n");
+				if (sw_command->comArg.arguments[0]) {
+					g_state_pb_open = true;
+				} else {
+					g_state_pb_open = false;
+				}
+				save_state();
+				break;
+			}
+			case SWCmdPacsatEnableUplink: {
+				debug_print("Enable Uplink Command\n");
+				g_state_uplink_open = sw_command->comArg.arguments[0];
+				save_state();
+				break;
+			}
+			default:
+				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
+				return EXIT_FAILURE;
+				break;
+		}
+		return EXIT_SUCCESS;
+}
+
+
+/**
  * pb_next_action()
  *
  * When called take the next action for next station on the PB
@@ -680,20 +756,12 @@ int pb_next_action() {
 		if (rc != EXIT_SUCCESS) {
 			error_print("Could not send PB status to TNC \n");
 		}
-		char buffer[256];
-		pb_make_list_str(buffer, sizeof(buffer));
-		debug_print("%s | %d frames queued\n", buffer, tnc_get_frames_queued());
+//		char buffer[256];
+//		pb_make_list_str(buffer, sizeof(buffer));
+//		debug_print("%s | %d frames queued\n", buffer, tnc_get_frames_queued());
 		last_pb_status_time = now;
 		sent_pb_status = true;
 	}
-
-	/* Print debug info to the console more ofter */
-//	if (now - last_pb_frames_queued_time > g_max_frames_in_tx_buffer) {
-//		char buffer[256];
-//		pb_make_list_str(buffer, sizeof(buffer));
-//		debug_print("%s | %d frames queued\n", buffer, g_frames_queued);
-//		last_pb_frames_queued_time = now;
-//	}
 
 	//TODO - broadcast the number of bytes transmitted to BSTAT periodically so stations can calc efficiency
 
@@ -840,7 +908,7 @@ int pb_next_action() {
 			/* Request to fill holes in the file */
 			int current_hole_num = pb_list[current_station_on_pb].current_hole_num;
 			debug_print("Preparing Fill %d of %d from FILE %04x for %s --",(current_hole_num+1), pb_list[current_station_on_pb].hole_num,
-					pb_list[current_station_on_pb].file_id, pb_list[current_station_on_pb].callsign);
+					pb_list[current_station_on_pb].node->pfh->fileId, pb_list[current_station_on_pb].callsign);
 
 			FILE_DATE_PAIR *holes = pb_list[current_station_on_pb].hole_list;
 
@@ -909,12 +977,11 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
 	}
 
 	// TODO - this is where the logic would go to check the block size that the client sends and potentially use that
-	unsigned char buffer[PB_FILE_DEFAULT_BLOCK_SIZE]; // This is the chunk we will send
 
 	if (fseek( f, offset, SEEK_SET ) != 0) {
 		return EXIT_SUCCESS;
 	}
-	int number_of_bytes_read = fread(buffer, sizeof(char), PB_FILE_DEFAULT_BLOCK_SIZE, f);
+	int number_of_bytes_read = fread(broadcast_buffer, sizeof(char), PB_FILE_DEFAULT_BLOCK_SIZE, f);
 	debug_print("Read %d bytes from %s\n", number_of_bytes_read, psf_filename);
 	fclose(f);
 
@@ -925,9 +992,8 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
 
 	debug_print("FILE BB to send: ");
 	pfh_debug_print(pfh);
-	unsigned char data_bytes[AX25_MAX_DATA_LEN];
 
-	int data_len = pb_make_file_broadcast_packet(pfh, data_bytes, buffer,
+	int data_len = pb_make_file_broadcast_packet(pfh, packet_buffer, broadcast_buffer,
 			number_of_bytes_read, offset, chunk_includes_last_byte);
 	if (data_len == 0) {
 		/* Hmm, something went badly wrong here.  We better remove this request or we will keep
@@ -940,7 +1006,7 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
 
 	/* Send the broadcast and finish */
 	if (!g_run_self_test)
-		rc = send_raw_packet(g_broadcast_callsign, QST, PID_FILE, data_bytes, data_len);
+		rc = send_raw_packet(g_broadcast_callsign, QST, PID_FILE, packet_buffer, data_len);
 	if (rc != EXIT_SUCCESS) {
 		error_print("Could not send broadcast packet to TNC \n");
 		return EXIT_SUCCESS;
@@ -1050,12 +1116,12 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int 
 		/* If we have an offset then we have already sent part of this, send the next part */
 		buffer_size = MAX_DIR_PFH_LENGTH;
 	}
-	unsigned char buffer[buffer_size];
+
 	if (*offset != 0)
 		if (fseek( f, *offset, SEEK_SET ) != 0) {
 			return 0; /* This is a failure as we return length 0 */
 		}
-	int num = fread(buffer, sizeof(char), buffer_size, f);
+	int num = fread(packet_buffer, sizeof(char), buffer_size, f);
 	if (num != buffer_size) {
 		fclose(f);
 		return 0; // Error with the read
@@ -1067,7 +1133,7 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int 
 	for (int i=0; i<sizeof(PB_DIR_HEADER);i++ )
 		data_bytes[i] = header[i];
 	for (int i=0; i<num; i++)
-		data_bytes[i+sizeof(PB_DIR_HEADER)] = buffer[i];
+		data_bytes[i+sizeof(PB_DIR_HEADER)] = packet_buffer[i];
 
 	length = sizeof(PB_DIR_HEADER) + num +2;
 	int checksum = gen_crc(data_bytes, length-2);
@@ -1152,6 +1218,19 @@ int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
 	return length; // return length of header + pfh + crc
 }
 
+/**
+ * Return true if this file is in use by the PB
+ */
+int pb_is_file_in_use(uint32_t file_id) {
+    int i;
+    for (i=0; i < number_on_pb; i++) {
+    	if (pb_list[i].node != NULL)
+    		if (pb_list[i].node->pfh != NULL)
+    			if (pb_list[i].node->pfh->fileId == file_id)
+    				return true;
+    }
+    return false;
+}
 
 /*********************************************************************************************
  *
@@ -1200,6 +1279,13 @@ int test_pb_list() {
 
 	pb_debug_print_list();
 
+	DIR_NODE test_node;
+	HEADER pfh;
+	pfh.fileId = 3;
+	pfh.bodyOffset = 36;
+	pfh.fileSize = 175;
+	test_node.pfh = &pfh;
+
 	// Test PB Full
 	debug_print("ADD Calls and test FULL\n");
 	if( pb_add_request("A1A", PB_DIR_REQUEST_TYPE, NULL, 0, 0, holes, 1) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
@@ -1207,7 +1293,7 @@ int test_pb_list() {
 	if( pb_add_request("C1C", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
 	if( pb_add_request("D1D", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
 	if( pb_add_request("E1E", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
-	if( pb_add_request("F1F", PB_FILE_REQUEST_TYPE, NULL, 3, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
+	if( pb_add_request("F1F", PB_FILE_REQUEST_TYPE, &test_node, 3, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
 	if( pb_add_request("G1G", PB_FILE_REQUEST_TYPE, NULL, 3, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
 	if( pb_add_request("H1H", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
 	if( pb_add_request("I1I", PB_DIR_REQUEST_TYPE, NULL, 0, 0, NULL, 0) != EXIT_SUCCESS) {debug_print("ERROR: Could not add call to PB list\n");return EXIT_FAILURE; }
@@ -1226,6 +1312,11 @@ int test_pb_list() {
 	if (strcmp(pb_list[9].callsign, "J1J") != 0) {printf("** Mismatched callsign 9\n"); return EXIT_FAILURE;}
 
 	pb_debug_print_list();
+	debug_print("TEST File 3 in use\n");
+	if (!pb_is_file_in_use(3)) {
+		debug_print("ERROR: File 3 is not in use when it should be \n");
+		return EXIT_FAILURE;
+	}
 
 	debug_print("Process Current Call\n");
 	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
@@ -1239,11 +1330,18 @@ int test_pb_list() {
 //	if (rc != EXIT_SUCCESS) {printf("** Could not remove request\n"); return EXIT_FAILURE; }
 //	if (strcmp(pb_list[current_station_on_pb].callsign, "B1B") != 0) {printf("** Mismatched callsign current call after remove head\n"); return EXIT_FAILURE;}
 
-	debug_print("Remove 5\n");
-	// Remove 5 as though it timed out
-	rc = pb_remove_request(5); // Now FIF
+	debug_print("Remove 3\n");
+	// Remove 3 as though it timed out
+	rc = pb_remove_request(3); // Now E1E
 	if (rc != EXIT_SUCCESS) {printf("** Could not remove request\n"); return EXIT_FAILURE; }
-	if (strcmp(pb_list[current_station_on_pb].callsign, "B1B") != 0) {printf("** Mismatched callsign current call after remove 5\n"); return EXIT_FAILURE;}
+	if (strcmp(pb_list[current_station_on_pb].callsign, "B1B") != 0) {printf("** Mismatched callsign current call after remove 3\n"); return EXIT_FAILURE;}
+    if (strcmp(pb_list[3].callsign, "F1F") != 0) {printf("** Mismatched callsign 3: %s\n",pb_list[3].callsign); return EXIT_FAILURE;}
+
+	 /* Also confirm that the node copied over correctly */
+	if (pb_list[3].node->pfh->fileId != 3) {printf("** Mismatched file id for entry 3\n"); return EXIT_FAILURE;}
+	if (pb_list[3].node->pfh->bodyOffset != 36) {printf("** Mismatched body offset for entry 3\n"); return EXIT_FAILURE;}
+	if (pb_list[3].node->pfh->fileSize != 175) {printf("** Mismatched file size of %d for entry 3\n",pb_list[3].node->pfh->fileSize); return EXIT_FAILURE;}
+	if (strcmp(pb_list[6].callsign, "I1I") != 0) {printf("** Mismatched callsign 6: %s\n",pb_list[6].callsign); return EXIT_FAILURE;}
 
 	debug_print("Remove current station\n");
 	// Remove the current station, which is also the head, should advance to next one
@@ -1345,7 +1443,7 @@ int test_pb_file() {
 	pb_handle_file_request("AC2CZ", data, sizeof(data));
 	pb_debug_print_list();
 	if (strcmp(pb_list[0].callsign, "AC2CZ") != 0) {printf("** Mismatched callsign AC2CZ\n"); return EXIT_FAILURE;}
-	if (pb_list[0].file_id != 1) {printf("** Mismatched file id\n"); return EXIT_FAILURE;}
+	if (pb_list[0].node->pfh->fileId != 1) {printf("** Mismatched file id\n"); return EXIT_FAILURE;}
 	if (pb_list[0].pb_type != PB_FILE_REQUEST_TYPE) {printf("** Mismatched req type\n"); return EXIT_FAILURE;}
 	if (pb_list[0].offset != 0) {printf("** Mismatched offset\n"); return EXIT_FAILURE;}
 
@@ -1380,7 +1478,7 @@ int test_pb_file_holes() {
 	if (pb_handle_file_request("AC2CZ", data, sizeof(data))) { printf("** Could handle file hole request\n"); return EXIT_FAILURE;}
 	pb_debug_print_list();
 	if (strcmp(pb_list[0].callsign, "AC2CZ") != 0) {printf("** Mismatched callsign AC2CZ\n"); return EXIT_FAILURE;}
-	if (pb_list[0].file_id != 2) {printf("** Mismatched file id\n"); return EXIT_FAILURE;}
+	if (pb_list[0].node->pfh->fileId != 2) {printf("** Mismatched file id\n"); return EXIT_FAILURE;}
 	if (pb_list[0].pb_type != PB_FILE_REQUEST_TYPE) {printf("** Mismatched req type\n"); return EXIT_FAILURE;}
 	if (pb_list[0].hole_num != 2) {printf("** Mismatched hole_num\n"); return EXIT_FAILURE;}
 	if (pb_list[0].current_hole_num != 0) {printf("** Mismatched offset\n"); return EXIT_FAILURE;}

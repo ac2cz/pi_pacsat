@@ -27,6 +27,7 @@
 
 #define PID_FILE		0xBB
 #define PID_DIRECTORY	0xBD
+#define PID_COMMAND 	0xBC
 #define PID_NO_PROTOCOL	0xF0
 
 #define MAX_PB_LENGTH 10 /* This is the maximum number of stations that can be on the PB at one time */
@@ -115,6 +116,7 @@ typedef struct t_dir_pair DIR_DATE_PAIR;
 
 int pb_next_action();
 void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len);
+int pb_is_file_in_use(uint32_t file_id);
 int test_pb();
 int test_pb_list();
 int test_pb_file();

@@ -25,6 +25,7 @@
 
 #define MAX_UPLINK_LIST_LENGTH 4
 #define BBSTAT "BBSTAT"
+#define BBCOM "BBCOM"
 
 #define FTL0_PFH_BIT 2
 #define FTL0_VERSION_BIT1 0

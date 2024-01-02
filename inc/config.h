@@ -45,7 +45,7 @@ extern int g_serial_fd; // file handle for the serial port for Rig control
 #define PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS "pb_max_period_for_client_in_seconds"
 #define UPLINK_STATUS_PERIOD_IN_SECONDS "uplink_status_period_in_seconds"
 #define UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS "uplink_max_period_for_client_in_seconds"
-
+#define CONFIG_IORS_LAST_COMMAND_TIME_PATH "iors_last_command_time_path"
 
 extern int g_bit_rate;		   /* the bit rate of the TNC - 1200 4800 9600 - this is only used to calculate delays.  Change actual value in DireWolf) */
 extern char g_bbs_callsign[MAX_CALLSIGN_LEN];
@@ -56,6 +56,7 @@ extern int g_pb_status_period_in_seconds;
 extern int g_pb_max_period_for_client_in_seconds;
 extern int g_uplink_status_period_in_seconds;
 extern int g_uplink_max_period_for_client_in_seconds;
+extern char g_iors_last_command_time_path[MAX_FILE_PATH_LEN];
 
 void load_config(char *filename);
 
