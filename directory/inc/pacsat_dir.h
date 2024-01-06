@@ -43,6 +43,7 @@ typedef struct dir_node DIR_NODE;
 int dir_init(char *folder);
 char *get_dir_folder();
 int dir_next_file_number();
+void dir_make_tmp_filename(int file_id, char *filename, int max_len);
 int dir_load();
 int dir_validate_file(HEADER *pfh, char *filename);
 void dir_free();

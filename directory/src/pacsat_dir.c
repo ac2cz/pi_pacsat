@@ -122,6 +122,16 @@ int dir_init(char *folder) {
 	return EXIT_SUCCESS;
 }
 
+void dir_make_tmp_filename(int file_id, char *filename, int max_len) {
+	char file_id_str[5];
+	snprintf(file_id_str, 5, "%04x",file_id);
+	strlcpy(filename, data_folder, MAX_FILE_PATH_LEN);
+	strlcat(filename, "/upload/", MAX_FILE_PATH_LEN);
+	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
+	strlcat(filename, ".", MAX_FILE_PATH_LEN);
+	strlcat(filename, "upload", MAX_FILE_PATH_LEN);
+}
+
 /**
  * dir_next_file_number()
  *

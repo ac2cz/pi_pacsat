@@ -45,6 +45,7 @@ struct uplink_entry {
 	char callsign[MAX_CALLSIGN_LEN];
 	int file_id; /* File id of the file being uploaded */
 	time_t request_time; /* The time the request was received for timeout purposes */
+	time_t TIMER_T3; /* This is our own T3 timer because direwolf is set at 300seconds.  We want to expire stations much faster if nothing heard */
 };
 typedef struct uplink_entry UPLINK_ENTRY;
 
@@ -322,6 +323,7 @@ int ftl0_connection_received(char *from_callsign, char *to_callsign, int channel
 		error_print("Could not send FTL0 LOGIN packet to TNC \n");
 		return EXIT_FAILURE;
 	}
+	uplink_list[current_station_on_uplink].TIMER_T3 = time(0); /* Start T3 */
 	return EXIT_SUCCESS;
 }
 
@@ -381,6 +383,9 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 		debug_print("Ignoring data from %s as they are not in the list uplink\n", from_callsign);
 		return EXIT_SUCCESS; /* Ignored, this station is not on the uplink */
 	}
+
+	uplink_list[selected_station].TIMER_T3 = time(0); /* Restart T3 */
+
 
 	int ftl0_type = ftl0_parse_packet_type(data);
 	if (ftl0_type > MAX_PACKET_ID) {
@@ -603,7 +608,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		ul_go_data.byte_offset = 0;
 		/* Initialize the empty file */
 		char tmp_filename[MAX_FILE_PATH_LEN];
-		ftl0_make_tmp_filename(ul_go_data.server_file_no, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
+		dir_make_tmp_filename(ul_go_data.server_file_no, tmp_filename, MAX_FILE_PATH_LEN);
 		FILE * f = fopen(tmp_filename, "w");
 		if (f == NULL) {
 			error_print("Can't initilize new file %s\n",tmp_filename);
@@ -615,7 +620,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		// TODO - we also need to check the situation where we have the complete file but the ground station never received the ACK.
 		//        So an atttempt to upload a finished file that belongs to this station, that has the right length, should get an ACK to finish upload off
 		char tmp_filename[MAX_FILE_PATH_LEN];
-		ftl0_make_tmp_filename(file_no, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
+		dir_make_tmp_filename(file_no, tmp_filename, MAX_FILE_PATH_LEN);
 		debug_print("Checking continue file: %s\n",tmp_filename);
 		FILE * f = fopen(tmp_filename, "rb");
 		if (f == NULL) {
@@ -670,7 +675,7 @@ int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel
 	unsigned char * data_bytes = (unsigned char *)data + 2; /* Point to the data just past the header */
 
 	char tmp_filename[MAX_FILE_PATH_LEN];
-	ftl0_make_tmp_filename(uplink_list[selected_station].file_id, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
+	dir_make_tmp_filename(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
 	debug_print("Saving data to file: %s\n",tmp_filename);
 	FILE * f = fopen(tmp_filename, "ab"); /* Open the file for append of data to the end */
 	if (f == NULL) {
@@ -699,7 +704,7 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 	}
 
 	char tmp_filename[MAX_FILE_PATH_LEN];
-	ftl0_make_tmp_filename(uplink_list[selected_station].file_id, get_dir_folder(), tmp_filename, MAX_FILE_PATH_LEN);
+	dir_make_tmp_filename(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
 
 	/* We can't call dir_load_pacsat_file() here because we want to check the tmp file but then
 	 * add the file after we rename it. So we validate it first. */
@@ -758,16 +763,6 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 	return ER_NONE;
 }
 
-void ftl0_make_tmp_filename(int file_id, char *dir_name, char *filename, int max_len) {
-	char file_id_str[5];
-	snprintf(file_id_str, 5, "%04x",file_id);
-	strlcpy(filename, dir_name, MAX_FILE_PATH_LEN);
-	strlcat(filename, "/", MAX_FILE_PATH_LEN);
-	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
-	strlcat(filename, ".", MAX_FILE_PATH_LEN);
-	strlcat(filename, "upload", MAX_FILE_PATH_LEN);
-}
-
 /*
  *
  * ftl0_next_action
@@ -806,6 +801,19 @@ int ftl0_next_action() {
 //	}
 
 	if (number_on_uplink == 0) return EXIT_SUCCESS; // nothing to do
+
+	if (uplink_list[current_station_on_uplink].TIMER_T3 > 0) {
+		/* Timer is running */
+		if (now - uplink_list[current_station_on_uplink].TIMER_T3 > TIMER_T3_PERIOD_IN_SECONDS) {
+			/* Timer T3 Expired - disconnect station */
+			debug_print("%s: T3 TIMEOUT\n",uplink_list[current_station_on_uplink].callsign);
+			ftl0_disconnect(uplink_list[current_station_on_uplink].callsign, uplink_list[current_station_on_uplink].channel);
+			ftl0_remove_request(current_station_on_uplink);
+			/* If we removed a station then we don't want/need to increment the current station pointer */
+			uplink_list[current_station_on_uplink].TIMER_T3 = 0; /* stop the timer */
+			return EXIT_SUCCESS;
+		}
+	}
 
 	if (now - uplink_list[current_station_on_uplink].request_time > g_uplink_max_period_for_client_in_seconds) {
 		/* This station has exceeded the time allowed on the PB */

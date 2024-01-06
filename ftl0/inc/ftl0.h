@@ -24,6 +24,7 @@
 #define FTL0_H_
 
 #define MAX_UPLINK_LIST_LENGTH 4
+#define TIMER_T3_PERIOD_IN_SECONDS 30 // this is 1/10th the Direwolf timeout of 300s
 #define BBSTAT "BBSTAT"
 #define BBCOM "BBCOM"
 
@@ -102,7 +103,6 @@ int ftl0_connection_received(char *from_callsign, char *to_callsign, int channel
 int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsigned char *data, int len);
 int ftl0_disconnected(char *from_callsign, char *to_callsign, unsigned char *data, int len);
 int ftl0_next_action();
-void ftl0_make_tmp_filename(int file_id, char *dir_name, char *filename, int max_len);
 
 int test_ftl0_frame();
 int test_ftl0_list();
