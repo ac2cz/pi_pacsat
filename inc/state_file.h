@@ -31,7 +31,8 @@
 #define PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS "pb_max_period_for_client_in_seconds"
 #define UPLINK_STATUS_PERIOD_IN_SECONDS "uplink_status_period_in_seconds"
 #define UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS "uplink_max_period_for_client_in_seconds"
-
+#define DIR_MAX_FILE_AGE_IN_SECONDS "dir_max_file_age_in_seconds"
+#define DIR_MAINTENANCE_IN_SECONDS "dir_maintenance_period_in_seconds"
 
 extern int g_state_pb_open;
 extern int g_state_uplink_open;
@@ -39,6 +40,8 @@ extern int g_pb_status_period_in_seconds;
 extern int g_pb_max_period_for_client_in_seconds;
 extern int g_uplink_status_period_in_seconds;
 extern int g_uplink_max_period_for_client_in_seconds;
+extern int g_dir_max_file_age_in_seconds;
+extern int g_dir_maintenance_period_in_seconds;
 
 void load_state(char *filename);
 void save_state();

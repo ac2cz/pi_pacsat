@@ -74,6 +74,8 @@ int g_pb_status_period_in_seconds = 30;
 int g_pb_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds
 int g_uplink_status_period_in_seconds = 30;
 int g_uplink_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds
+int g_dir_max_file_age_in_seconds = 432000; // 5 Days or 5 * 24 * 60 * 60 seconds
+int g_dir_maintenance_period_in_seconds = 5; // check one node after this delay
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
@@ -333,6 +335,7 @@ int main(int argc, char *argv[]) {
 
 		pb_next_action();
 		ftl0_next_action();
+		dir_maintenance();
 
 	}
 

@@ -57,6 +57,7 @@
 
 /* Program include files */
 #include "config.h"
+#include "state_file.h"
 #include "pacsat_dir.h"
 #include "pacsat_header.h"
 #include "pacsat_broadcast.h"
@@ -73,6 +74,8 @@ int dir_load_pacsat_file(char *psf_name);
 /* Dir variables */
 static DIR_NODE *dir_head = NULL;  // the head of the directory linked list
 static DIR_NODE *dir_tail = NULL;  // the tail of the directory linked list
+DIR_NODE *dir_maint_node = NULL;   // the node where we are performing directory maintenance
+time_t last_dir_maint_time;
 static char data_folder[MAX_FILE_PATH_LEN]; // Directory path of the data folder
 static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory folder
 static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
@@ -287,7 +290,7 @@ void dir_free() {
 		p = p->next;
 		dir_delete_node(node);
 	}
-	debug_print("Dir List Cleared\n");
+	//debug_print("Dir List Cleared\n");
 }
 
 /**
@@ -346,6 +349,7 @@ int dir_load_pacsat_file(char *psf_name) {
  * pacsat file header and add it to dir.
  */
 int dir_load() {
+	dir_free();
 	DIR * d = opendir(dir_folder);
 	if (d == NULL) { error_print("** Could not open dir: %s\n",dir_folder); return EXIT_FAILURE; }
 	struct dirent *de;
@@ -514,6 +518,53 @@ int cp(const char *from, const char *to)
 
     errno = saved_errno;
     return -1;
+}
+
+/**
+ * Perform maintenance on the next node in the directory
+ */
+void dir_maintenance() {
+    uint32_t now = time(0);
+
+    if (last_dir_maint_time == 0) last_dir_maint_time = now; // Initialize at startup
+    if ((now - last_dir_maint_time) > g_dir_maintenance_period_in_seconds) {
+
+    	last_dir_maint_time = now;
+
+    	if (dir_maint_node == NULL)
+    		dir_maint_node = dir_head;
+
+    	char file_name_with_path[MAX_FILE_PATH_LEN];
+    	pfh_make_filename(dir_maint_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
+//    	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
+//    			file_name_with_path, dir_maint_node->pfh->uploadTime, now-dir_maint_node->pfh->uploadTime);
+    	int32_t age = now-dir_maint_node->pfh->uploadTime;
+    	if (age < 0) {
+    		// this looks wrong, something is corrupt.  Skip it
+    		dir_maint_node = dir_maint_node->next;
+    	} else if (pb_is_file_in_use(dir_maint_node->pfh->fileId)) {
+    		// This file is currently being broadcast then skip it until next time
+    		dir_maint_node = dir_maint_node->next;
+    	} else if (age > g_dir_max_file_age_in_seconds) {
+    		// Remove this file it is over the max age
+
+    		debug_print("Purging: %s\n",file_name_with_path);
+    		if (remove(file_name_with_path) != 0) {
+    			error_print("Could not remove the temp file: %s\n", file_name_with_path);
+    			// This was probablly open because it is being update or broadcast.  So it is OK to skip until next time
+    			dir_maint_node = dir_maint_node->next;
+    		} else {
+    			// Remove from the dir
+    			DIR_NODE *node = dir_maint_node;
+    			dir_maint_node = dir_maint_node->next;
+    			dir_delete_node(node);
+    		}
+
+    	} else {
+    		// TODO - Check if there is an expiry date in the header
+    		dir_maint_node = dir_maint_node->next;
+    	}
+    }
 }
 
 /*********************************************************************************************
