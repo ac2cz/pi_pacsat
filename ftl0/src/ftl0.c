@@ -445,11 +445,11 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 		break;
 
 	case UL_DATA_RX:
-		debug_print("%s: UL_DATA_RX - %s\n",uplink_list[selected_station].callsign, ftl0_packet_type_names[ftl0_type]);
+//		debug_print("%s: UL_DATA_RX - %s\n",uplink_list[selected_station].callsign, ftl0_packet_type_names[ftl0_type]);
 
 		switch (ftl0_type) {
 		case DATA :
-			debug_print("%s: UL_DATA_RX - DATA RECEIVED\n",uplink_list[selected_station].callsign);
+//			debug_print("%s: UL_DATA_RX - DATA RECEIVED\n",uplink_list[selected_station].callsign);
 			int err = ftl0_process_data_cmd(selected_station, from_callsign, channel, data, len);
 			if (err != ER_NONE) {
 				rc = ftl0_send_nak(from_callsign, channel, err);
@@ -465,12 +465,12 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 			break;
 
 		case DATA_END :
-			debug_print("%s: UL_DATA_RX - DATA END RECEIVED\n",uplink_list[selected_station].callsign);
+//			debug_print("%s: UL_DATA_RX - DATA END RECEIVED\n",uplink_list[selected_station].callsign);
 			err = ftl0_process_data_end_cmd(selected_station, from_callsign, channel, data, len);
 			if (err != ER_NONE) {
 				rc = ftl0_send_nak(from_callsign, channel, err);
 			} else {
-				debug_print(" *** SENDING ACK *** \n");
+//				debug_print(" *** SENDING ACK *** \n");
 				rc = ftl0_send_ack(from_callsign, channel);
 			}
 			uplink_list[selected_station].state = UL_CMD_OK;

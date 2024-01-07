@@ -55,8 +55,6 @@
 void header_copy_to_str(unsigned char *, int, char *, int);
 int pfh_save_pacsatfile(unsigned char * header, int header_len, char *filename, char *body_filename);
 int pfh_generate_header_bytes(HEADER *pfh, int body_size, unsigned char *header_bytes);
-unsigned char * pfh_store_short(unsigned char *buffer, unsigned short n);
-unsigned char * pfh_store_int(unsigned char *buffer, unsigned int n);
 unsigned char * pfh_store_char_field(unsigned char *buffer, unsigned short int id, unsigned char val);
 unsigned char * pfh_store_short_int_field(unsigned char *buffer, unsigned short int id, unsigned short int val);
 unsigned char * pfh_store_int_field(unsigned char *buffer, unsigned short int id, unsigned int val);
@@ -92,6 +90,7 @@ HEADER *pfh_new_header() {
 
 		/* Extended */
 		hdr->source[0]          = '\0';
+	    hdr->source_length      = 0;
 		hdr->uploader[0]        = '\0';
 		hdr->uploadTime         = 0;
 		hdr->downloadCount      = 0;
@@ -198,7 +197,7 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 				}
 			}
 
-			//debug_print("ExtractHeader: id:%X length:%d ", id, length);
+			//debug_print("ExtractHeader: id:%X length:%d \n", id, length);
 
 			switch (id)
 			{
@@ -242,6 +241,7 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 				break;
 			case SOURCE:
 				header_copy_to_str(&buffer[i], length, hdr->source, 32);
+	            hdr->source_length = length; /* Store the actual source length in case it was truncated. */
 				break;
 			case AX25_UPLOADER:
 				header_copy_to_str(&buffer[i], length, hdr->uploader, 6);
@@ -296,7 +296,8 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 				break;
 
 			default:
-				debug_print("** Unknown header id %d ** ", id);
+				/*
+				debug_print("** Unknown header id %X ** ", id);
 
 			for (int n=0; n<length; n++) {
 				if (isprint(buffer[i+n]))
@@ -306,7 +307,7 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 			for (int n=0; n<length; n++)
 				debug_print(" %02X",buffer[i+n]);
 			debug_print("\n");
-
+				 */
 				break;
 			}
 
@@ -400,16 +401,13 @@ int pfh_generate_header_bytes(HEADER *pfh, int body_size, unsigned char *header_
  * save the new bytes to the start of the file.  All fields except the header
  * checksum need to be correct.
  *
- * TODO - this does not preserve any PFH fields that we do not know about. It
- * would be better to update fields in place.
- *
- * TODO - it seems that this does not work for ZIP files.  Which relies on both the filename and user file name perhaps??
- *
+ * NOTE - this does not preserve any PFH fields that we do not know about. It
+ * is better to update fields in place using the routines in dir.
  *
  */
 int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder, char *out_filename) {
 	/* Build Pacsat File Header */
-	unsigned char buffer[1024];
+	unsigned char buffer[MAX_PFH_LENGTH];
 	int original_body_offset = pfh->bodyOffset;
 	int body_size = pfh->fileSize - pfh->bodyOffset;
 	int len = pfh_generate_header_bytes(pfh, body_size, buffer);
@@ -505,7 +503,7 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 	pfh->bodyCRC = body_checksum;
 
 	/* Build Pacsat File Header */
-	unsigned char buffer[1024];
+	unsigned char buffer[MAX_PFH_LENGTH];
 	int len = pfh_generate_header_bytes(pfh, body_size, buffer);
 
 	int rc = pfh_save_pacsatfile(buffer, len, out_filename, body_filename);
@@ -529,15 +527,15 @@ HEADER * pfh_load_from_file(char *filename) {
 	if (f == NULL) {
 		return NULL;
 	}
-	unsigned char buffer[1024]; // needs to be bigger than largest header but does not need to be the whole file
-	int num = fread(buffer, sizeof(char), 1024, f);
+	unsigned char buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
+	int num = fread(buffer, sizeof(char), MAX_PFH_LENGTH, f);
 	if (num == 0) {
 		fclose(f);
 		return NULL; // nothing was read
 	}
 	int size;
 	int crc_passed;
-	pfh = pfh_extract_header(buffer, 1025, &size, &crc_passed);
+	pfh = pfh_extract_header(buffer, MAX_PFH_LENGTH, &size, &crc_passed);
 	//debug_print("Read: %d Header size: %d\n",num, size);
 
 	if (!crc_passed) {

@@ -70,6 +70,7 @@ void dir_free();
 void dir_delete_node(DIR_NODE *node);
 void dir_debug_print(DIR_NODE *p);
 int dir_load_pacsat_file(char *psf_name);
+int dir_fs_update_header(char *file_name_with_path, HEADER *pfh);
 
 /* Dir variables */
 static DIR_NODE *dir_head = NULL;  // the head of the directory linked list
@@ -81,6 +82,8 @@ static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory fo
 static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
 static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
 static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
+unsigned char pfh_byte_buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
+
 
 int dir_make_dir(char * folder) {
 	struct stat st = {0};
@@ -197,6 +200,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 		dir_tail = new_node;
 		if (new_pfh->uploadTime == 0) {
 			new_pfh->uploadTime = now;
+			//debug_print("Resave new PFH at head of list\n");
 			resave = true;
 		}
 		new_node->next = NULL;
@@ -210,6 +214,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 			new_pfh->uploadTime = now;
 		}
 		insert_after(dir_tail, new_node);
+		//debug_print("Resave new PFH with upload time 0\n");
 		resave = true;
 	} else {
 		/* Insert this at the right point, searching from the back*/
@@ -236,9 +241,10 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 	}
 	// Now re-save the file with the new time if it changed, this recalculates the checksums
 	if (resave) {
-		//int rc = pfh_make_pacsat_file(new_pfh, dir_folder);
-		int rc = pfh_update_pacsat_header(new_pfh, get_dir_folder(), filename);
+    	char file_name_with_path[MAX_FILE_PATH_LEN];
+    	pfh_make_filename(new_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
 
+		int rc = dir_fs_update_header(file_name_with_path, new_node->pfh);
 
 		if (rc != EXIT_SUCCESS) {
 			// we could not save this
@@ -247,7 +253,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 			return NULL;
 		} else {
 			debug_print("Saved:");
-			pfh_debug_print(new_pfh);
+			pfh_debug_print(new_node->pfh);
 		}
 	}
 	return new_node;
@@ -534,6 +540,7 @@ int cp(const char *from, const char *to)
  * Perform maintenance on the next node in the directory
  */
 void dir_maintenance() {
+	if (dir_head == NULL) return;
     uint32_t now = time(0);
 
     if (last_dir_maint_time == 0) last_dir_maint_time = now; // Initialize at startup
@@ -576,6 +583,111 @@ void dir_maintenance() {
     	}
     }
 }
+
+/**
+ * This saves a big endian 4 byte int into little endian format in the MRAM
+ */
+int dir_fs_save_int(FILE *fp, uint32_t value, uint32_t offset) {
+    int32_t numOfBytesWritten = -1;
+    int32_t rc = fseek(fp, offset + 3, SEEK_SET);
+    if (rc == -1) {
+        return -1;
+    }
+    uint8_t data[4];
+    pfh_store_int(data, value);
+    numOfBytesWritten = fwrite(&data, sizeof(uint8_t), sizeof(data), fp);
+    if (numOfBytesWritten != sizeof(data)) {
+        printf("Write returned: %d\n",numOfBytesWritten);
+        return -1;
+    }
+    return numOfBytesWritten;
+}
+
+/**
+ * This saves a big endian 2 byte short into into little endian format in the MRAM
+ */
+int dir_fs_save_short(FILE *fp, uint16_t value, uint32_t offset) {
+    int32_t numOfBytesWritten = -1;
+    int32_t rc = fseek(fp, offset + 3, SEEK_SET);
+    if (rc != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+    }
+    uint8_t data[2];
+    pfh_store_short(data, value);
+    numOfBytesWritten = fwrite(&data, sizeof(uint8_t), sizeof(data), fp);
+    if (numOfBytesWritten != sizeof(data)) {
+        printf("Write returned: %d\n",numOfBytesWritten);
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+
+
+/**
+ * Update the header in place in the file. This preserves any pacsat header fields that the spacecraft
+ * does not understand, but which are important to the sender/receiver.
+ *
+ * This uses fixed offsets for the mandatory fields, which are defined in pacsat_header.h
+ *
+ * Returns EXIT_SUCCESS or EXIT_FAILURE if there is an error
+ */
+int dir_fs_update_header(char *file_name_with_path, HEADER *pfh) {
+    int32_t rc;
+//
+
+	FILE *fp = fopen(file_name_with_path, "r+"); // open for reading and writing
+	if (fp == NULL) {
+        debug_print("Unable to open %s for writing: %s\n", file_name_with_path, strerror(errno));
+        return EXIT_FAILURE;
+    }
+	/* Save fileid directly in file */
+    rc = dir_fs_save_int(fp, pfh->fileId, FILE_ID_BYTE_POS);
+    if (rc == EXIT_FAILURE) {
+        debug_print("Unable to save fileid to %s with data at offset %d: %s\n", file_name_with_path, FILE_ID_BYTE_POS, strerror(errno));
+        rc = fclose(fp);
+        return EXIT_FAILURE;
+    }
+    /* Save upload time directly in file */
+    rc = dir_fs_save_int(fp, pfh->uploadTime, UPLOAD_TIME_BYTE_POS_EX_SOURCE_LEN + pfh->source_length);
+    if (rc == EXIT_FAILURE) {
+        debug_print("Unable to save uploadtime to %s with data at offset %d: %s\n", file_name_with_path,
+        		UPLOAD_TIME_BYTE_POS_EX_SOURCE_LEN + pfh->source_length, strerror(errno));
+        rc = fclose(fp);
+        return EXIT_FAILURE;
+    }
+
+    /* Then recalculate the checksum and write it */
+    uint16_t crc_result = 0;
+    rc = fseek(fp, 0, SEEK_SET);
+    int num = fread(pfh_byte_buffer, sizeof(char), 1024, fp);
+    if (num == 0) {
+    	debug_print("Unable to re-read header from %s\n", file_name_with_path);
+    	fclose(fp);
+    	return EXIT_FAILURE; // nothing was read
+    }
+    /* First zero out the existing header checksum */
+    pfh_byte_buffer[HEADER_CHECKSUM_BYTE_POS +3] = 0x00;
+    pfh_byte_buffer[HEADER_CHECKSUM_BYTE_POS +4] = 0x00;
+
+    int j;
+    /* Then calculate the new one and save it back to MRAM */
+    for (j=0; j<pfh->bodyOffset; j++)
+    	crc_result += pfh_byte_buffer[j] & 0xff;
+    rc = dir_fs_save_short(fp, crc_result, HEADER_CHECKSUM_BYTE_POS);
+    if (rc == -1) {
+    	debug_print("Unable to save header checksum to %s with data at offset %d: %s\n",
+    			file_name_with_path, HEADER_CHECKSUM_BYTE_POS, strerror(errno));
+    	rc = fclose(fp);
+    	return EXIT_FAILURE;
+    }
+
+    rc = fclose(fp);
+    if (rc != 0) {
+    	printf("Unable to close %s: %s\n", file_name_with_path, strerror(errno));
+    }
+    return EXIT_SUCCESS;
+}
+
 
 /*********************************************************************************************
  *

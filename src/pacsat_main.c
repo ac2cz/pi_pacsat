@@ -297,10 +297,10 @@ int main(int argc, char *argv[]) {
 					pb_process_frame (frame.header->call_from, frame.header->call_to, frame.data, frame.header->data_len);
 				break;
 			case 'C': // Connected to a station
-				debug_print("CON:%d:",frame_num);
-				print_header(frame.header);
-				print_data(frame.data, frame.header->data_len);
-				debug_print("\n");
+//				debug_print("CON:%d:",frame_num);
+//				print_header(frame.header);
+//				print_data(frame.data, frame.header->data_len);
+//				debug_print("\n");
 
 				if (strncmp((char *)frame.data, "*** CONNECTED To Station", 24) == 0) {
 					// Incoming: Other station initiated the connect request.
@@ -314,15 +314,15 @@ int main(int argc, char *argv[]) {
 
 			case 'D': // Data from a connected station
 				// TODO - we might want to block signals here so we don't exit in the middle of a file write
-				debug_print("DATA:%d:",frame_num);
-				print_header(frame.header);
-				print_data(frame.data, frame.header->data_len);
-				debug_print("\n");
+//				debug_print("DATA:%d:",frame_num);
+//				print_header(frame.header);
+//				print_data(frame.data, frame.header->data_len);
+//				debug_print("\n");
 				ftl0_process_data(frame.header->call_from, frame.header->call_to, frame.header->portx, frame.data, frame.header->data_len);
 				break;
 
 			case 'd': // Disconnect from the TNC
-				debug_print("*** DISC:%d:",frame_num);
+				debug_print("*** DISC from other TNC:%d:",frame_num);
 				print_header(frame.header);
 				print_data(frame.data, frame.header->data_len);
 				debug_print("\n");

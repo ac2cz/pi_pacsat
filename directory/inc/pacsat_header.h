@@ -68,9 +68,14 @@
 #define PFH_TYPE_WOD 3
 #define PFH_TYPE_IMAGES 211
 
+// These offsets are to the start of the field, i.e. they point to the ID number not the data.
+#define FILE_ID_BYTE_POS 2
+#define UPLOAD_TIME_BYTE_POS_EX_SOURCE_LEN 82
 #define FILE_SIZE_BYTE_POS 26
 #define BODY_OFFSET_BYTE_POS 65
 #define HEADER_CHECKSUM_BYTE_POS 60
+
+#define MAX_PFH_LENGTH 2048
 
 #define PSF_FILE_EXT "act"
 
@@ -90,6 +95,7 @@ typedef struct {
 
   /* Extended Header Information */
   char          source[33];          /* 0x10 */
+  char          source_length;       /* This is the actual length of the source field on disk, which may have been truncated when parsed */
   char          uploader[7];         /* 0x11 */
   uint32_t uploadTime;          /* 0x12 */   /* Note that this is a Mandatory item on all files */
   unsigned char downloadCount;       /* 0x13 */
@@ -126,6 +132,9 @@ int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder, char *out_filename);
 int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder);
 HEADER * pfh_load_from_file(char *filename);
 void pfh_debug_print(HEADER *pfh);
+unsigned char * pfh_store_short(unsigned char *buffer, unsigned short n);
+unsigned char * pfh_store_int(unsigned char *buffer, unsigned int n);
+
 int test_pacsat_header();
 int write_test_msg(char *dir_folder, char *pfh_filename, char *contents, int length);
 int test_pfh_checksum() ;
