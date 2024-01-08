@@ -64,6 +64,10 @@ void load_config(char *filename) {
 				} else if (strcmp(key, MAX_FRAMES_IN_TX_BUFFER) == 0) {
 					int n = atoi(value);
 					g_max_frames_in_tx_buffer = n;
+				} else if (strcmp(key, CONFIG_IORS_LAST_COMMAND_TIME_PATH) == 0) {
+					strlcpy(g_iors_last_command_time_path, value,sizeof(g_iors_last_command_time_path));
+				} else if (strcmp(key, CONFIG_UPLOAD_TABLE_PATH) == 0) {
+					strlcpy(g_upload_table_path, value,sizeof(g_upload_table_path));
 				} else {
 					error_print("Unknown key in %s file: %s\n",filename, key);
 				}

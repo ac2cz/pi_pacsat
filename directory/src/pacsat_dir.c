@@ -633,7 +633,6 @@ int dir_fs_save_short(FILE *fp, uint16_t value, uint32_t offset) {
  */
 int dir_fs_update_header(char *file_name_with_path, HEADER *pfh) {
     int32_t rc;
-//
 
 	FILE *fp = fopen(file_name_with_path, "r+"); // open for reading and writing
 	if (fp == NULL) {
@@ -907,8 +906,15 @@ int test_pacsat_dir() {
 	if (dir_get_node_by_id(1) == NULL) { printf("** Error finding file 1\n"); return EXIT_FAILURE; }
 	DIR_NODE * last = dir_get_node_by_id(4);
 	if ( last == NULL) { printf("** Error finding file 4\n"); return EXIT_FAILURE; }
-	if ( last->next != NULL) { printf("** Error duplicate insert after file 4\n"); return EXIT_FAILURE; }
 	if (dir_get_node_by_id(9999) != NULL) { printf("** Error with search for missing file\n"); return EXIT_FAILURE; }
+	// We should have only 4 files
+	int c = 0;
+	DIR_NODE *p = dir_head;
+	while (p != NULL) {
+		p = p->next;
+		c++;
+	}
+	if ( c != 4) { printf("** Error expected 4 files, found %d\n",c); return EXIT_FAILURE; }
 
 	dir_free();
 

@@ -33,6 +33,7 @@
 #define UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS "uplink_max_period_for_client_in_seconds"
 #define DIR_MAX_FILE_AGE_IN_SECONDS "dir_max_file_age_in_seconds"
 #define DIR_MAINTENANCE_IN_SECONDS "dir_maintenance_period_in_seconds"
+#define FTL0_MAX_FILE_SIZE "ftl0_max_file_size"
 
 extern int g_state_pb_open;
 extern int g_state_uplink_open;
@@ -42,6 +43,7 @@ extern int g_uplink_status_period_in_seconds;
 extern int g_uplink_max_period_for_client_in_seconds;
 extern int g_dir_max_file_age_in_seconds;
 extern int g_dir_maintenance_period_in_seconds;
+extern int g_ftl0_max_file_size;
 
 void load_state(char *filename);
 void save_state();

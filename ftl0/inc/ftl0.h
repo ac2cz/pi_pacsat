@@ -24,9 +24,14 @@
 #define FTL0_H_
 
 #define MAX_UPLINK_LIST_LENGTH 4
+#define MAX_IN_PROCESS_FILE_UPLOADS 10
 #define TIMER_T3_PERIOD_IN_SECONDS 30 // this is 1/10th the Direwolf timeout of 300s
 #define BBSTAT "BBSTAT"
 #define BBCOM "BBCOM"
+
+#define FTL0_STATE_SHUT 0
+#define FTL0_STATE_OPEN 1
+#define FTL0_STATE_COMMAND 2
 
 #define FTL0_PFH_BIT 2
 #define FTL0_VERSION_BIT1 0
@@ -99,11 +104,26 @@ typedef struct {
 	uint32_t file_length;
 } FTL0_UPLOAD_CMD;
 
+/* This stores the details of an in process file upload */
+typedef struct InProcessFileUpload {
+    char callsign[MAX_CALLSIGN_LEN]; /* The callsign of the stations that initiated the upload */
+    uint32_t file_id; /* The file id that was allocated by the dir.  A standard function calculates the tmp file name on disk */
+    uint32_t length;  /* The promised length of the file given by the station when it requested the upload */
+    uint32_t offset;  /* The offset at the end of the latest block uploaded */
+    uint32_t request_time; /* The date/time that this upload was requested */
+} InProcessFileUpload_t;
+
 int ftl0_connection_received(char *from_callsign, char *to_callsign, int channel, int incomming, unsigned char * data);
 int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsigned char *data, int len);
 int ftl0_disconnected(char *from_callsign, char *to_callsign, unsigned char *data, int len);
 int ftl0_next_action();
 
+int ftl0_get_file_upload_record(uint32_t file_id, InProcessFileUpload_t * file_upload_record);
+int ftl0_set_file_upload_record(InProcessFileUpload_t * file_upload_record);
+int ftl0_get_space_reserved_by_upload_table();
+int ftl0_update_file_upload_record(InProcessFileUpload_t * file_upload_record);
+
+int test_ftl0_upload_table();
 int test_ftl0_frame();
 int test_ftl0_list();
 int test_ftl0_action();

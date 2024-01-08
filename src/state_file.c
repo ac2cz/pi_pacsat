@@ -72,6 +72,8 @@ void load_state(char *filepath) {
 					g_dir_max_file_age_in_seconds = atoi(value);
 				} else if (strcmp(key, DIR_MAINTENANCE_IN_SECONDS) == 0) {
 					g_dir_maintenance_period_in_seconds = atoi(value);
+				} else if (strcmp(key, FTL0_MAX_FILE_SIZE) == 0) {
+					g_ftl0_max_file_size = atoi(value);
 				} else {
 					error_print("Unknown key in state file: %s : %s\n",filename, key);
 				}
@@ -95,6 +97,7 @@ void save_state() {
 		save_int_key_value(UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_uplink_max_period_for_client_in_seconds, file);
 		save_int_key_value(DIR_MAX_FILE_AGE_IN_SECONDS, g_dir_max_file_age_in_seconds, file);
 		save_int_key_value(DIR_MAINTENANCE_IN_SECONDS, g_dir_maintenance_period_in_seconds, file);
+		save_int_key_value(FTL0_MAX_FILE_SIZE, g_ftl0_max_file_size, file);
 	}
 	fclose(file);
 }

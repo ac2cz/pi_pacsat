@@ -721,11 +721,11 @@ unsigned char * add_extended_header(unsigned char *p, HEADER *pfh) {
 	 * occurrences of items 0x14, 0x15, and 0x16.
 	 */
 	p = pfh_store_str_field(p, SOURCE, strlen(pfh->source), pfh->source);
-	p = pfh_store_str_field(p, AX25_UPLOADER, 7, pfh->uploader);
+	p = pfh_store_str_field(p, AX25_UPLOADER, 6, pfh->uploader);
 	p = pfh_store_int_field(p, UPLOAD_TIME, pfh->uploadTime);
 	p = pfh_store_char_field(p, DOWNLOAD_COUNT, pfh->downloadCount);
 	p = pfh_store_str_field(p, DESTINATION, strlen(pfh->destination), pfh->destination);
-	p = pfh_store_str_field(p, AX25_DOWNLOADER, 7, pfh->downloader);
+	p = pfh_store_str_field(p, AX25_DOWNLOADER, 6, pfh->downloader);
 	p = pfh_store_int_field(p, DOWNLOAD_TIME, pfh->downloadTime);
 	p = pfh_store_int_field(p, EXPIRE_TIME, pfh->expireTime);
 	p = pfh_store_char_field(p, PRIORITY, pfh->priority);
