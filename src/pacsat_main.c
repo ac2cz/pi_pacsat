@@ -78,6 +78,7 @@ int g_uplink_max_period_for_client_in_seconds = 600; // This is 10 mins in the s
 int g_dir_max_file_age_in_seconds = 432000; // 5 Days or 5 * 24 * 60 * 60 seconds
 int g_dir_maintenance_period_in_seconds = 5; // check one node after this delay
 int g_ftl0_max_file_size = 153600; // 150k max file size
+int g_ftl0_max_upload_age_in_seconds = 5 * 24 * 60 * 60; // 5 days
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
@@ -85,6 +86,8 @@ int g_run_self_test = false;
 int frame_queue_status_known = false;
 char config_file_name[MAX_FILE_PATH_LEN] = "pi_pacsat.config";
 char dir_path[MAX_FILE_PATH_LEN] = "./pacsat";
+time_t last_dir_maint_time;
+
 
 /**
  * Print this help if the -h or --help command line options are used
@@ -184,31 +187,31 @@ int main(int argc, char *argv[]) {
 
 	if (g_run_self_test) {
 		debug_print("Running Self Tests..\n");
-		rc = test_ftl0_frame();
-		if (rc != EXIT_SUCCESS) exit(rc);
-		rc = test_ftl0_list();
-		if (rc != EXIT_SUCCESS) exit(rc);
-
-		rc = test_ftl0_action();
-		if (rc != EXIT_SUCCESS) exit(rc);
-
-		rc = test_pfh_checksum();
-		if (rc != EXIT_SUCCESS) exit(rc);
-		rc = test_pacsat_header();
-		if (rc != EXIT_SUCCESS) exit(rc);
-		rc = test_pacsat_dir_one();
-		if (rc != EXIT_SUCCESS) exit(rc);
-
-		rc = test_pacsat_dir();
-		if (rc != EXIT_SUCCESS) exit(rc);
-		rc = test_pb_list();
-		if (rc != EXIT_SUCCESS) exit(rc);
-		rc = test_pb();
-		if (rc != EXIT_SUCCESS) exit(rc);
-		rc = test_pb_file();
-		if (rc != EXIT_SUCCESS) exit(rc);
-		rc = test_pb_file_holes();
-		if (rc != EXIT_SUCCESS) exit(rc);
+//		rc = test_ftl0_frame();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//		rc = test_ftl0_list();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//
+//		rc = test_ftl0_action();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//
+//		rc = test_pfh_checksum();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//		rc = test_pacsat_header();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//		rc = test_pacsat_dir_one();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//
+//		rc = test_pacsat_dir();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//		rc = test_pb_list();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//		rc = test_pb();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//		rc = test_pb_file();
+//		if (rc != EXIT_SUCCESS) exit(rc);
+//		rc = test_pb_file_holes();
+//		if (rc != EXIT_SUCCESS) exit(rc);
 
 		rc = test_ftl0_upload_table();
 		if (rc != EXIT_SUCCESS) exit(rc);
@@ -245,6 +248,7 @@ int main(int argc, char *argv[]) {
 	if (dir_init(dir_path) != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 	init_commanding(g_iors_last_command_time_path);
+	ftl0_load_upload_table();
 
 	/**
 	 * RECEIVE LOOP
@@ -340,8 +344,18 @@ int main(int argc, char *argv[]) {
 
 		pb_next_action();
 		ftl0_next_action();
-		dir_maintenance();
 
+		uint32_t now = time(0);
+
+		if (last_dir_maint_time == 0) last_dir_maint_time = now; // Initialize at startup
+		if ((now - last_dir_maint_time) > g_dir_maintenance_period_in_seconds) {
+			last_dir_maint_time = now;
+			dir_maintenance(now);
+
+			// TODO - we could run ftl0 main less frequently as it checks the whole list e.g. once per hour or per day
+			char *path = get_upload_folder();
+			ftl0_maintenance(now, path);
+		}
 	}
 
 

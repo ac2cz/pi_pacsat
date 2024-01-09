@@ -558,7 +558,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 	else {
 	    // confirm it is really on Disk and we can read the size
 		char file_name_with_path[MAX_FILE_PATH_LEN];
-		pfh_make_filename(file_header->file_id,get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
+		dir_get_file_path_from_file_id(file_header->file_id,get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
 		FILE * f = fopen(file_name_with_path, "rb");
 		if (f == NULL) {
 			error_print("No file on disk, node in dir is wrong\n");
@@ -889,7 +889,7 @@ int pb_next_action() {
 		debug_print("Preparing FILE Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
 
 		char psf_filename[MAX_FILE_PATH_LEN];
-		pfh_make_filename(pb_list[current_station_on_pb].node->pfh->fileId,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
+		dir_get_file_path_from_file_id(pb_list[current_station_on_pb].node->pfh->fileId,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
 
 		if (pb_list[current_station_on_pb].hole_num == 0) {
 			/* Request to broadcast the whole file */
@@ -1111,7 +1111,7 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int 
 	}
 
 	char psf_filename[MAX_FILE_PATH_LEN];
-	pfh_make_filename(node->pfh->fileId,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
+	dir_get_file_path_from_file_id(node->pfh->fileId,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
 	FILE * f = fopen(psf_filename, "r");
 	if (f == NULL) {
 		return 0;

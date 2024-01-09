@@ -42,8 +42,13 @@ typedef struct dir_node DIR_NODE;
 
 int dir_init(char *folder);
 char *get_dir_folder();
+char *get_upload_folder();
+char *get_wod_folder();
 int dir_next_file_number();
-void dir_make_tmp_filename(int file_id, char *filename, int max_len);
+void dir_get_upload_file_path_from_file_id(int file_id, char *filename, int max_len);
+void dir_get_file_path_from_file_id(int file_id, char *dir_name, char *filename, int max_len);
+void dir_get_filename_from_file_id(uint32_t file_id, char *file_name, int max_len);
+uint32_t dir_get_file_id_from_filename(char *file_name);
 int dir_load();
 int dir_validate_file(HEADER *pfh, char *filename);
 void dir_free();

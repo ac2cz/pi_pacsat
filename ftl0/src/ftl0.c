@@ -28,6 +28,7 @@
 #include <time.h>
 #include <sys/statvfs.h>
 #include <errno.h>
+#include <dirent.h>
 
 /* Program Include files */
 #include "config.h"
@@ -87,8 +88,7 @@ int ftl0_make_packet(unsigned char *data_bytes, unsigned char *info, int length,
 int ftl0_parse_packet_type(unsigned char * data);
 int ftl0_parse_packet_length(unsigned char * data);
 int ftl0_clear_upload_table();
-int ftl0_load_upload_table();
-int ftl0_save_upload_table();
+int ftl0_remove_upload_file(uint32_t file_id);
 
 /**
  * ftl0_send_status()
@@ -471,6 +471,16 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 				return rc;
 			}
 			uplink_list[selected_station].state = UL_DATA_RX;
+			// Update the upload record in case nothing else is received
+			InProcessFileUpload_t file_upload_record;
+			if (ftl0_get_file_upload_record(uplink_list[selected_station].file_id, &file_upload_record) == EXIT_SUCCESS) {
+				file_upload_record.request_time = time(0); // this is updated when we receive data
+				file_upload_record.offset = uplink_list[selected_station].offset;
+				if (ftl0_update_file_upload_record(&file_upload_record) != EXIT_SUCCESS) {
+					debug_print("Unable to update upload record\n");
+					// do not treat this as fatal because the file can still be uploaded
+				}
+			}
 			break;
 
 		case DATA_END :
@@ -639,13 +649,26 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 
 		/* Initialize the empty file */
 		char tmp_filename[MAX_FILE_PATH_LEN];
-		dir_make_tmp_filename(ul_go_data.server_file_no, tmp_filename, MAX_FILE_PATH_LEN);
+		dir_get_upload_file_path_from_file_id(ul_go_data.server_file_no, tmp_filename, MAX_FILE_PATH_LEN);
 		FILE * f = fopen(tmp_filename, "w");
 		if (f == NULL) {
 			error_print("Can't initilize new file %s\n",tmp_filename);
 			return ER_NO_ROOM;
 		}
 		fclose(f);
+
+		/* Store in an upload table record.  The state will now contain all the details */
+		InProcessFileUpload_t file_upload_record;
+		strlcpy(file_upload_record.callsign,state->callsign, sizeof(file_upload_record.callsign));
+		file_upload_record.file_id = state->file_id;
+		file_upload_record.length = state->length;
+		file_upload_record.request_time = state->request_time;
+		file_upload_record.offset = state->offset;
+		if (ftl0_set_file_upload_record(&file_upload_record) != EXIT_SUCCESS ) {
+			debug_print("Unable to create upload record for file id %04x\n",state->file_id);
+			// this is not fatal as we may still be able to upload the file, though a later continue may not work
+		}
+
 	} else {
 		/* File number was supplied in the Upload command.  In this situation we send a GO response with the offset
 		 * that the station should use to continue the upload.  Space should still be available as it was allocated
@@ -663,7 +686,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		 */
 
 		char file_name_with_path[MAX_FILE_PATH_LEN];
-		pfh_make_filename(state->file_id, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
+		dir_get_file_path_from_file_id(state->file_id, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
 		debug_print("Checking if file: %s is already uploaded\n",file_name_with_path);
 
 		FILE * f = fopen(file_name_with_path, "rb");
@@ -690,12 +713,28 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		}
 
 		/* Is this a valid continue, check to see there is an upload record */
-// TODO
-
+		InProcessFileUpload_t upload_record;
+		if (ftl0_get_file_upload_record(state->file_id, &upload_record) != EXIT_SUCCESS)  {
+			debug_print("Could not read upload record for file id %04x - FAILED\n",state->file_id);
+			return ER_NO_SUCH_FILE_NUMBER;
+		} else {
+			/* if <continue_file_no> is not 0 and the <file_length> does not
+		               agree with the <file_length> previously associated with the file identified by
+		               <continue_file_no>.  Continue is not possible.*/
+			if (upload_record.length != state->length) {
+				debug_print("Promised file length does not match - BAD CONTINUE\n");
+				return ER_BAD_CONTINUE;
+			}
+			/* If this file does not belong to this callsign then reject */
+			if (strcmp(upload_record.callsign, state->callsign) != 0) {
+				debug_print("Callsign does not match - BAD CONTINUE\n");
+				return ER_BAD_CONTINUE;
+			}
+		}
 
 		/* Is this a valid continue, check to see there is a tmp file */
 		char tmp_filename[MAX_FILE_PATH_LEN];
-		dir_make_tmp_filename(state->file_id, tmp_filename, MAX_FILE_PATH_LEN);
+		dir_get_upload_file_path_from_file_id(state->file_id, tmp_filename, MAX_FILE_PATH_LEN);
 
 		debug_print("Checking continue file: %s\n",tmp_filename);
 		f = fopen(tmp_filename, "rb");
@@ -756,7 +795,7 @@ int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel
 	unsigned char * data_bytes = (unsigned char *)data + 2; /* Point to the data just past the header */
 
 	char tmp_filename[MAX_FILE_PATH_LEN];
-	dir_make_tmp_filename(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
+	dir_get_upload_file_path_from_file_id(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
 	debug_print("Saving data to file: %s\n",tmp_filename);
 	FILE * f = fopen(tmp_filename, "ab"); /* Open the file for append of data to the end */
 	if (f == NULL) {
@@ -790,7 +829,7 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 	}
 
 	char tmp_filename[MAX_FILE_PATH_LEN];
-	dir_make_tmp_filename(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
+	dir_get_upload_file_path_from_file_id(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
 
 	/* We can't call dir_load_pacsat_file() here because we want to check the tmp file but then
 	 * add the file after we rename it. So we validate it first. */
@@ -822,7 +861,7 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
            is sent.
 	 */
 	char new_filename[MAX_FILE_PATH_LEN];
-	pfh_make_filename(uplink_list[selected_station].file_id, get_dir_folder(), new_filename, MAX_FILE_PATH_LEN);
+	dir_get_file_path_from_file_id(uplink_list[selected_station].file_id, get_dir_folder(), new_filename, MAX_FILE_PATH_LEN);
 	if (rename(tmp_filename, new_filename) == EXIT_SUCCESS) {
 //		char file_id_str[5];
 //		snprintf(file_id_str, 4, "%d",uplink_list[selected_station].file_id);
@@ -963,6 +1002,16 @@ int ftl0_parse_packet_length(unsigned char * data) {
 	return length;
 }
 
+int ftl0_on_the_uplink_now(uint32_t file_id) {
+	int j;
+	for (j=0; j < number_on_uplink; j++) {
+		if (uplink_list[j].state != UL_UNINIT)
+			if (uplink_list[j].file_id == file_id)
+				return true;
+	}
+	return false;
+}
+
 /**
  * Read a record from the file upload table slot
  */
@@ -1006,6 +1055,7 @@ int ftl0_get_file_upload_record(uint32_t file_id, InProcessFileUpload_t * file_u
 int ftl0_set_file_upload_record(InProcessFileUpload_t * file_upload_record) {
     int i;
     int oldest_id = -1;
+    int oldest_file_id = -1;
     int first_empty_id = -1;
     uint32_t oldest_date = 0xFFFFFFFF;
     InProcessFileUpload_t tmp_file_upload_record;
@@ -1026,16 +1076,9 @@ int ftl0_set_file_upload_record(InProcessFileUpload_t * file_upload_record) {
             if (tmp_file_upload_record.request_time < oldest_date) {
                 /* This time is older than the oldest date so far.  Make sure this is not
                  * live right now and then note it as the oldest */
-                int on_the_uplink_now = false;
-                int j;
-                for (j=0; j < number_on_uplink; j++) {
-                    if (uplink_list[j].state != UL_UNINIT)
-                    	if (uplink_list[j].file_id == tmp_file_upload_record.file_id)
-                    		if (strcasecmp(uplink_list[j].callsign, tmp_file_upload_record.callsign) == 0) {
-                    			on_the_uplink_now = true;                        }
-                }
-                if (!on_the_uplink_now) {
+                if (!ftl0_on_the_uplink_now(tmp_file_upload_record.file_id)) {
                     oldest_id = i;
+                    oldest_file_id = tmp_file_upload_record.file_id;
                     oldest_date = tmp_file_upload_record.request_time;
                 }
             }
@@ -1052,8 +1095,12 @@ int ftl0_set_file_upload_record(InProcessFileUpload_t * file_upload_record) {
     if (oldest_id != -1) {
         //debug_print("Store in oldest slot %d\n",oldest_id);
         int rc3 = ftl0_raw_set_file_upload_record(oldest_id, file_upload_record);
-        //TODO - this has to purge the old tmp file as well or it needs to be cleaned up by maintenance func
-        if (rc3 == EXIT_FAILURE) return EXIT_FAILURE;
+        if (rc3 == EXIT_FAILURE) {
+        	return EXIT_FAILURE;
+        } else {
+            /* Remove the temp file on disk */
+            ftl0_remove_upload_file(oldest_file_id);
+        }
         return EXIT_SUCCESS;
     }
     return EXIT_FAILURE;
@@ -1102,6 +1149,9 @@ int ftl0_remove_file_upload_record(uint32_t id) {
         if (tmp_file_upload_record2.file_id == id) {
             if (ftl0_raw_set_file_upload_record(i, &tmp_file_upload_record) != EXIT_SUCCESS) {
                 return EXIT_FAILURE;
+            } else {
+            	 /* Remove the temp file on disk */
+            	ftl0_remove_upload_file(id);
             }
             return EXIT_SUCCESS;
         }
@@ -1167,27 +1217,27 @@ int ftl0_load_upload_table() {
 
 		/* Token will point to the part before the , */
 		token = strtok(line, search);
-		debug_print("%s",token);
+		//debug_print("%s",token);
 		int id = atoi(token);
 		upload_table[i].file_id = id;
 
 		token = strtok(NULL, search);
-		debug_print(" , %s",token);
+		//debug_print(" , %s",token);
 		int len = atoi(token);
 		upload_table[i].length = len;
 
 		token = strtok(NULL, search);
-		debug_print(" , %s",token);
+		//debug_print(" , %s",token);
 		time_t t = atol(token);
 		upload_table[i].request_time = t;
 
 		token = strtok(NULL, search);
-		debug_print(" , %s",token);
+		//debug_print(" , %s",token);
 		strlcpy(upload_table[i].callsign, token,sizeof(upload_table[i].callsign));
 
 		token = strtok(NULL, search);
 		token[strcspn(token,"\n")] = 0; // Remove the nul termination to get rid of the new line
-		debug_print(" , %s\n",token);
+		//debug_print(" , %s\n",token);
 		int off = atoi(token);
 		upload_table[i].offset = off;
 		i++;
@@ -1209,12 +1259,28 @@ int ftl0_save_upload_table() {
 		debug_print("Unable to open %s for writing: %s\n", g_upload_table_path, strerror(errno));
 		return EXIT_FAILURE;
 	}
+
 	for (i=0; i < MAX_IN_PROCESS_FILE_UPLOADS; i++) {
+		if (upload_table[i].callsign[0] == 0)
+			strlcpy(upload_table[i].callsign, "NONE",sizeof(upload_table[i].callsign));
+
 		snprintf(buf, MAX_CONFIG_LINE_LENGTH, "%d,%d,%d,%s,%d\n",upload_table[i].file_id,upload_table[i].length,upload_table[i].request_time
 				,upload_table[i].callsign,upload_table[i].offset);
 		fputs(buf, file);
 	}
 	fclose(file);
+	return EXIT_SUCCESS;
+}
+
+int ftl0_remove_upload_file(uint32_t file_id) {
+	// Remove the tmp file
+	char file_name_with_path[MAX_FILE_PATH_LEN];
+	dir_get_upload_file_path_from_file_id(file_id, file_name_with_path, MAX_FILE_PATH_LEN);
+	int32_t fp = remove(file_name_with_path);
+	if (fp == -1) {
+		debug_print("Unable to remove tmp file: %s : %s\n", file_name_with_path, strerror(errno));
+		return EXIT_FAILURE;
+	}
 	return EXIT_SUCCESS;
 }
 
@@ -1237,15 +1303,106 @@ int ftl0_debug_list_upload_table() {
     return EXIT_SUCCESS;
 }
 
+/**
+ * ftl0_maintenance()
+ * Remove expired entries from the file upload table and delete their tmp file on disk
+ * Remove any orphaned tmp files on disk
+ *
+ */
+void ftl0_maintenance(time_t now, char *upload_folder) {
+    debug_print("Running FTL0 Maintenance\n");
+
+    // First remove any expired entries in the table
+    int i;
+    InProcessFileUpload_t rec;
+    InProcessFileUpload_t blank_file_upload_record;
+    blank_file_upload_record.file_id = 0;
+    blank_file_upload_record.length = 0;
+    blank_file_upload_record.request_time = 0;
+    blank_file_upload_record.callsign[0] = 0;
+    blank_file_upload_record.offset = 0;
+
+    for (i=0; i < MAX_IN_PROCESS_FILE_UPLOADS; i++) {
+        if (ftl0_raw_get_file_upload_record(i, &rec) != EXIT_SUCCESS) {
+            // skip and keep going in case this is temporary;
+        	continue;
+        }
+        if (rec.file_id != 0) {
+        	if (!ftl0_on_the_uplink_now(rec.file_id)) {
+        		int32_t age = now-rec.request_time;
+        		if (age > g_ftl0_max_upload_age_in_seconds) {
+        			debug_print("REMOVING RECORD: %d- File: %04x by %s length: %d offset: %d for %ld seconds\n",i,
+        					rec.file_id, rec.callsign, rec.length, rec.offset, now-rec.request_time);
+        			if (ftl0_raw_set_file_upload_record(i, &blank_file_upload_record) == EXIT_SUCCESS) {
+        				ftl0_remove_upload_file(rec.file_id);
+        			} else {
+        				debug_print(" FTL0 Maintenance - Could not remove upload record %d\n",i);
+        			}
+        		}
+        	}
+        }
+    }
+
+    // Next remove any orphaned tmp files
+	struct dirent *pDirEnt;
+    printf("Checking TMP Directory from %s:\n",upload_folder);
+    DIR * pDir = opendir(upload_folder);
+    if (pDir == NULL) {
+        debug_print("Unable to open tmp folder: %s\n", strerror(errno));
+        return;
+    }
+
+    errno = 0; /* Set error to zero so we can distinguish between a real error and the end of the DIR */
+    pDirEnt = readdir(pDir);
+    while (pDirEnt != NULL) {
+    	if ((strcmp(pDirEnt->d_name, ".") != 0) && (strcmp(pDirEnt->d_name, "..") != 0)){
+            debug_print("Checking: %s\n",pDirEnt->d_name);
+
+            char file_name_with_path[MAX_FILE_PATH_LEN];
+            strlcpy(file_name_with_path, upload_folder, MAX_FILE_PATH_LEN);
+            strlcat(file_name_with_path, "/", MAX_FILE_PATH_LEN);
+            strlcat(file_name_with_path, pDirEnt->d_name, MAX_FILE_PATH_LEN);
+
+            uint32_t id = dir_get_file_id_from_filename(pDirEnt->d_name);
+            if (id == 0 || ftl0_get_file_upload_record(id, &rec) != EXIT_SUCCESS) {
+                debug_print("Could not find file %s in upload table\n",pDirEnt->d_name);
+                // If this is not in the upload table then remove the file
+                int32_t fp = remove(file_name_with_path);
+                if (fp == -1) {
+                    debug_print("Unable to remove orphaned tmp file: %s : %s\n", file_name_with_path, strerror(errno));
+                } else {
+                	debug_print("Removed orphaned tmp file: %s\n", file_name_with_path);
+                }
+            }
+        }
+        pDirEnt = readdir(pDir);
+    }
+    if (errno != 0) {
+        debug_print("*** Error reading tmp directory: %s\n", strerror(errno));
+    }
+    int32_t rc2 = closedir(pDir);
+    if (rc2 != 0) {
+        debug_print("*** Unable to close tmp dir: %s\n", strerror(errno));
+    }
+
+}
 
 /*********************************************************************************************
  *
  * SELF TESTS FOLLOW
  *
  */
+void test_touch(char *f) {
+	FILE *file = fopen ( f, "w" );
+	fclose(file);
+}
+
 int test_ftl0_upload_table() {
     printf("##### TEST UPLOAD TABLE:\n");
     int rc = EXIT_SUCCESS;
+    char * upload_folder = "/tmp/test_dir/upload";
+    dir_init("/tmp/test_dir");
+
     if (ftl0_clear_upload_table() != EXIT_SUCCESS) { debug_print("Could not clear upload table - FAILED\n"); return EXIT_FAILURE;}
 
     /* Test core set/get functions */
@@ -1324,6 +1481,9 @@ int test_ftl0_upload_table() {
         if (ftl0_set_file_upload_record(&tmp_file_upload_record) != EXIT_SUCCESS) {
             return EXIT_FAILURE;
         }
+        char f[MAX_FILE_PATH_LEN];
+    	dir_get_upload_file_path_from_file_id(tmp_file_upload_record.file_id,f,MAX_FILE_PATH_LEN);
+        test_touch(f);
     }
 
     if (ftl0_debug_list_upload_table() != EXIT_SUCCESS) { debug_print("Could not print upload table - FAILED\n"); return EXIT_FAILURE; }
@@ -1347,16 +1507,20 @@ int test_ftl0_upload_table() {
      * and only slot 0 and 5 were full.  So it should be in slot 6  */
     InProcessFileUpload_t file_upload_record6;
     strlcpy(file_upload_record6.callsign,"VE2TCP", sizeof(file_upload_record.callsign));
-    file_upload_record6.file_id = 9990;
+    file_upload_record6.file_id = 0x9990;
     file_upload_record6.length = 123999;
     file_upload_record6.request_time = 999;
     file_upload_record6.offset = 122999;
+    char f6[MAX_FILE_PATH_LEN];
+    dir_get_upload_file_path_from_file_id(file_upload_record6.file_id,f6,MAX_FILE_PATH_LEN);
+    test_touch(f6);
 
     if (ftl0_set_file_upload_record(&file_upload_record6) != EXIT_SUCCESS) {  debug_print("Error - could not add record6 - FAILED\n"); return EXIT_FAILURE; }
+    if (access("/tmp/test_dir/upload/0069.upload", F_OK) == 0) {  debug_print("ERROR: File 0069.upload still there after replaced - FAILED\n"); return EXIT_FAILURE; }
 
     InProcessFileUpload_t record7;
     if (ftl0_raw_get_file_upload_record(6, &record7) != EXIT_SUCCESS)  {  debug_print("ERROR: Could not read slot 6 - FAILED\n"); return EXIT_FAILURE; }
-    if (record7.file_id != 9990)  {  debug_print("Wrong file id in slot 6- FAILED\n"); return EXIT_FAILURE; }
+    if (record7.file_id != 0x9990)  {  debug_print("Wrong file id in slot 6- FAILED\n"); return EXIT_FAILURE; }
 
 //    if (ftl0_debug_list_upload_table() != EXIT_SUCCESS) { debug_print("Could not print upload table - FAILED\n"); return EXIT_FAILURE; }
 
@@ -1366,6 +1530,30 @@ int test_ftl0_upload_table() {
     if (ftl0_clear_upload_table() != EXIT_SUCCESS) { debug_print("Could not clear upload table - FAILED\n"); return EXIT_FAILURE;}
 
     if (ftl0_load_upload_table() != EXIT_SUCCESS) { debug_print("Could not load upload table - FAILED\n"); return EXIT_FAILURE;}
+    if (ftl0_debug_list_upload_table() != EXIT_SUCCESS) { debug_print("Could not print upload table - FAILED\n"); return EXIT_FAILURE; }
+
+    // Reread and this should be the same
+    if (ftl0_raw_get_file_upload_record(6, &record7) != EXIT_SUCCESS)  {  debug_print("ERROR: Could not read slot 6 - FAILED\n"); return EXIT_FAILURE; }
+    if (record7.file_id != 0x9990)  {  debug_print("Wrong file id in slot 6- FAILED\n"); return EXIT_FAILURE; }
+
+    debug_print("TEST MAINT\n");
+    // Test the files which were uploaded at 1 second intervals from 1692394562 to 1692394562 + 2 + MAX_IN_PROCESS_FILE_UPLOADS
+    g_ftl0_max_upload_age_in_seconds = MAX_IN_PROCESS_FILE_UPLOADS - 5;  // this should purge 5 files
+    test_touch("/tmp/test_dir/upload/fred");  // orphaned file that will be cleaned up
+
+    ftl0_maintenance(1692394562 + 2 + MAX_IN_PROCESS_FILE_UPLOADS, upload_folder);  // this is time of the final record uploaded
+    // Check a slot that should survive
+    if (ftl0_raw_get_file_upload_record(5, &record7) != EXIT_SUCCESS)  {  debug_print("ERROR: Could not read slot 5 after maint() - FAILED\n"); return EXIT_FAILURE; }
+    if (record7.file_id != 104)  {  debug_print("ERROR: slot 5 has data after maint() - FAILED\n"); return EXIT_FAILURE; }
+    if (access("/tmp/test_dir/upload/0068.upload", F_OK) != 0) {  debug_print("ERROR: file 0068.upload missing after maint() - FAILED\n"); return EXIT_FAILURE; }
+
+    // Check a slot that should be purged
+    if (ftl0_raw_get_file_upload_record(6, &record7) != EXIT_SUCCESS)  {  debug_print("ERROR: Could not read slot 6 after maint() - FAILED\n"); return EXIT_FAILURE; }
+    if (record7.file_id != 0)  {  debug_print("ERROR: slot 6 has data after maint() - FAILED\n"); return EXIT_FAILURE; }
+
+    // Check orphan file gone
+    if (access("/tmp/test_dir/upload/fred", F_OK) == 0) {  debug_print("ERROR: orphan file fred still there after maint() - FAILED\n"); return EXIT_FAILURE; }
+
     if (ftl0_debug_list_upload_table() != EXIT_SUCCESS) { debug_print("Could not print upload table - FAILED\n"); return EXIT_FAILURE; }
 
     /* And reset everything */
@@ -1503,7 +1691,7 @@ int test_ftl0_action() {
 	//ftl0_next_action();
 
 	// Now append
-	debug_print("Saving data to file: %s\n",filename);
+	//debug_print("Saving data to file: %s\n",filename);
 	FILE * f2 = fopen(filename, "ab"); /* Open the file for append of data to the end */
 	if (f == NULL) {
 		return ER_NO_SUCH_FILE_NUMBER;

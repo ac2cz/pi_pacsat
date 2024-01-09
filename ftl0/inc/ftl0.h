@@ -122,6 +122,9 @@ int ftl0_get_file_upload_record(uint32_t file_id, InProcessFileUpload_t * file_u
 int ftl0_set_file_upload_record(InProcessFileUpload_t * file_upload_record);
 int ftl0_get_space_reserved_by_upload_table();
 int ftl0_update_file_upload_record(InProcessFileUpload_t * file_upload_record);
+int ftl0_load_upload_table();
+int ftl0_save_upload_table();
+void ftl0_maintenance(time_t now, char *upload_folder);
 
 int test_ftl0_upload_table();
 int test_ftl0_frame();

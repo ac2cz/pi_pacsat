@@ -49,6 +49,7 @@
 
 #include "config.h"
 #include "pacsat_header.h"
+#include "pacsat_dir.h"
 #include "str_util.h"
 
 /* Forward declarations */
@@ -115,7 +116,7 @@ HEADER *pfh_new_header() {
 }
 
 // TODO - make sure that we are not assuming this is the name of the file on disk on the sat.  That is file_no.act and has no relation to this.
-void pfh_get_filename(HEADER *hdr, char *dir_name, char *filename, int max_len) {
+void pfh_get_8_3_filename(HEADER *hdr, char *dir_name, char *filename, int max_len) {
 	strlcpy(filename, dir_name, max_len);
 	strlcat(filename, "/", max_len);
 	strlcat(filename, hdr->fileName, max_len);
@@ -129,21 +130,7 @@ void pfh_get_user_filename(HEADER *hdr,  char *dir_name, char *filename, int max
 	strlcat(filename, hdr->userFileName, max_len);
 }
 
-/**
- * pfh_make_filename()
- *
- * Make a default filename for a PACSAT file based on its file id
- *
- */
-void pfh_make_filename(int file_id, char *dir_name, char *filename, int max_len) {
-	char file_id_str[5];
-	snprintf(file_id_str, 5, "%04x",file_id);
-	strlcpy(filename, dir_name, MAX_FILE_PATH_LEN);
-	strlcat(filename, "/", MAX_FILE_PATH_LEN);
-	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
-	strlcat(filename, ".", MAX_FILE_PATH_LEN);
-	strlcat(filename, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
-}
+
 
 /**
  * pfh_extract_header()
@@ -483,7 +470,7 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 	pfh_get_user_filename(pfh, dir_folder, body_filename, MAX_FILE_PATH_LEN);
 	//pfh_get_filename(pfh,dir_folder, out_filename, MAX_FILE_PATH_LEN);
 
-	pfh_make_filename(pfh->fileId, dir_folder, out_filename, MAX_FILE_PATH_LEN);
+	dir_get_file_path_from_file_id(pfh->fileId, dir_folder, out_filename, MAX_FILE_PATH_LEN);
 
 	/* Measure body_size and calculate body_checksum */
 	short int body_checksum = 0;

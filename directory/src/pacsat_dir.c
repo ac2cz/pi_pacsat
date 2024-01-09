@@ -76,7 +76,6 @@ int dir_fs_update_header(char *file_name_with_path, HEADER *pfh);
 static DIR_NODE *dir_head = NULL;  // the head of the directory linked list
 static DIR_NODE *dir_tail = NULL;  // the tail of the directory linked list
 DIR_NODE *dir_maint_node = NULL;   // the node where we are performing directory maintenance
-time_t last_dir_maint_time;
 static char data_folder[MAX_FILE_PATH_LEN]; // Directory path of the data folder
 static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory folder
 static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
@@ -125,7 +124,7 @@ int dir_init(char *folder) {
 	return EXIT_SUCCESS;
 }
 
-void dir_make_tmp_filename(int file_id, char *filename, int max_len) {
+void dir_get_upload_file_path_from_file_id(int file_id, char *filename, int max_len) {
 	char file_id_str[5];
 	snprintf(file_id_str, 5, "%04x",file_id);
 	strlcpy(filename, data_folder, MAX_FILE_PATH_LEN);
@@ -133,6 +132,45 @@ void dir_make_tmp_filename(int file_id, char *filename, int max_len) {
 	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
 	strlcat(filename, ".", MAX_FILE_PATH_LEN);
 	strlcat(filename, "upload", MAX_FILE_PATH_LEN);
+}
+
+///**
+// * Given a file name, create the file name string with full path
+// */
+//void dir_get_file_path_from_file_name(uint32_t file_id, char *file_path, int max_len) {
+//    char file_id_str[5];
+//    snprintf(file_id_str, 5, "%04x",file_id);
+//    strlcpy(file_path, DIR_FOLDER, max_len);
+//    strlcat(file_path, file_id_str, max_len);
+////}
+
+/**
+ * pfh_make_filename()
+ *
+ * Make a default filename for a PACSAT file based on its file id
+ *
+ */
+void dir_get_file_path_from_file_id(int file_id, char *dir_name, char *filename, int max_len) {
+	char file_id_str[5];
+	snprintf(file_id_str, 5, "%04x",file_id);
+	strlcpy(filename, dir_name, MAX_FILE_PATH_LEN);
+	strlcat(filename, "/", MAX_FILE_PATH_LEN);
+	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
+	strlcat(filename, ".", MAX_FILE_PATH_LEN);
+	strlcat(filename, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
+}
+
+void dir_get_filename_from_file_id(uint32_t file_id, char *file_name, int max_len) {
+    snprintf(file_name, max_len, "%04x",file_id);
+}
+
+uint32_t dir_get_file_id_from_filename(char *file_name) {
+    char file_id_str[5];
+    strlcpy(file_id_str,file_name,sizeof(file_id_str)); // copy first 4 chars
+    int ret = strlen(file_id_str);
+    if (ret != 4) return 0;
+    uint32_t id = (uint32_t)strtol(file_id_str, NULL, 16);
+    return id;
 }
 
 /**
@@ -151,6 +189,14 @@ int dir_next_file_number() {
 
 char *get_dir_folder() {
 	return dir_folder; // We can return this because it is static
+}
+
+char *get_upload_folder() {
+	return upload_folder; // We can return this because it is static
+}
+
+char *get_wod_folder() {
+	return wod_folder; // We can return this because it is static
 }
 
 /**
@@ -242,7 +288,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 	// Now re-save the file with the new time if it changed, this recalculates the checksums
 	if (resave) {
     	char file_name_with_path[MAX_FILE_PATH_LEN];
-    	pfh_make_filename(new_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
+    	dir_get_file_path_from_file_id(new_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
 
 		int rc = dir_fs_update_header(file_name_with_path, new_node->pfh);
 
@@ -530,7 +576,7 @@ int cp(const char *from, const char *to)
 
     close(fd_from);
     if (fd_to >= 0)
-        close(fd_to);
+    	close(fd_to);
 
     errno = saved_errno;
     return -1;
@@ -539,49 +585,43 @@ int cp(const char *from, const char *to)
 /**
  * Perform maintenance on the next node in the directory
  */
-void dir_maintenance() {
+void dir_maintenance(time_t now) {
 	if (dir_head == NULL) return;
-    uint32_t now = time(0);
 
-    if (last_dir_maint_time == 0) last_dir_maint_time = now; // Initialize at startup
-    if ((now - last_dir_maint_time) > g_dir_maintenance_period_in_seconds) {
+	if (dir_maint_node == NULL)
+		dir_maint_node = dir_head;
 
-    	last_dir_maint_time = now;
+	char file_name_with_path[MAX_FILE_PATH_LEN];
+	dir_get_file_path_from_file_id(dir_maint_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
+	//    	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
+	//    			file_name_with_path, dir_maint_node->pfh->uploadTime, now-dir_maint_node->pfh->uploadTime);
+	int32_t age = now-dir_maint_node->pfh->uploadTime;
+	if (age < 0) {
+		// this looks wrong, something is corrupt.  Skip it
+		dir_maint_node = dir_maint_node->next;
+	} else if (pb_is_file_in_use(dir_maint_node->pfh->fileId)) {
+		// This file is currently being broadcast then skip it until next time
+		dir_maint_node = dir_maint_node->next;
+	} else if (age > g_dir_max_file_age_in_seconds) {
+		// Remove this file it is over the max age
 
-    	if (dir_maint_node == NULL)
-    		dir_maint_node = dir_head;
+		debug_print("Purging: %s\n",file_name_with_path);
+		if (remove(file_name_with_path) != 0) {
+			error_print("Could not remove the temp file: %s\n", file_name_with_path);
+			// This was probablly open because it is being update or broadcast.  So it is OK to skip until next time
+			dir_maint_node = dir_maint_node->next;
+		} else {
+			// Remove from the dir
+			DIR_NODE *node = dir_maint_node;
+			dir_maint_node = dir_maint_node->next;
+			dir_delete_node(node);
+		}
 
-    	char file_name_with_path[MAX_FILE_PATH_LEN];
-    	pfh_make_filename(dir_maint_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
-//    	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
-//    			file_name_with_path, dir_maint_node->pfh->uploadTime, now-dir_maint_node->pfh->uploadTime);
-    	int32_t age = now-dir_maint_node->pfh->uploadTime;
-    	if (age < 0) {
-    		// this looks wrong, something is corrupt.  Skip it
-    		dir_maint_node = dir_maint_node->next;
-    	} else if (pb_is_file_in_use(dir_maint_node->pfh->fileId)) {
-    		// This file is currently being broadcast then skip it until next time
-    		dir_maint_node = dir_maint_node->next;
-    	} else if (age > g_dir_max_file_age_in_seconds) {
-    		// Remove this file it is over the max age
+	} else {
+		// TODO - Check if there is an expiry date in the header
+		dir_maint_node = dir_maint_node->next;
+	}
 
-    		debug_print("Purging: %s\n",file_name_with_path);
-    		if (remove(file_name_with_path) != 0) {
-    			error_print("Could not remove the temp file: %s\n", file_name_with_path);
-    			// This was probablly open because it is being update or broadcast.  So it is OK to skip until next time
-    			dir_maint_node = dir_maint_node->next;
-    		} else {
-    			// Remove from the dir
-    			DIR_NODE *node = dir_maint_node;
-    			dir_maint_node = dir_maint_node->next;
-    			dir_delete_node(node);
-    		}
-
-    	} else {
-    		// TODO - Check if there is an expiry date in the header
-    		dir_maint_node = dir_maint_node->next;
-    	}
-    }
 }
 
 /**
@@ -703,7 +743,7 @@ int make_big_test_dir() {
 	for (int f=0; f<100; f++) {
 		char userfilename1[MAX_FILE_PATH_LEN];
 		char psf_name[MAX_FILE_PATH_LEN];
-		pfh_make_filename(f, get_dir_folder(), psf_name, MAX_FILE_PATH_LEN);
+		dir_get_file_path_from_file_id(f, get_dir_folder(), psf_name, MAX_FILE_PATH_LEN);
 		char snum[5];
 		sprintf(snum, "%d",f);
 		strlcpy(userfilename1, "file", sizeof(userfilename1));
@@ -731,19 +771,19 @@ int make_three_test_entries() {
 	int rc = EXIT_SUCCESS;
 	/* Make three test files */
 	char filename1[MAX_FILE_PATH_LEN];
-	pfh_make_filename(1, get_dir_folder(), filename1, MAX_FILE_PATH_LEN);
+	dir_get_file_path_from_file_id(1, get_dir_folder(), filename1, MAX_FILE_PATH_LEN);
 	char *userfilename1 = "file1.txt";
 	char *msg = "Hi there,\nThis is a test message first\n";
 	write_test_msg(dir_folder, userfilename1, msg, strlen(msg));
 
 	char filename2[MAX_FILE_PATH_LEN];
-	pfh_make_filename(2, get_dir_folder(), filename2, MAX_FILE_PATH_LEN);
+	dir_get_file_path_from_file_id(2, get_dir_folder(), filename2, MAX_FILE_PATH_LEN);
 	char *userfilename2 = "file2.txt";
 	char *msg2 = "Hi again,\nThis is a test message as a follow up\nAll the best\nChris";
 	write_test_msg(dir_folder, userfilename2, msg2, strlen(msg2));
 
 	char filename3[MAX_FILE_PATH_LEN];
-	pfh_make_filename(3, get_dir_folder(), filename3, MAX_FILE_PATH_LEN);
+	dir_get_file_path_from_file_id(3, get_dir_folder(), filename3, MAX_FILE_PATH_LEN);
 	char *userfilename3 = "file3.txt";
 	char *msg3 = "Hi finally,\nThis is my last message\n";
 	write_test_msg(dir_folder, userfilename3, msg3, strlen(msg3));
@@ -766,7 +806,7 @@ int make_three_test_entries() {
 	sleep(1);
 	/* TODO - This only works if the pfh spec is copied into the temp dir */
 	char filename4[MAX_FILE_PATH_LEN];
-	pfh_make_filename(4, get_dir_folder(), filename4, MAX_FILE_PATH_LEN);
+	dir_get_file_path_from_file_id(4, get_dir_folder(), filename4, MAX_FILE_PATH_LEN);
 	char *userfilename4 = "pfh_spec.txt";
 	char *target = "/tmp/test_dir/dir/pfh_spec.txt";
 	FILE *file;
@@ -796,7 +836,7 @@ int test_pacsat_dir_one() {
 	if (dir_init("/tmp/one") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; };
 
 	char filename1[MAX_FILE_PATH_LEN];
-	pfh_make_filename(1, get_dir_folder(), filename1, MAX_FILE_PATH_LEN);
+	dir_get_file_path_from_file_id(1, get_dir_folder(), filename1, MAX_FILE_PATH_LEN);
 	char *userfilename1 = "file1.txt";
 	char *msg = "Hi there,\nThis is a test message first\n";
 	write_test_msg(dir_folder, userfilename1, msg, strlen(msg));
