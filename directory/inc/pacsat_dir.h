@@ -41,6 +41,7 @@ struct dir_node {
 typedef struct dir_node DIR_NODE;
 
 int dir_init(char *folder);
+char *get_data_folder();
 char *get_dir_folder();
 char *get_upload_folder();
 char *get_wod_folder();

@@ -46,6 +46,8 @@
 #include <ctype.h>
 #include <time.h>
 #include <string.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #include "config.h"
 #include "pacsat_header.h"
@@ -496,6 +498,69 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 	int rc = pfh_save_pacsatfile(buffer, len, out_filename, body_filename);
 
 	return rc;
+}
+
+/**
+ * pfh_extract_file()
+ * Open a PSF, extract the header and use the information to extract the file
+ * contents.  Save the extracted file in dest_filename.  If dest_filename is a
+ * dir then use the user_filename.
+ *
+ * Returns EXIT_SUCCESS if the extracted file could be saved or EXIT_FAILURE if
+ * it could not.
+ *
+ */
+int pfh_extract_file(char *src_filename, char *dest_filename) {
+	HEADER *pfh;
+	char dest_filepath[MAX_FILE_PATH_LEN];
+	pfh = pfh_load_from_file(src_filename);
+	if (pfh == NULL) return EXIT_FAILURE;
+
+	struct stat sb;
+
+	strlcpy(dest_filepath, dest_filename, MAX_FILE_PATH_LEN);
+	if (stat(dest_filename, &sb) == 0 && S_ISDIR(sb.st_mode)) {
+	    /* It is a dir */
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, pfh->userFileName, MAX_FILE_PATH_LEN);
+	}
+
+	FILE * outfile = fopen(dest_filepath, "wb");
+	if (outfile == NULL) return EXIT_FAILURE;
+
+	/* Add the file contents */
+	FILE * infile=fopen(src_filename,"rb");
+	if (infile == NULL) {
+		fclose(outfile);
+		return EXIT_FAILURE;
+	}
+	int32_t rc = fseek(infile, pfh->bodyOffset, SEEK_SET);
+	if (rc != 0) {
+		debug_print("Could not seek body offset for file: %s - %s\n",src_filename, strerror(errno));
+		return EXIT_FAILURE;
+	}
+	int ch=fgetc(infile);
+	if (ch == EOF) {
+		fclose(infile);
+		fclose(outfile);
+		return EXIT_FAILURE; // we could not read from to the infile
+	}
+	while (ch!=EOF) {
+		int c = fputc((unsigned int)ch,outfile);
+		if (c == EOF) {
+			fclose(infile);
+			fclose(outfile);
+			return EXIT_FAILURE; // we could not write to the file
+		}
+		ch=fgetc(infile);
+	}
+
+	fclose(infile);
+	fclose(outfile);
+	debug_print("Extracted %s from %s\n",dest_filename, src_filename);
+
+	free(pfh);
+	return EXIT_SUCCESS;
 }
 
 /**

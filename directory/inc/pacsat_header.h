@@ -127,6 +127,7 @@ void pfh_get_8_3_filename(HEADER *hdr, char *dir_name, char *filename, int max_l
 void pfh_get_user_filename(HEADER *hdr,  char *dir_name, char *filename, int max_len);
 HEADER *pfh_new_header();
 HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *crc_passed);
+int pfh_extract_file(char *src_filename, char *dest_filename);
 int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder, char *out_filename);
 int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder);
 HEADER * pfh_load_from_file(char *filename);

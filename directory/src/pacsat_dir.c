@@ -55,6 +55,8 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#include <iors_command.h>
+
 /* Program include files */
 #include "config.h"
 #include "state_file.h"
@@ -109,15 +111,18 @@ int dir_init(char *folder) {
 	if (dir_make_dir(data_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	strlcpy(dir_folder, data_folder, sizeof(dir_folder));
-	strlcat(dir_folder, "/dir", sizeof(dir_folder));
+	strlcat(dir_folder, "/", sizeof(dir_folder));
+	strlcat(dir_folder, get_folder_str(FolderDir), sizeof(dir_folder));
 	if (dir_make_dir(dir_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	strlcpy(wod_folder, data_folder, sizeof(wod_folder));
-	strlcat(wod_folder, "/wod", sizeof(wod_folder));
+	strlcat(wod_folder, "/", sizeof(wod_folder));
+	strlcat(wod_folder, get_folder_str(FolderWod), sizeof(wod_folder));
 	if (dir_make_dir(wod_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	strlcpy(upload_folder, data_folder, sizeof(upload_folder));
-	strlcat(upload_folder, "/upload", sizeof(upload_folder));
+	strlcat(upload_folder, "/", sizeof(upload_folder));
+	strlcat(upload_folder, get_folder_str(FolderUpload), sizeof(upload_folder));
 	if (dir_make_dir(upload_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	debug_print("Pacsat Initialized in: %s\n", data_folder);
@@ -127,8 +132,8 @@ int dir_init(char *folder) {
 void dir_get_upload_file_path_from_file_id(int file_id, char *filename, int max_len) {
 	char file_id_str[5];
 	snprintf(file_id_str, 5, "%04x",file_id);
-	strlcpy(filename, data_folder, MAX_FILE_PATH_LEN);
-	strlcat(filename, "/upload/", MAX_FILE_PATH_LEN);
+	strlcpy(filename, upload_folder, MAX_FILE_PATH_LEN);
+	strlcat(filename, "/", MAX_FILE_PATH_LEN);
 	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
 	strlcat(filename, ".", MAX_FILE_PATH_LEN);
 	strlcat(filename, "upload", MAX_FILE_PATH_LEN);
@@ -185,6 +190,10 @@ uint32_t dir_get_file_id_from_filename(char *file_name) {
 int dir_next_file_number() {
 	next_file_id++;
 	return next_file_id;
+}
+
+char *get_data_folder() {
+	return data_folder; // We can return this because it is static
 }
 
 char *get_dir_folder() {

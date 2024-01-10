@@ -1310,7 +1310,7 @@ int ftl0_debug_list_upload_table() {
  *
  */
 void ftl0_maintenance(time_t now, char *upload_folder) {
-    debug_print("Running FTL0 Maintenance\n");
+    //debug_print("Running FTL0 Maintenance\n");
 
     // First remove any expired entries in the table
     int i;
@@ -1345,7 +1345,7 @@ void ftl0_maintenance(time_t now, char *upload_folder) {
 
     // Next remove any orphaned tmp files
 	struct dirent *pDirEnt;
-    printf("Checking TMP Directory from %s:\n",upload_folder);
+    //printf("Checking TMP Directory from %s:\n",upload_folder);
     DIR * pDir = opendir(upload_folder);
     if (pDir == NULL) {
         debug_print("Unable to open tmp folder: %s\n", strerror(errno));

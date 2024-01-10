@@ -733,6 +733,50 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				save_state();
 				break;
 			}
+			case SWCmdPacsatInstallFile: {
+
+				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
+				uint16_t *arg1 = (uint32_t *)&sw_command->comArg.arguments[2];
+				uint16_t *arg2 = (uint32_t *)&sw_command->comArg.arguments[3];
+
+				char source_file[MAX_FILE_PATH_LEN];
+				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
+
+				char dest_file[MAX_FILE_PATH_LEN];
+				char file_name[10];
+				snprintf(file_name, 10, "%04x",*arg0);
+				strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
+				strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+				strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
+				strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+				strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
+				debug_print("Install File: %04x : %s into dir: %d - %s | Force:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
+				if (pfh_extract_file(source_file, dest_file) != EXIT_SUCCESS) {
+					debug_print("Error extracting file %s\n",source_file);
+				}
+				break;
+			}
+			case SWCmdPacsatInstallUserFile: {
+
+				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
+				uint16_t *arg1 = (uint32_t *)&sw_command->comArg.arguments[2];
+				uint16_t *arg2 = (uint32_t *)&sw_command->comArg.arguments[3];
+
+				char source_file[MAX_FILE_PATH_LEN];
+				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
+
+				char dest_file[MAX_FILE_PATH_LEN];
+				char file_name[10];
+				snprintf(file_name, 10, "%04x",*arg0);
+				strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
+				strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+				strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
+				debug_print("Install User File: %04x : %s into dir: %d - %s | Force:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
+				if (pfh_extract_file(source_file, dest_file) != EXIT_SUCCESS) {
+					debug_print("Error extracting file %s\n",source_file);
+				}
+				break;
+			}
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
 				return EXIT_FAILURE;
