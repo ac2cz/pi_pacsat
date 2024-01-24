@@ -696,7 +696,8 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 	//	for (i=0; i<4; i++)
 	//		debug_print("arg:%d %d\n",i,sw_command->comArg.arguments[i]);
 		/* Pass the data to the command processor */
-		if(!AuthenticateSoftwareCommand(sw_command)){
+		int cmd_rc = AuthenticateSoftwareCommand(sw_command);
+		if (cmd_rc == EXIT_FAILURE){
 			int r = pb_send_err(from_callsign, 5);
 			if (r != EXIT_SUCCESS) {
 				debug_print("\n Error : Could not send ERR Response to TNC \n");
@@ -707,6 +708,8 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 		if (rc != EXIT_SUCCESS) {
 			debug_print("\n Error : Could not send OK Response to TNC \n");
 		}
+		if (cmd_rc == EXIT_DUPLICATE) return EXIT_SUCCESS; // Duplicate
+
 //		debug_print("Auth Command\n");
 
 		switch (sw_command->comArg.command) {
@@ -735,6 +738,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 			case SWCmdPacsatInstallFile: {
+				/* Args are 32 bit fild id, folder id, flag to use id or user_file_name */
 				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
 				uint16_t *arg1 = (uint32_t *)&sw_command->comArg.arguments[2];
 				uint16_t *arg2 = (uint32_t *)&sw_command->comArg.arguments[3];
@@ -746,12 +750,14 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				char file_name[10];
 				snprintf(file_name, 10, "%04x",*arg0);
 				if (*arg2 == 0) {
+					/* Build the full path if we use fild-id as the destination file name */
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
 				} else {
+					/* Just build the folder path if we are going to use the user-filename*/
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
