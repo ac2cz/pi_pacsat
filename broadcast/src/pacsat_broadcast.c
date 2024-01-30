@@ -740,8 +740,8 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			case SWCmdPacsatInstallFile: {
 				/* Args are 32 bit fild id, folder id, flag to use id or user_file_name */
 				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
-				uint16_t *arg1 = (uint32_t *)&sw_command->comArg.arguments[2];
-				uint16_t *arg2 = (uint32_t *)&sw_command->comArg.arguments[3];
+				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
+				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
 
 				char source_file[MAX_FILE_PATH_LEN];
 				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
@@ -770,8 +770,8 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			}
 			case SWCmdPacsatDeleteFile: {
 				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
-				uint16_t *arg1 = (uint32_t *)&sw_command->comArg.arguments[2];
-				uint16_t *arg2 = (uint32_t *)&sw_command->comArg.arguments[3];
+				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
+				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
 
 				char dest_file[MAX_FILE_PATH_LEN];
 				char file_name[10];
