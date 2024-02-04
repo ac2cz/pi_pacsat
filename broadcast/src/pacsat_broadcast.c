@@ -743,6 +743,9 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
 				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
 
+				char *folder = get_folder_str(*arg1);
+				if (folder == NULL) break;
+
 				char source_file[MAX_FILE_PATH_LEN];
 				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
 
@@ -753,14 +756,14 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					/* Build the full path if we use fild-id as the destination file name */
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
+					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
 				} else {
 					/* Just build the folder path if we are going to use the user-filename*/
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
+					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
 				}
 				debug_print("Install File: %04x : %s into dir: %d - %s | File Name:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
 				if (pfh_extract_file(source_file, dest_file) != EXIT_SUCCESS) {
@@ -773,32 +776,40 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
 				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
 
+				char *folder = get_folder_str(*arg1);
+				if (folder == NULL) break;
+
 				char dest_file[MAX_FILE_PATH_LEN];
 				char file_name[10];
 				snprintf(file_name, 10, "%04x",*arg0);
 				if (*arg2 == 0) {
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
+					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
 				} else {
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
+					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
 				}
-				error_print("NOT YET IMPLEMENTED --- Delete File: %04x in dir: %d - %s | File Name:%d\n",*arg0, *arg1, dest_file, *arg2);
+				debug_print("Remove: %s\n",dest_file);
+				remove(dest_file); // best attempt to remove.  Ignore errors.
+				//error_print("NOT YET IMPLEMENTED --- Delete File: %04x in dir: %d - %s | File Name:%d\n",*arg0, *arg1, dest_file, *arg2);
 
 				break;
 			}
 			case SWCmdPacsatDeleteFolder: {
 				uint16_t *arg0 = (uint16_t *)&sw_command->comArg.arguments[0];
 
+				char *folder = get_folder_str(*arg0);
+				if (folder == NULL) break;
+
 				char filename[MAX_FILE_PATH_LEN];
 				char dest_path[MAX_FILE_PATH_LEN];
 				strlcpy(dest_path, get_data_folder(), MAX_FILE_PATH_LEN);
 				strlcat(dest_path, "/", MAX_FILE_PATH_LEN);
-				strlcat(dest_path, get_folder_str(*arg0), MAX_FILE_PATH_LEN);
+				strlcat(dest_path, folder, MAX_FILE_PATH_LEN);
 
 				debug_print("Purge Folder: %s\n",dest_path);
 				DIR * d = opendir(dest_path);
@@ -821,27 +832,6 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				}
 				break;
 			}
-//			case SWCmdPacsatInstallUserFile: {
-//
-//				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
-//				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
-//				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
-//
-//				char source_file[MAX_FILE_PATH_LEN];
-//				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
-//
-//				char dest_file[MAX_FILE_PATH_LEN];
-//				char file_name[10];
-//				snprintf(file_name, 10, "%04x",*arg0);
-//				strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
-//				strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-//				strlcat(dest_file, get_folder_str(*arg1), MAX_FILE_PATH_LEN);
-//				debug_print("Install User File: %04x : %s into dir: %d - %s | Force:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
-//				if (pfh_extract_file(source_file, dest_file) != EXIT_SUCCESS) {
-//					debug_print("Error extracting file %s\n",source_file);
-//				}
-//				break;
-//			}
 
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);

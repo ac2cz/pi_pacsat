@@ -85,7 +85,7 @@ pthread_t tnc_listen_pthread;
 int g_run_self_test = false;
 int frame_queue_status_known = false;
 char config_file_name[MAX_FILE_PATH_LEN] = "pi_pacsat.config";
-char dir_path[MAX_FILE_PATH_LEN] = "./pacsat";
+char data_folder_path[MAX_FILE_PATH_LEN] = "./pacsat";
 time_t last_dir_maint_time;
 
 
@@ -152,8 +152,8 @@ int main(int argc, char *argv[]) {
 		case 'c': // config file name
 			strlcpy(config_file_name, optarg, sizeof(config_file_name));
 			break;
-		case 'd': // directory
-			strlcpy(dir_path, optarg, sizeof(dir_path));
+		case 'd': // data folder
+			strlcpy(data_folder_path, optarg, sizeof(data_folder_path));
 			break;
 		}
 	}
@@ -187,31 +187,31 @@ int main(int argc, char *argv[]) {
 
 	if (g_run_self_test) {
 		debug_print("Running Self Tests..\n");
-//		rc = test_ftl0_frame();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//		rc = test_ftl0_list();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//
-//		rc = test_ftl0_action();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//
-//		rc = test_pfh_checksum();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//		rc = test_pacsat_header();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//		rc = test_pacsat_dir_one();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//
-//		rc = test_pacsat_dir();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//		rc = test_pb_list();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//		rc = test_pb();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//		rc = test_pb_file();
-//		if (rc != EXIT_SUCCESS) exit(rc);
-//		rc = test_pb_file_holes();
-//		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_ftl0_frame();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_ftl0_list();
+		if (rc != EXIT_SUCCESS) exit(rc);
+
+		rc = test_ftl0_action();
+		if (rc != EXIT_SUCCESS) exit(rc);
+
+		rc = test_pfh_checksum();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pacsat_header();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pacsat_dir_one();
+		if (rc != EXIT_SUCCESS) exit(rc);
+
+		rc = test_pacsat_dir();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pb_list();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pb();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pb_file();
+		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pb_file_holes();
+		if (rc != EXIT_SUCCESS) exit(rc);
 
 		rc = test_ftl0_upload_table();
 		if (rc != EXIT_SUCCESS) exit(rc);
@@ -245,7 +245,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Initialize the directory */
-	if (dir_init(dir_path) != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
+	if (dir_init(data_folder_path) != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 	init_commanding(g_iors_last_command_time_path);
 	ftl0_load_upload_table();
