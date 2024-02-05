@@ -788,14 +788,23 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
+					if (*arg1 == FolderDir) {
+						strlcat(dest_file, ".", MAX_FILE_PATH_LEN);
+						strlcat(dest_file, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
+					}
 				} else {
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
+					error_print("NOT IMPLEMENTED --- Delete File by userfilename: %04x in dir: %d - %s | File Name:%d\n",*arg0, *arg1, dest_file, *arg2);
 				}
 				debug_print("Remove: %s\n",dest_file);
 				remove(dest_file); // best attempt to remove.  Ignore errors.
-				//error_print("NOT YET IMPLEMENTED --- Delete File: %04x in dir: %d - %s | File Name:%d\n",*arg0, *arg1, dest_file, *arg2);
+
+				if (*arg1 == FolderDir) {
+					/* We deleted in the PACSAT dir. Reload. */
+					dir_load();
+				}
 
 				break;
 			}
