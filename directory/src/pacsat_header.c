@@ -522,11 +522,19 @@ int pfh_extract_file(char *src_filename, char *dest_filename) {
 	if (stat(dest_filename, &sb) == 0 && S_ISDIR(sb.st_mode)) {
 	    /* It is a dir */
 		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, pfh->userFileName, MAX_FILE_PATH_LEN);
+		if (pfh->userFileName == NULL || strlen(pfh->userFileName) == 0) {
+			char file_name[10];
+			snprintf(file_name, 10, "%04x",pfh->fileId);
+			strlcat(dest_filepath, file_name, MAX_FILE_PATH_LEN);
+		} else {
+			strlcat(dest_filepath, pfh->userFileName, MAX_FILE_PATH_LEN);
+		}
 	}
 
 	FILE * outfile = fopen(dest_filepath, "wb");
-	if (outfile == NULL) return EXIT_FAILURE;
+	if (outfile == NULL) {
+		return EXIT_FAILURE;
+	}
 
 	/* Add the file contents */
 	FILE * infile=fopen(src_filename,"rb");

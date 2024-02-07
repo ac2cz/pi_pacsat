@@ -698,17 +698,19 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 		/* Pass the data to the command processor */
 		int cmd_rc = AuthenticateSoftwareCommand(sw_command);
 		if (cmd_rc == EXIT_FAILURE){
-			int r = pb_send_err(from_callsign, 5);
+			int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 			if (r != EXIT_SUCCESS) {
 				debug_print("\n Error : Could not send ERR Response to TNC \n");
 			}
 			return EXIT_FAILURE;
 		}
-		int rc = pb_send_ok(from_callsign);
-		if (rc != EXIT_SUCCESS) {
-			debug_print("\n Error : Could not send OK Response to TNC \n");
+		if (cmd_rc == EXIT_DUPLICATE) {
+			return EXIT_SUCCESS; // Duplicate
+			int rc = pb_send_ok(from_callsign);
+			if (rc != EXIT_SUCCESS) {
+				debug_print("\n Error : Could not send OK Response to TNC \n");
+			}
 		}
-		if (cmd_rc == EXIT_DUPLICATE) return EXIT_SUCCESS; // Duplicate
 
 //		debug_print("Auth Command\n");
 
@@ -722,6 +724,10 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (sw_command->comArg.arguments[2]) {
 					g_pb_max_period_for_client_in_seconds = sw_command->comArg.arguments[2];
 				}
+				int rc = pb_send_ok(from_callsign);
+				if (rc != EXIT_SUCCESS) {
+					debug_print("\n Error : Could not send OK Response to TNC \n");
+				}
 				save_state();
 				break;
 			}
@@ -733,6 +739,10 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				}
 				if (sw_command->comArg.arguments[2]) {
 					g_uplink_max_period_for_client_in_seconds = sw_command->comArg.arguments[2];
+				}
+				int rc = pb_send_ok(from_callsign);
+				if (rc != EXIT_SUCCESS) {
+					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
 				save_state();
 				break;
@@ -750,10 +760,10 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
 
 				char dest_file[MAX_FILE_PATH_LEN];
-				char file_name[10];
-				snprintf(file_name, 10, "%04x",*arg0);
 				if (*arg2 == 0) {
 					/* Build the full path if we use fild-id as the destination file name */
+					char file_name[10];
+					snprintf(file_name, 10, "%04x",*arg0);
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
@@ -768,7 +778,17 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				debug_print("Install File: %04x : %s into dir: %d - %s | File Name:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
 				if (pfh_extract_file(source_file, dest_file) != EXIT_SUCCESS) {
 					debug_print("Error extracting file %s\n",source_file);
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					break;
 				}
+				int rc = pb_send_ok(from_callsign);
+				if (rc != EXIT_SUCCESS) {
+					debug_print("\n Error : Could not send OK Response to TNC \n");
+				}
+
 				break;
 			}
 			case SWCmdPacsatDeleteFile: {
@@ -799,11 +819,21 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					error_print("NOT IMPLEMENTED --- Delete File by userfilename: %04x in dir: %d - %s | File Name:%d\n",*arg0, *arg1, dest_file, *arg2);
 				}
 				debug_print("Remove: %s\n",dest_file);
-				remove(dest_file); // best attempt to remove.  Ignore errors.
+				if (remove(dest_file) == EXIT_SUCCESS) {
+					int rc = pb_send_ok(from_callsign);
+					if (rc != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send OK Response to TNC \n");
+					}
 
-				if (*arg1 == FolderDir) {
-					/* We deleted in the PACSAT dir. Reload. */
-					dir_load();
+					if (*arg1 == FolderDir) {
+						/* We deleted in the PACSAT dir. Reload. */
+						dir_load();
+					}
+				} else {
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
 				}
 
 				break;
@@ -822,7 +852,14 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				debug_print("Purge Folder: %s\n",dest_path);
 				DIR * d = opendir(dest_path);
-				if (d == NULL) { error_print("** Could not open dir %s\n",dest_path); break; }
+				if (d == NULL) {
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					error_print("** Could not open dir %s\n",dest_path);
+					break;
+				}
 				struct dirent *de;
 				for (de = readdir(d); de != NULL; de = readdir(d)) {
 					//debug_print("CHECKING: %s\n",de->d_name);
@@ -835,6 +872,11 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					}
 				}
 				closedir(d);
+				int rc = pb_send_ok(from_callsign);
+				if (rc != EXIT_SUCCESS) {
+					debug_print("\n Error : Could not send OK Response to TNC \n");
+				}
+
 				if (*arg0 == FolderDir) {
 					/* We purged the PACSAT dir. Reload. */
 					dir_load();
@@ -844,6 +886,11 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
+				int r = pb_send_err(from_callsign, 4);
+				if (r != EXIT_SUCCESS) {
+					debug_print("\n Error : Could not send ERR Response to TNC \n");
+				}
+
 				return EXIT_FAILURE;
 				break;
 		}
