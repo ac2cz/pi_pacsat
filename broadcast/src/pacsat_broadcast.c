@@ -784,6 +784,10 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					}
 					break;
 				}
+				/* If successful we change the header to include a keyword for the installed dir and set the expiry date */
+
+
+
 				int rc = pb_send_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
@@ -1540,9 +1544,10 @@ int test_pb_list() {
 int test_pb() {
 	printf("##### TEST PACSAT BROADCAST:\n");
 	int rc = EXIT_SUCCESS;
+	mkdir("/tmp/pacsat",0777);
 
 	debug_print("LOAD DIR\n");
-	if (dir_init("/tmp/test_dir") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; }
+	if (dir_init("/tmp") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 
 	// Add AC2CZ with a DIR request
@@ -1598,8 +1603,10 @@ int test_pb_file() {
 	/* Confirm not added to PB */
 	if (number_on_pb > 0) { printf("** Added to PB when no file available\n"); return EXIT_FAILURE; }
 
+	mkdir("/tmp/pacsat",0777);
+
 	debug_print("LOAD DIR\n");
-	if (dir_init("/tmp/test_dir") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; }
+	if (dir_init("/tmp") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 
 	pb_handle_file_request("AC2CZ", data, sizeof(data));
@@ -1633,8 +1640,10 @@ int test_pb_file_holes() {
 	unsigned char data[] = {0x00, 0xa0, 0x8c, 0xa6, 0x66, 0x40, 0x40, 0xf6, 0x82, 0x86, 0x64, 0x86, 0xb4, 0x40, 0x61, 0x03, 0xbb,
 	0x12, 0x02, 0x00, 0x00, 0x00, 0xf4, 0x00, 0x00, 0x00, 0x00, 0xa9, 0x00, 0xd0, 0x00, 0x00, 0x00, 0x02};
 
+	mkdir("/tmp/pacsat",0777);
+
 	debug_print("LOAD DIR\n");
-	if (dir_init("/tmp/test_dir") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; }
+	if (dir_init("/tmp") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 
 	if (pb_handle_file_request("AC2CZ", data, sizeof(data))) { printf("** Could handle file hole request\n"); return EXIT_FAILURE;}

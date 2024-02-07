@@ -656,7 +656,7 @@ void pfh_debug_print(HEADER *pfh) {
 /**
  * pfh_save_pacsatfile()
  *
- * Create a Pacsat file based on the PFH byte steam specified with header and the file specified
+ * Create a Pacsat file based on the PFH byte stream specified with header and the file specified
  * by body_filename.  The resulting pacsat file is saved in filename
  *
  * Returns: EXIT_SUCCESS or EXIT_FAILURE

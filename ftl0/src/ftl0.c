@@ -1400,8 +1400,10 @@ void test_touch(char *f) {
 int test_ftl0_upload_table() {
     printf("##### TEST UPLOAD TABLE:\n");
     int rc = EXIT_SUCCESS;
-    char * upload_folder = "/tmp/test_dir/upload";
-    dir_init("/tmp/test_dir");
+	mkdir("/tmp/pacsat",0777);
+
+    char * upload_folder = "/tmp/pacsat/upload";
+    dir_init("/tmp");
 
     if (ftl0_clear_upload_table() != EXIT_SUCCESS) { debug_print("Could not clear upload table - FAILED\n"); return EXIT_FAILURE;}
 
@@ -1516,7 +1518,7 @@ int test_ftl0_upload_table() {
     test_touch(f6);
 
     if (ftl0_set_file_upload_record(&file_upload_record6) != EXIT_SUCCESS) {  debug_print("Error - could not add record6 - FAILED\n"); return EXIT_FAILURE; }
-    if (access("/tmp/test_dir/upload/0069.upload", F_OK) == 0) {  debug_print("ERROR: File 0069.upload still there after replaced - FAILED\n"); return EXIT_FAILURE; }
+    if (access("/tmp/pacsat/upload/0069.upload", F_OK) == 0) {  debug_print("ERROR: File 0069.upload still there after replaced - FAILED\n"); return EXIT_FAILURE; }
 
     InProcessFileUpload_t record7;
     if (ftl0_raw_get_file_upload_record(6, &record7) != EXIT_SUCCESS)  {  debug_print("ERROR: Could not read slot 6 - FAILED\n"); return EXIT_FAILURE; }
@@ -1539,20 +1541,20 @@ int test_ftl0_upload_table() {
     debug_print("TEST MAINT\n");
     // Test the files which were uploaded at 1 second intervals from 1692394562 to 1692394562 + 2 + MAX_IN_PROCESS_FILE_UPLOADS
     g_ftl0_max_upload_age_in_seconds = MAX_IN_PROCESS_FILE_UPLOADS - 5;  // this should purge 5 files
-    test_touch("/tmp/test_dir/upload/fred");  // orphaned file that will be cleaned up
+    test_touch("/tmp/pacsat/upload/fred");  // orphaned file that will be cleaned up
 
     ftl0_maintenance(1692394562 + 2 + MAX_IN_PROCESS_FILE_UPLOADS, upload_folder);  // this is time of the final record uploaded
     // Check a slot that should survive
     if (ftl0_raw_get_file_upload_record(5, &record7) != EXIT_SUCCESS)  {  debug_print("ERROR: Could not read slot 5 after maint() - FAILED\n"); return EXIT_FAILURE; }
     if (record7.file_id != 104)  {  debug_print("ERROR: slot 5 has data after maint() - FAILED\n"); return EXIT_FAILURE; }
-    if (access("/tmp/test_dir/upload/0068.upload", F_OK) != 0) {  debug_print("ERROR: file 0068.upload missing after maint() - FAILED\n"); return EXIT_FAILURE; }
+    if (access("/tmp/pacsat/upload/0068.upload", F_OK) != 0) {  debug_print("ERROR: file 0068.upload missing after maint() - FAILED\n"); return EXIT_FAILURE; }
 
     // Check a slot that should be purged
     if (ftl0_raw_get_file_upload_record(6, &record7) != EXIT_SUCCESS)  {  debug_print("ERROR: Could not read slot 6 after maint() - FAILED\n"); return EXIT_FAILURE; }
     if (record7.file_id != 0)  {  debug_print("ERROR: slot 6 has data after maint() - FAILED\n"); return EXIT_FAILURE; }
 
     // Check orphan file gone
-    if (access("/tmp/test_dir/upload/fred", F_OK) == 0) {  debug_print("ERROR: orphan file fred still there after maint() - FAILED\n"); return EXIT_FAILURE; }
+    if (access("/tmp/pacsat/upload/fred", F_OK) == 0) {  debug_print("ERROR: orphan file fred still there after maint() - FAILED\n"); return EXIT_FAILURE; }
 
     if (ftl0_debug_list_upload_table() != EXIT_SUCCESS) { debug_print("Could not print upload table - FAILED\n"); return EXIT_FAILURE; }
 
