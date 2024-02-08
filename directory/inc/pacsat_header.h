@@ -79,6 +79,10 @@
 
 #define PSF_FILE_EXT "act"
 
+#define PFH_NUM_OF_SPARE_FIELDS 5
+#define PFH_SHORT_CHAR_FIELD_LEN 33
+#define PFH_LONG_CHAR_FIELD_LEN 65
+
 typedef struct {
   /* required Header Information */
   uint32_t fileId;              /* 0x01 */
@@ -94,12 +98,12 @@ typedef struct {
   unsigned short int  bodyOffset;          /* 0x0B */
 
   /* Extended Header Information */
-  char          source[33];          /* 0x10 */
+  char          source[PFH_SHORT_CHAR_FIELD_LEN];          /* 0x10 */
   char          source_length;       /* This is the actual length of the source field on disk, which may have been truncated when parsed */
   char          uploader[7];         /* 0x11 */
   uint32_t uploadTime;          /* 0x12 */   /* Note that this is a Mandatory item on all files */
   unsigned char downloadCount;       /* 0x13 */
-  char          destination[33];     /* 0x14 */
+  char          destination[PFH_SHORT_CHAR_FIELD_LEN];     /* 0x14 */
   char          downloader[7];       /* 0x15 */
   uint32_t downloadTime;        /* 0x16 */
   uint32_t expireTime;          /* 0x17 */
@@ -108,16 +112,15 @@ typedef struct {
   /* Optional Header Information */
   unsigned char compression;         /* 0x19 */
   char          BBSMessageType;      /* 0x20 */
-  char          BID[33];             /* 0x21 */
-  char          title[65];           /* 0x22 */
-  char          keyWords[33];        /* 0x23 */
-  char          file_description[33];     /* 0x24 */
-  char          compressionDesc[33]; /* 0x25 */
-  char          userFileName[33];    /* 0x26 */
+  char          BID[PFH_SHORT_CHAR_FIELD_LEN];             /* 0x21 */
+  char          title[PFH_LONG_CHAR_FIELD_LEN];           /* 0x22 */
+  char          keyWords[PFH_SHORT_CHAR_FIELD_LEN];        /* 0x23 */
+  char          file_description[PFH_SHORT_CHAR_FIELD_LEN];     /* 0x24 */
+  char          compressionDesc[PFH_SHORT_CHAR_FIELD_LEN]; /* 0x25 */
+  char          userFileName[PFH_SHORT_CHAR_FIELD_LEN];    /* 0x26 */
 
-  char          other1[33];    /* 0x42 */
-  char          other2[33];    /* 0x43 */
-  char          other3[33];    /* 0x44 */
+  int			other_id[PFH_NUM_OF_SPARE_FIELDS]; /* 0x42 - 0x44 or others*/
+  char          other_data[PFH_NUM_OF_SPARE_FIELDS][PFH_SHORT_CHAR_FIELD_LEN];    /* 0x42 - 0x44 or others*/
 
 
 }
@@ -128,7 +131,7 @@ void pfh_get_user_filename(HEADER *hdr,  char *dir_name, char *filename, int max
 HEADER *pfh_new_header();
 HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *crc_passed);
 int pfh_extract_file(char *src_filename, char *dest_filename);
-int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder, char *out_filename);
+int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder);
 int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder);
 HEADER * pfh_load_from_file(char *filename);
 void pfh_debug_print(HEADER *pfh);
@@ -139,5 +142,6 @@ int test_pacsat_header();
 int write_test_msg(char *dir_folder, char *pfh_filename, char *contents, int length);
 int test_pfh_checksum() ;
 HEADER * make_test_header(unsigned int id, char *filename, char *source, char *destination, char *title, char *user_filename) ;
+int test_pacsat_header_disk_access();
 
 #endif /* PACSAT_HEADER_H_ */

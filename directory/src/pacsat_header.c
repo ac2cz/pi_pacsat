@@ -66,6 +66,8 @@ unsigned char * add_mandatory_header(unsigned char *p, HEADER *pfh);
 unsigned char * add_extended_header(unsigned char *p, HEADER *pfh);
 unsigned char * add_optional_header(unsigned char *p, HEADER *pfh);
 
+void pfh_populate_test_header(int id, HEADER *pfh, char *user_file_name);
+
 /**
  * pfh_new_header()
  *
@@ -112,6 +114,12 @@ HEADER *pfh_new_header() {
 		hdr->file_description[0]     = '\0';
 		hdr->compressionDesc[0] = '\0';
 		hdr->userFileName[0]    = '\0';
+
+		int i;
+		for (i = 0; i < PFH_NUM_OF_SPARE_FIELDS; i++) {
+			hdr->other_id[i] = 0;
+			hdr->other_data[i][0] = '\0';
+		}
 		return hdr;
 	}
 	return NULL;
@@ -150,6 +158,7 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 	unsigned char length;
 	HEADER  *hdr;
 	unsigned short int crc_result = 0;
+	int other_field = 0;
 
 	hdr = pfh_new_header();
 	if (hdr != NULL ){
@@ -285,18 +294,22 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 				break;
 
 			default:
-				/*
-				debug_print("** Unknown header id %X ** ", id);
+				if (other_field >= PFH_NUM_OF_SPARE_FIELDS) {
+					debug_print("** Too many extra fields %X skipped ** ", id);
+					break;
+				}
+				hdr->other_id[other_field] = id;
+				header_copy_to_str(&buffer[i], length, hdr->other_data[other_field], 32);
 
-			for (int n=0; n<length; n++) {
-				if (isprint(buffer[i+n]))
-					debug_print("%c",buffer[i+n]);
-			}
-			debug_print(" |");
-			for (int n=0; n<length; n++)
-				debug_print(" %02X",buffer[i+n]);
-			debug_print("\n");
-				 */
+//				debug_print("** Unknown header id %X ** ", id);
+//				for (int n=0; n<length; n++) {
+//					if (isprint(buffer[i+n]))
+//						debug_print("%c",buffer[i+n]);
+//				}
+//				debug_print(" |");
+//				for (int n=0; n<length; n++)
+//					debug_print(" %02X",buffer[i+n]);
+//				debug_print("\n");
 				break;
 			}
 
@@ -394,7 +407,10 @@ int pfh_generate_header_bytes(HEADER *pfh, int body_size, unsigned char *header_
  * is better to update fields in place using the routines in dir.
  *
  */
-int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder, char *out_filename) {
+int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
+	char out_filename[MAX_FILE_PATH_LEN];
+	dir_get_file_path_from_file_id(pfh->fileId, dir_folder, out_filename, MAX_FILE_PATH_LEN);
+
 	/* Build Pacsat File Header */
 	unsigned char buffer[MAX_PFH_LENGTH];
 	int original_body_offset = pfh->bodyOffset;
@@ -503,8 +519,9 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
 /**
  * pfh_extract_file()
  * Open a PSF, extract the header and use the information to extract the file
- * contents.  Save the extracted file in dest_filename.  If dest_filename is a
- * dir then use the user_filename.
+ * contents.  Save the extracted file in dest_filename.
+ *
+ * If dest_filename is a dir then use the user_filename.
  *
  * Returns EXIT_SUCCESS if the extracted file could be saved or EXIT_FAILURE if
  * it could not.
@@ -816,17 +833,23 @@ unsigned char * add_optional_header(unsigned char *p, HEADER *pfh) {
 		p = pfh_store_str_field(p, COMPRESSION_DESCRIPTION, strlen(pfh->compressionDesc), pfh->compressionDesc);
 	if (pfh->userFileName[0] != 0)
 			p = pfh_store_str_field(p, USER_FILE_NAME, strlen(pfh->userFileName), pfh->userFileName);
+	int i;
+	for (i=0; i < PFH_NUM_OF_SPARE_FIELDS; i++) {
+		if (pfh->other_data[i][0] != 0)
+				p = pfh_store_str_field(p, pfh->other_id[i], strlen(pfh->other_data[i]), pfh->other_data[i]);
+	}
 	return p;
 }
+
 
 /*
  * SELF TESTS FOLLOW
  */
 
-void pfh_populate_test_header(HEADER *pfh, char *user_file_name) {
+void pfh_populate_test_header(int id, HEADER *pfh, char *user_file_name) {
 	if (pfh != NULL) {
 		/* Required Header Information */
-		pfh->fileId = 0x1234;
+		pfh->fileId = id;
 		strlcpy(pfh->fileName,"1234", sizeof(pfh->fileName));
 		strlcpy(pfh->fileExt,PSF_FILE_EXT, sizeof(pfh->fileExt));
 
@@ -916,7 +939,7 @@ int test_pacsat_header() {
 	char *filename1 = "1234.act";
 	char *userfilename1 = "file.txt";
 	HEADER *pfh= pfh_new_header();
-	pfh_populate_test_header(pfh, userfilename1);
+	pfh_populate_test_header(0x1234, pfh, userfilename1);
 	pfh_debug_print(pfh);
 
 	/* Make test files */
@@ -1032,4 +1055,79 @@ int test_pfh_checksum() {
 			printf("##### TEST PACSAT HEADER CRC: fail:\n");
 		return rc;
 
+}
+
+int test_pacsat_header_disk_access() {
+	printf("##### TEST PACSAT HEADER DISK ACCESS:\n");
+	int rc = EXIT_SUCCESS;
+	char *filename1 = "0999.act";
+	char *userfilename1 = "999_file.txt";
+	HEADER *pfh= pfh_new_header();
+	pfh_populate_test_header(0x999, pfh, userfilename1);
+	pfh_debug_print(pfh);
+
+	/* Make test files */
+	char *msg = "#!/bin/bash\necho This is a test script\n";
+	rc = write_test_msg(".", userfilename1, msg, strlen(msg));
+	if (rc != EXIT_SUCCESS) { printf("** Failed to make 999_file.txt file.\n"); return EXIT_FAILURE; }
+
+	rc = pfh_make_pacsat_file(pfh, ".");
+	if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file.  Make sure there is a test file called %s\n",userfilename1); return EXIT_FAILURE; }
+	if (pfh->fileId != 0x999) { 				printf("** Wrong fileId\n"); rc = EXIT_FAILURE; }
+
+	HEADER * pfh3 = pfh_load_from_file(filename1);
+	if (pfh3 == NULL) { printf("** Failed to load pacsat header\n"); return EXIT_FAILURE; }
+	pfh_debug_print(pfh3);
+
+	/* Now modify the keywords and add sstv_q1 dir */
+	strlcpy(pfh3->keyWords, "SSTV", 33);
+	if (pfh_update_pacsat_header(pfh3, ".") != EXIT_SUCCESS) { printf("** Failed to re-write header in file.\n"); return EXIT_FAILURE; }
+
+	pfh_debug_print(pfh3);
+
+	HEADER * pfh2 = pfh_load_from_file(filename1);
+	if (pfh2 == NULL) { printf("** Failed to load pacsat header\n"); return EXIT_FAILURE; }
+	pfh_debug_print(pfh2);
+	/* Check the mandatory fields match */
+	if (pfh->fileId != pfh2->fileId) { 				printf("** Mismatched fileId\n"); rc = EXIT_FAILURE; }
+	if (strcmp(pfh->fileName,pfh2->fileName) != 0) {printf("** Mismatched fileName\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->fileExt,pfh2->fileExt) != 0) { 	printf("** Mismatched fileExt\n"); rc = EXIT_FAILURE;}
+//	if (pfh->fileSize != pfh2->fileSize) { 			printf("** Mismatched fileSize expected %d got %d\n",pfh->fileSize, pfh2->fileSize); rc = EXIT_FAILURE;}
+	if (pfh->createTime != pfh2->createTime) {		printf("** Mismatched createTime\n"); rc = EXIT_FAILURE;}
+	if (pfh->modifiedTime != pfh2->modifiedTime) {	printf("** Mismatched modifiedTime\n"); rc = EXIT_FAILURE;}
+	if (pfh->SEUflag != pfh2->SEUflag) {			printf("** Mismatched SEUflag\n"); rc = EXIT_FAILURE;}
+	if (pfh->fileType != pfh2->fileType) {			printf("** Mismatched fileType\n"); rc = EXIT_FAILURE;}
+	if (pfh->bodyCRC != pfh2->bodyCRC) {			printf("** Mismatched bodyCRC\n"); rc = EXIT_FAILURE;}
+//	if (pfh->headerCRC != pfh2->headerCRC) {		printf("** Mismatched headerCRC\n"); rc = EXIT_FAILURE;}
+//	if (pfh->bodyOffset != pfh2->bodyOffset) {		printf("** Mismatched bodyOffset\n"); rc = EXIT_FAILURE;}
+
+	/* Check the extended header matches */
+	if (strcmp(pfh->source,pfh2->source) != 0) {	printf("** Mismatched source\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->uploader,pfh2->uploader) != 0) {printf("** Mismatched uploader\n"); rc = EXIT_FAILURE;}
+	if (pfh->uploadTime != pfh2->uploadTime) { 		printf("** Mismatched uploadTime\n"); rc = EXIT_FAILURE;}
+	if (pfh->downloadCount != pfh2->downloadCount) {printf("** Mismatched downloadCount\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->destination,pfh2->destination) != 0) {printf("** Mismatched destination\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->downloader,pfh2->downloader) != 0) { 	printf("** Mismatched downloader\n"); rc = EXIT_FAILURE;}
+	if (pfh->downloadTime != pfh2->downloadTime) { 	printf("** Mismatched downloadTime\n"); rc = EXIT_FAILURE;}
+	if (pfh->expireTime != pfh2->expireTime) { 		printf("** Mismatched expireTime\n"); rc = EXIT_FAILURE;}
+	if (pfh->priority != pfh2->priority) { 			printf("** Mismatched priority\n"); rc = EXIT_FAILURE;}
+
+	/* Check the optional header items match */
+	if (pfh->compression != pfh2->compression) { 	printf("** Mismatched compression\n"); rc = EXIT_FAILURE;}
+	if (pfh->BBSMessageType != pfh2->BBSMessageType) {		printf("** Mismatched BBSMessageType\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->BID,pfh2->BID) != 0) {			printf("** Mismatched BID\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->title,pfh2->title) != 0) {		printf("** Mismatched title\n"); rc = EXIT_FAILURE;}
+	if (strcmp("SSTV",pfh2->keyWords) != 0) {printf("** Mismatched keyWords\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->file_description,pfh2->file_description) != 0) {printf("** Mismatched description\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->compressionDesc,pfh2->compressionDesc) != 0) {printf("** Mismatched compressionDesc\n"); rc = EXIT_FAILURE;}
+	if (strcmp(pfh->userFileName,pfh2->userFileName) != 0) {printf("** Mismatched userFileName\n"); rc = EXIT_FAILURE;}
+
+	free(pfh);
+	free(pfh2);
+
+	if (rc == EXIT_SUCCESS)
+		printf("##### TEST PACSAT HEADER DISK ACCESS: success:\n");
+	else
+		printf("##### TEST PACSAT HEADER DISK ACCESS: fail:\n");
+	return rc;
 }

@@ -753,11 +753,24 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
 				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
 
+				DIR_NODE *node = dir_get_node_by_id(*arg0);
+				debug_print("Installing %d into %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
+
 				char *folder = get_folder_str(*arg1);
-				if (folder == NULL) break;
+				if (folder == NULL) {
+					debug_print("Error - invalid folder\n");
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					break;
+				}
 
 				char source_file[MAX_FILE_PATH_LEN];
 				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
+
+				/////////////////  FOR USER FILE NAME -- APPEND THE FIE ID SO WE CAN UPDATE KEYWORDS IF DIR PURGED
+
 
 				char dest_file[MAX_FILE_PATH_LEN];
 				if (*arg2 == 0) {
@@ -784,14 +797,23 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					}
 					break;
 				}
-				/* If successful we change the header to include a keyword for the installed dir and set the expiry date */
-
-
+				/* If successful we change the header to include a keyword for the installed dir and set the upload and expiry dates */
+				if (strlen(node->pfh->keyWords) > 0)
+					strlcat(node->pfh->keyWords, " ", PFH_SHORT_CHAR_FIELD_LEN);
+				strlcat(node->pfh->keyWords, folder, PFH_SHORT_CHAR_FIELD_LEN);
+				node->pfh->uploadTime = time(0);
+				node->pfh->expireTime = 0xFFFFFF7F; // 2038
+				if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
+					debug_print("** Failed to re-write header in file.\n");
+				}
 
 				int rc = pb_send_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
+
+				/* We updated the PACSAT dir. Reload. */
+				dir_load();
 
 				break;
 			}
@@ -799,6 +821,9 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
 				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
 				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
+
+				DIR_NODE *node = dir_get_node_by_id(*arg0);
+				debug_print("Deleting %d from %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
 
 				char *folder = get_folder_str(*arg1);
 				if (folder == NULL) break;
@@ -817,10 +842,19 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 						strlcat(dest_file, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
 					}
 				} else {
+					if (node->pfh->userFileName == NULL || strlen(node->pfh->userFileName) == 0) {
+						int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+						if (r != EXIT_SUCCESS) {
+							debug_print("\n Error : No user filename to delete \n");
+						}
+						break;
+					}
 					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
-					error_print("NOT IMPLEMENTED --- Delete File by userfilename: %04x in dir: %d - %s | File Name:%d\n",*arg0, *arg1, dest_file, *arg2);
+					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+					strlcat(dest_file, node->pfh->userFileName, MAX_FILE_PATH_LEN);
+					debug_print("Delete File by userfilename: %04x in dir: %d - %s | File Name:%d\n",*arg0, *arg1, dest_file, *arg2);
 				}
 				debug_print("Remove: %s\n",dest_file);
 				if (remove(dest_file) == EXIT_SUCCESS) {
@@ -828,11 +862,29 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					if (rc != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send OK Response to TNC \n");
 					}
-
-					if (*arg1 == FolderDir) {
-						/* We deleted in the PACSAT dir. Reload. */
-						dir_load();
+					/* If successful we change the header to remove the keyword for the installed dir and set the upload date */
+					char new_keywords[PFH_SHORT_CHAR_FIELD_LEN];
+					char *key = strtok(node->pfh->keyWords, " ");
+					strlcpy(new_keywords,"", PFH_SHORT_CHAR_FIELD_LEN);
+					while (key != NULL) {
+						if (strncmp(key, folder, PFH_SHORT_CHAR_FIELD_LEN) != 0) {
+							strlcat(new_keywords,key, PFH_SHORT_CHAR_FIELD_LEN);
+							strlcat(new_keywords," ", PFH_SHORT_CHAR_FIELD_LEN);
+						}
+						key = strtok(NULL, " ");
 					}
+					if (strlen(new_keywords) > 0) {
+						new_keywords[strlen(new_keywords)-1] = 0; // we always have an extra space, so remove it
+					}
+					strlcpy(node->pfh->keyWords,new_keywords, PFH_SHORT_CHAR_FIELD_LEN);
+					node->pfh->uploadTime = time(0);
+					if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
+						debug_print("** Failed to re-write header in file.\n");
+					}
+
+					/* We updated the PACSAT dir. Reload. */
+					dir_load();
+
 				} else {
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {

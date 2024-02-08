@@ -199,6 +199,9 @@ int main(int argc, char *argv[]) {
 		if (rc != EXIT_SUCCESS) exit(rc);
 		rc = test_pacsat_header();
 		if (rc != EXIT_SUCCESS) exit(rc);
+		rc = test_pacsat_header_disk_access();
+		if (rc != EXIT_SUCCESS) exit(rc);
+
 		rc = test_pacsat_dir_one();
 		if (rc != EXIT_SUCCESS) exit(rc);
 
