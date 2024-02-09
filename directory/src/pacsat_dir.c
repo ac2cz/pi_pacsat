@@ -371,12 +371,34 @@ void dir_free() {
  *
  */
 void dir_debug_print(DIR_NODE *p) {
+#ifdef DEBUG
+
 	if (p == NULL)
-		debug_print("..Empty Dir List\n");
+		p = dir_head;
 	while (p != NULL) {
+
+		char buf[30];
+		time_t t_old, t_new;;
+
+		if (p->prev != NULL)
+			t_old = p->prev->pfh->uploadTime + 1;
+		else
+			t_old = 0;
+
+		strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&t_old));
+		debug_print("Old:%s ", buf);
+
+		if (p->next != NULL)
+			t_new = p->next->pfh->uploadTime - 1;
+		else {
+			t_new = p->pfh->uploadTime;
+		}
+		strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&t_new));
+		debug_print("New:%s ", buf);
 		pfh_debug_print(p->pfh);
 		p = p->next;
 	}
+#endif
 }
 
 /**
@@ -441,6 +463,7 @@ int dir_load() {
 			}
 	}
 	closedir(d);
+
 	return EXIT_SUCCESS;
 }
 
@@ -494,12 +517,22 @@ int dir_validate_file(HEADER *pfh, char *filename) {
       will indicate to the client that there are no entries between <start> and
       <end>.
  *
- * Returns a pointer to the PFH or NULL if none are found
+ * Returns a pointer to the PFH or NULL if none are found.  NULL is typically
+ * returned as we progress through a hole and have reached the end.
+ *
+ * However, in the special case where p was passed in as NULL, meaning this is
+ * a new search from the head of the dir, then we should never return NULL.  Instead
+ * we should return 1 record to close the hole according to the logic above.
  *
  */
 DIR_NODE * dir_get_pfh_by_date(DIR_DATE_PAIR pair, DIR_NODE *p ) {
+	DIR_NODE * first_node_after_end = NULL;
+	DIR_NODE * last_node_before_start = NULL;
+	int search_from_head = false;
+
 	if (p == NULL) {
 		/* Then we are starting the search from the head.  TODO - could later optimize if search from head or tail */
+		search_from_head = true;
 		p = dir_head;
 	}
 	while (p != NULL) {
@@ -507,10 +540,23 @@ DIR_NODE * dir_get_pfh_by_date(DIR_DATE_PAIR pair, DIR_NODE *p ) {
 		p = p->next;
 		if (node->pfh->uploadTime >= pair.start && node->pfh->uploadTime <= pair.end)
 			return node;
+		if (search_from_head) {
+			if (node->pfh->uploadTime > pair.end && first_node_after_end == NULL)
+				first_node_after_end = node;
+			if (node->pfh->uploadTime < pair.start)
+				last_node_before_start = node;
+		}
 	}
 
+	if (search_from_head) {
+		if (first_node_after_end != NULL)
+			return first_node_after_end;
+		return last_node_before_start;
+	}
 	return NULL;
 }
+
+
 
 /**
  * dir_get_node_by_id()
@@ -747,7 +793,8 @@ int make_big_test_dir() {
 
 	debug_print("TEST Create a file\n");
 
-	if (dir_init("./dir") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; };
+	mkdir("/tmp/pacsat",0777);
+	if (dir_init("/tmp") != EXIT_SUCCESS) { printf("** Could not initialize the dir\n"); return EXIT_FAILURE; };
 
 	for (int f=0; f<100; f++) {
 		char userfilename1[MAX_FILE_PATH_LEN];

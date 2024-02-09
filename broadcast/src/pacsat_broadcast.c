@@ -88,7 +88,7 @@ packet: NO
 struct pb_entry {
 	int pb_type; /* DIR or FILE request */
 	char callsign[MAX_CALLSIGN_LEN];
-	DIR_NODE *node; /* Pointer to the node that we should broadcast next if this is a DIR request */
+	DIR_NODE *node; /* Pointer to the node that we should broadcast next */
 //	int file_id; /* File id of the file we are broadcasting if this is a file request */
 	int offset; /* The current offset in the file we are broadcasting or the PFH we are transmitting */
 	int block_size; /* The maximum size of broadcasts. THIS IS CURRENTLY IGNORED but in theory is sent from the ground for file requests */
@@ -753,6 +753,8 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
 				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
 
+				dir_debug_print(NULL);
+
 				DIR_NODE *node = dir_get_node_by_id(*arg0);
 				debug_print("Installing %d into %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
 
@@ -768,9 +770,6 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				char source_file[MAX_FILE_PATH_LEN];
 				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
-
-				/////////////////  FOR USER FILE NAME -- APPEND THE FIE ID SO WE CAN UPDATE KEYWORDS IF DIR PURGED
-
 
 				char dest_file[MAX_FILE_PATH_LEN];
 				if (*arg2 == 0) {
@@ -814,6 +813,8 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				/* We updated the PACSAT dir. Reload. */
 				dir_load();
+
+				dir_debug_print(NULL);
 
 				break;
 			}
@@ -896,6 +897,9 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			}
 			case SWCmdPacsatDeleteFolder: {
 				uint16_t *arg0 = (uint16_t *)&sw_command->comArg.arguments[0];
+
+
+				///////////////  THIS SHOULD GET A LIST OF FILES WITH THE RIGHT TAG FROM DIR, THEN DELETE THOSE
 
 				char *folder = get_folder_str(*arg0);
 				if (folder == NULL) break;
@@ -988,8 +992,6 @@ int pb_next_action() {
 
 	//TODO - broadcast the number of bytes transmitted to BSTAT periodically so stations can calc efficiency
 
-	//TODO - DIR maintenance.  Daily scan the dir for corrupt or expired files and delete them.  This could run slowly, 1 file scan per pb_action.  But what if we remove a file we are broadcasting?
-
 	/* Now process the next station on the PB if there is one and take its action */
 	if (number_on_pb == 0) return EXIT_SUCCESS; // nothing to do
 
@@ -1018,12 +1020,16 @@ int pb_next_action() {
 			return EXIT_SUCCESS;
 		}
 
+		/*
+		 * We are processing a dir request, which we may be part way through.  There is a list of holes
+		 * are we are at hole "current_hole_num", which is zero if we are just starting
+		 * empty_hole_list is updated if we find at least one hole
+		 */
 		int current_hole_num = pb_list[current_station_on_pb].current_hole_num;
 		DIR_DATE_PAIR *holes = pb_list[current_station_on_pb].hole_list;
 		DIR_NODE *node = dir_get_pfh_by_date(holes[current_hole_num], pb_list[current_station_on_pb].node);
 		if (node == NULL) {
 			/* We have finished the broadcasts for this hole, or there were no records for the hole, move to the next hole if there is one. */
-			// TODO - need to test this logic.  If we list 10 holes with no data and then 1 hole with data, then do we miss our turn on the PB 10 times?
 			pb_list[current_station_on_pb].current_hole_num++; /* Increment now.  If the data is bad and we can't make a frame, we want to move on to the next */
 			if (pb_list[current_station_on_pb].current_hole_num == pb_list[current_station_on_pb].hole_num) {
 				/* We have finished this hole list */
@@ -1035,9 +1041,6 @@ int pb_next_action() {
 				// debug_print("PB: No more files for this hole for request from %s\n", pb_list[current_station_on_pb].callsign);
 				pb_list[current_station_on_pb].node = NULL; // next search will be from start of the DIR as we have no idea what the next hole may be
 			}
-			// TODO - What response if there were no PFHs at all for the request?  An error? Or do nothing
-			// IS THIS NO -5???
-
 		}
 		else {
 			/* We found a dir header */
@@ -1622,12 +1625,6 @@ int test_pb() {
 		debug_print("ACTION: %d\n",i);
 		if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
 	}
-//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
-//	if (pb_next_action() != EXIT_SUCCESS) { printf("** Could not take next PB action\n"); return EXIT_FAILURE; }
 
 	debug_print("List at end of actions:\n");
 	pb_debug_print_list();
