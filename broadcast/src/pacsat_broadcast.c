@@ -1121,7 +1121,7 @@ int pb_next_action() {
 			/* Request to fill holes in the file */
 			int current_hole_num = pb_list[current_station_on_pb].current_hole_num;
 //			debug_print("Preparing Fill %d of %d from FILE %04x for %s --",(current_hole_num+1), pb_list[current_station_on_pb].hole_num,
-					pb_list[current_station_on_pb].node->pfh->fileId, pb_list[current_station_on_pb].callsign);
+//					pb_list[current_station_on_pb].node->pfh->fileId, pb_list[current_station_on_pb].callsign);
 
 			FILE_DATE_PAIR *holes = pb_list[current_station_on_pb].hole_list;
 
