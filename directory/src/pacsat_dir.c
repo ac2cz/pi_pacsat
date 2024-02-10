@@ -342,7 +342,7 @@ void dir_delete_node(DIR_NODE *node) {
 		node->next->prev = node->prev;
 		node->prev->next = node->next;
 	}
-	debug_print("REMOVED: ");
+	//debug_print("REMOVED: ");
 	pfh_debug_print(node->pfh);
 	free(node->pfh);
 	free(node);
@@ -556,6 +556,25 @@ DIR_NODE * dir_get_pfh_by_date(DIR_DATE_PAIR pair, DIR_NODE *p ) {
 	return NULL;
 }
 
+/**
+ * Given a folder return the first pfh after this node
+ *
+ */
+DIR_NODE * dir_get_pfh_by_folder_id(char *folder, DIR_NODE *p ) {
+
+	if (p == NULL) {
+		/* Then we are starting the search from the head.  TODO - could later optimize if search from head or tail */
+		p = dir_head;
+	}
+	while (p != NULL) {
+		DIR_NODE *node = p;
+		p = p->next;
+		if (pfh_contains_keyword(node->pfh, folder))
+			return node;
+	}
+
+	return NULL;
+}
 
 
 /**

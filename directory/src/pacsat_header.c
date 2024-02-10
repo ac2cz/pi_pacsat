@@ -336,6 +336,46 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 	return hdr;
 }
 
+int pfh_add_keyword(HEADER *pfh, char *keyword) {
+	if (pfh_contains_keyword(pfh, keyword))
+		return EXIT_SUCCESS;
+	if (strlen(pfh->keyWords) > 0)
+		strlcat(pfh->keyWords, " ", PFH_SHORT_CHAR_FIELD_LEN);
+	strlcat(pfh->keyWords, keyword, PFH_SHORT_CHAR_FIELD_LEN);
+
+	return EXIT_SUCCESS;
+}
+
+int pfh_remove_keyword(HEADER *pfh, char *keyword) {
+	char new_keywords[PFH_SHORT_CHAR_FIELD_LEN];
+	char *key = strtok(pfh->keyWords, " ");
+	strlcpy(new_keywords,"", PFH_SHORT_CHAR_FIELD_LEN);
+	while (key != NULL) {
+		if (strncmp(key, keyword, PFH_SHORT_CHAR_FIELD_LEN) != 0) {
+			strlcat(new_keywords,key, PFH_SHORT_CHAR_FIELD_LEN);
+			strlcat(new_keywords," ", PFH_SHORT_CHAR_FIELD_LEN);
+		}
+		key = strtok(NULL, " ");
+	}
+	if (strlen(new_keywords) > 0) {
+		new_keywords[strlen(new_keywords)-1] = 0; // we always have an extra space, so remove it
+	}
+	strlcpy(pfh->keyWords,new_keywords, PFH_SHORT_CHAR_FIELD_LEN);
+
+	return EXIT_SUCCESS;
+}
+
+int pfh_contains_keyword(HEADER *pfh, char *keyword) {
+	char *key = strtok(pfh->keyWords, " ");
+	while (key != NULL) {
+		if (strncmp(key, keyword, PFH_SHORT_CHAR_FIELD_LEN) == 0) {
+			return true;
+		}
+		key = strtok(NULL, " ");
+	}
+	return false;
+}
+
 /**
  * pfh_generate_header_bytes()
  *

@@ -109,6 +109,7 @@ void pb_make_list_str(char *buffer, int len);
 int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int *offset);
 DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data);
 int get_num_of_dir_holes(int request_len);
+int pb_delete_file_from_folder(DIR_NODE *node, char*folder, int is_directory_folder);
 int pb_broadcast_next_file_chunk(HEADER *psf, char * psf_filename, int offset, int length, int file_size);
 int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
 		unsigned char *buffer, int number_of_bytes_read, int offset, int chunk_includes_last_byte);
@@ -689,8 +690,8 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 		if(sw_command->namespaceNumber != SWCmdNSPacsat) return EXIT_SUCCESS; // This was not for us, ignore
 
-		debug_print("Received PACSAT Command %04x addr: %d names: %d cmd %d from %s length %d\n",(sw_command->dateTime),
-				sw_command->address, sw_command->namespaceNumber, (sw_command->comArg.command), from_callsign, len);
+//		debug_print("Received PACSAT Command %04x addr: %d names: %d cmd %d from %s length %d\n",(sw_command->dateTime),
+//				sw_command->address, sw_command->namespaceNumber, (sw_command->comArg.command), from_callsign, len);
 
 		//	int i;
 	//	for (i=0; i<4; i++)
@@ -716,7 +717,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 		switch (sw_command->comArg.command) {
 			case SWCmdPacsatEnablePB: {
-				debug_print("Enable PB Command\n");
+				//debug_print("Enable PB Command\n");
 				g_state_pb_open = sw_command->comArg.arguments[0];
 				if (sw_command->comArg.arguments[1]) {
 					g_pb_status_period_in_seconds = sw_command->comArg.arguments[1];
@@ -732,7 +733,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 			case SWCmdPacsatEnableUplink: {
-				debug_print("Enable Uplink Command\n");
+				//debug_print("Enable Uplink Command\n");
 				g_state_uplink_open = sw_command->comArg.arguments[0];
 				if (sw_command->comArg.arguments[1]) {
 					g_uplink_status_period_in_seconds = sw_command->comArg.arguments[1];
@@ -753,10 +754,19 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
 				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
 
-				dir_debug_print(NULL);
+				//dir_debug_print(NULL);
+
+				if (*arg1 == FolderDir) {
+					debug_print("Error - cant install into Directory\n");
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					break;
+				}
 
 				DIR_NODE *node = dir_get_node_by_id(*arg0);
-				debug_print("Installing %d into %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
+				//debug_print("Installing %d into %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
 
 				char *folder = get_folder_str(*arg1);
 				if (folder == NULL) {
@@ -772,7 +782,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
 
 				char dest_file[MAX_FILE_PATH_LEN];
-				if (*arg2 == 0) {
+				if (strlen(node->pfh->userFileName) == 0) {
 					/* Build the full path if we use fild-id as the destination file name */
 					char file_name[10];
 					snprintf(file_name, 10, "%04x",*arg0);
@@ -787,7 +797,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
 				}
-				debug_print("Install File: %04x : %s into dir: %d - %s | File Name:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
+				//debug_print("Install File: %04x : %s into dir: %d - %s | File Name:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
 				if (pfh_extract_file(source_file, dest_file) != EXIT_SUCCESS) {
 					debug_print("Error extracting file %s\n",source_file);
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
@@ -797,9 +807,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 				/* If successful we change the header to include a keyword for the installed dir and set the upload and expiry dates */
-				if (strlen(node->pfh->keyWords) > 0)
-					strlcat(node->pfh->keyWords, " ", PFH_SHORT_CHAR_FIELD_LEN);
-				strlcat(node->pfh->keyWords, folder, PFH_SHORT_CHAR_FIELD_LEN);
+				pfh_add_keyword(node->pfh, folder);
 				node->pfh->uploadTime = time(0);
 				node->pfh->expireTime = 0xFFFFFF7F; // 2038
 				if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
@@ -814,7 +822,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				/* We updated the PACSAT dir. Reload. */
 				dir_load();
 
-				dir_debug_print(NULL);
+				//dir_debug_print(NULL);
 
 				break;
 			}
@@ -824,60 +832,19 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
 
 				DIR_NODE *node = dir_get_node_by_id(*arg0);
-				debug_print("Deleting %d from %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
 
 				char *folder = get_folder_str(*arg1);
 				if (folder == NULL) break;
+				int is_directory_folder = false;
+				if (*arg1 == FolderDir)
+					is_directory_folder = true;
 
-				char dest_file[MAX_FILE_PATH_LEN];
-				char file_name[10];
-				snprintf(file_name, 10, "%04x",*arg0);
-				if (*arg2 == 0) {
-					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
-					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
-					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
-					if (*arg1 == FolderDir) {
-						strlcat(dest_file, ".", MAX_FILE_PATH_LEN);
-						strlcat(dest_file, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
-					}
-				} else {
-					if (node->pfh->userFileName == NULL || strlen(node->pfh->userFileName) == 0) {
-						int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
-						if (r != EXIT_SUCCESS) {
-							debug_print("\n Error : No user filename to delete \n");
-						}
-						break;
-					}
-					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
-					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
-					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, node->pfh->userFileName, MAX_FILE_PATH_LEN);
-					debug_print("Delete File by userfilename: %04x in dir: %d - %s | File Name:%d\n",*arg0, *arg1, dest_file, *arg2);
-				}
-				debug_print("Remove: %s\n",dest_file);
-				if (remove(dest_file) == EXIT_SUCCESS) {
+				int rc = pb_delete_file_from_folder(node, folder, is_directory_folder);
+				if (rc == EXIT_SUCCESS) {
 					int rc = pb_send_ok(from_callsign);
 					if (rc != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send OK Response to TNC \n");
 					}
-					/* If successful we change the header to remove the keyword for the installed dir and set the upload date */
-					char new_keywords[PFH_SHORT_CHAR_FIELD_LEN];
-					char *key = strtok(node->pfh->keyWords, " ");
-					strlcpy(new_keywords,"", PFH_SHORT_CHAR_FIELD_LEN);
-					while (key != NULL) {
-						if (strncmp(key, folder, PFH_SHORT_CHAR_FIELD_LEN) != 0) {
-							strlcat(new_keywords,key, PFH_SHORT_CHAR_FIELD_LEN);
-							strlcat(new_keywords," ", PFH_SHORT_CHAR_FIELD_LEN);
-						}
-						key = strtok(NULL, " ");
-					}
-					if (strlen(new_keywords) > 0) {
-						new_keywords[strlen(new_keywords)-1] = 0; // we always have an extra space, so remove it
-					}
-					strlcpy(node->pfh->keyWords,new_keywords, PFH_SHORT_CHAR_FIELD_LEN);
 					node->pfh->uploadTime = time(0);
 					if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
 						debug_print("** Failed to re-write header in file.\n");
@@ -885,7 +852,6 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 					/* We updated the PACSAT dir. Reload. */
 					dir_load();
-
 				} else {
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
@@ -898,49 +864,42 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			case SWCmdPacsatDeleteFolder: {
 				uint16_t *arg0 = (uint16_t *)&sw_command->comArg.arguments[0];
 
-
-				///////////////  THIS SHOULD GET A LIST OF FILES WITH THE RIGHT TAG FROM DIR, THEN DELETE THOSE
-
 				char *folder = get_folder_str(*arg0);
 				if (folder == NULL) break;
 
-				char filename[MAX_FILE_PATH_LEN];
-				char dest_path[MAX_FILE_PATH_LEN];
-				strlcpy(dest_path, get_data_folder(), MAX_FILE_PATH_LEN);
-				strlcat(dest_path, "/", MAX_FILE_PATH_LEN);
-				strlcat(dest_path, folder, MAX_FILE_PATH_LEN);
+				int is_directory_folder = false;
+				if (*arg0 == FolderDir)
+					is_directory_folder = true;
 
-				debug_print("Purge Folder: %s\n",dest_path);
-				DIR * d = opendir(dest_path);
-				if (d == NULL) {
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
-					if (r != EXIT_SUCCESS) {
-						debug_print("\n Error : Could not send ERR Response to TNC \n");
+				DIR_NODE *node;
+				DIR_NODE *next_node = NULL;
+				time_t now = time(0);
+
+				while(node != NULL) {
+					node = dir_get_pfh_by_folder_id(folder, next_node );
+					if (node != NULL) {
+						/* We have a header installed in this folder */
+						//debug_print("Removing: File id %d from folder %s\n", node->pfh->fileId, folder);
+						pb_delete_file_from_folder(node, folder, is_directory_folder);
+						node->pfh->uploadTime = now++;
+						if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
+							debug_print("** Failed to re-write header in file.\n");
+						}
+						if (node->next == NULL) {
+							break; // we are at end of dir
+						} else {
+							next_node = node->next;
+						}
 					}
-					error_print("** Could not open dir %s\n",dest_path);
-					break;
 				}
-				struct dirent *de;
-				for (de = readdir(d); de != NULL; de = readdir(d)) {
-					//debug_print("CHECKING: %s\n",de->d_name);
-					if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0)) {
-						strlcpy(filename, dest_path, MAX_FILE_PATH_LEN);
-						strlcat(filename, "/", MAX_FILE_PATH_LEN);
-						strlcat(filename, de->d_name, MAX_FILE_PATH_LEN);
-						debug_print("Remove: %s\n",filename);
-						remove(filename); // best attempt to remove.  Ignore errors.
-					}
-				}
-				closedir(d);
+
 				int rc = pb_send_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
 
-				if (*arg0 == FolderDir) {
-					/* We purged the PACSAT dir. Reload. */
-					dir_load();
-				}
+				/* We update the PACSAT dir. Reload. */
+				dir_load();
 				break;
 			}
 
@@ -957,6 +916,39 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 		return EXIT_SUCCESS;
 }
 
+int pb_delete_file_from_folder(DIR_NODE *node, char*folder, int is_directory_folder) {
+//	debug_print("Deleting %d from %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
+	char dest_file[MAX_FILE_PATH_LEN];
+	char file_name[10];
+	snprintf(file_name, 10, "%04x",node->pfh->fileId);
+	if (is_directory_folder || strlen(node->pfh->userFileName) == 0) {
+		strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
+		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
+		if (is_directory_folder) {
+			strlcat(dest_file, ".", MAX_FILE_PATH_LEN);
+			strlcat(dest_file, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
+		}
+	} else {
+		strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
+		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_file, node->pfh->userFileName, MAX_FILE_PATH_LEN);
+		debug_print("Delete File by userfilename: %04x in dir: %s - %s\n",node->pfh->fileId, folder, dest_file);
+	}
+//	debug_print("Remove: %s\n",dest_file);
+	if (remove(dest_file) == EXIT_SUCCESS) {
+		/* If successful we change the header to remove the keyword for the installed dir and set the upload date */
+		pfh_remove_keyword(node->pfh, folder);
+		return EXIT_SUCCESS;
+	} else {
+		return EXIT_FAILURE;
+	}
+
+}
 
 /**
  * pb_next_action()
@@ -1010,11 +1002,11 @@ int pb_next_action() {
 	 */
 	if (pb_list[current_station_on_pb].pb_type == PB_DIR_REQUEST_TYPE) {
 
-		debug_print("Preparing DIR Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
+//		debug_print("Preparing DIR Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
 		if (pb_list[current_station_on_pb].hole_num < 1) {
 			/* This is not a valid DIR Request.  There is no hole list.  We should not get here because this
 			 * should not have been added.  So just remove it. */
-			debug_print("Invalid DIR request with no hole list from %s\n", pb_list[current_station_on_pb].callsign);
+			error_print("Invalid DIR request with no hole list from %s\n", pb_list[current_station_on_pb].callsign);
 			pb_remove_request(current_station_on_pb);
 			/* If we removed a station then we don't want/need to increment the current station pointer */
 			return EXIT_SUCCESS;
@@ -1033,7 +1025,7 @@ int pb_next_action() {
 			pb_list[current_station_on_pb].current_hole_num++; /* Increment now.  If the data is bad and we can't make a frame, we want to move on to the next */
 			if (pb_list[current_station_on_pb].current_hole_num == pb_list[current_station_on_pb].hole_num) {
 				/* We have finished this hole list */
-				debug_print("Added last hole for request from %s\n", pb_list[current_station_on_pb].callsign);
+				//debug_print("Added last hole for request from %s\n", pb_list[current_station_on_pb].callsign);
 				pb_remove_request(current_station_on_pb);
 				/* If we removed a station then we don't want/need to increment the current station pointer */
 				return EXIT_SUCCESS;
@@ -1045,7 +1037,7 @@ int pb_next_action() {
 		else {
 			/* We found a dir header */
 
-			debug_print("DIR BD Offset %d: ", pb_list[current_station_on_pb].offset);
+			//debug_print("DIR BD Offset %d: ", pb_list[current_station_on_pb].offset);
 			pfh_debug_print(node->pfh);
 
 			/* Store the offset and pass it into the function that makes the broadcast packet.  The offset after
@@ -1086,7 +1078,7 @@ int pb_next_action() {
 					pb_list[current_station_on_pb].current_hole_num++;
 					if (pb_list[current_station_on_pb].current_hole_num == pb_list[current_station_on_pb].hole_num) {
 						/* We have finished this hole list */
-						debug_print("Added last hole for request from %s\n", pb_list[current_station_on_pb].callsign);
+//						debug_print("Added last hole for request from %s\n", pb_list[current_station_on_pb].callsign);
 						pb_remove_request(current_station_on_pb);
 						/* If we removed a station then we don't want/need to increment the current station pointer */
 						return EXIT_SUCCESS;
@@ -1101,7 +1093,7 @@ int pb_next_action() {
 	 *  Process Request to broadcast a file or parts of a file
 	 */
 	} else if (pb_list[current_station_on_pb].pb_type == PB_FILE_REQUEST_TYPE) {
-		debug_print("Preparing FILE Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
+//		debug_print("Preparing FILE Broadcast for %s\n",pb_list[current_station_on_pb].callsign);
 
 		char psf_filename[MAX_FILE_PATH_LEN];
 		dir_get_file_path_from_file_id(pb_list[current_station_on_pb].node->pfh->fileId,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
@@ -1128,7 +1120,7 @@ int pb_next_action() {
 
 			/* Request to fill holes in the file */
 			int current_hole_num = pb_list[current_station_on_pb].current_hole_num;
-			debug_print("Preparing Fill %d of %d from FILE %04x for %s --",(current_hole_num+1), pb_list[current_station_on_pb].hole_num,
+//			debug_print("Preparing Fill %d of %d from FILE %04x for %s --",(current_hole_num+1), pb_list[current_station_on_pb].hole_num,
 					pb_list[current_station_on_pb].node->pfh->fileId, pb_list[current_station_on_pb].callsign);
 
 			FILE_DATE_PAIR *holes = pb_list[current_station_on_pb].hole_list;
@@ -1137,7 +1129,7 @@ int pb_next_action() {
 				/* Then this is probablly a new hole, initialize to the start of it */
 				pb_list[current_station_on_pb].offset = holes[current_hole_num].offset;
 			}
-			debug_print("  Chunk from %d length %d at offset %d\n",holes[current_hole_num].offset, holes[current_hole_num].length, pb_list[current_station_on_pb].offset);
+//			debug_print("  Chunk from %d length %d at offset %d\n",holes[current_hole_num].offset, holes[current_hole_num].length, pb_list[current_station_on_pb].offset);
 
 			/* We are currently at byte pb_list[current_station_on_pb].offset for this request.  So this hole
 			 * still has the following remaining bytes */
