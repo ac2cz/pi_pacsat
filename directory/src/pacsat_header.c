@@ -567,25 +567,29 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
  * it could not.
  *
  */
-int pfh_extract_file(char *src_filename, char *dest_filename) {
-	HEADER *pfh;
+int pfh_extract_file(HEADER *pfh, char *dest_folder) {
+
+	char src_filename[MAX_FILE_PATH_LEN];
 	char dest_filepath[MAX_FILE_PATH_LEN];
-	pfh = pfh_load_from_file(src_filename);
 	if (pfh == NULL) return EXIT_FAILURE;
+	dir_get_file_path_from_file_id(pfh->fileId, get_dir_folder(), src_filename, MAX_FILE_PATH_LEN);
 
-	struct stat sb;
-
-	strlcpy(dest_filepath, dest_filename, MAX_FILE_PATH_LEN);
-	if (stat(dest_filename, &sb) == 0 && S_ISDIR(sb.st_mode)) {
-	    /* It is a dir */
+	if (strlen(pfh->userFileName) == 0) {
+		/* Build the full path if we use fild-id as the destination file name */
+		char file_name[10];
+		snprintf(file_name, 10, "%04x",pfh->fileId);
+		strlcpy(dest_filepath, get_data_folder(), MAX_FILE_PATH_LEN);
 		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
-		if (pfh->userFileName == NULL || strlen(pfh->userFileName) == 0) {
-			char file_name[10];
-			snprintf(file_name, 10, "%04x",pfh->fileId);
-			strlcat(dest_filepath, file_name, MAX_FILE_PATH_LEN);
-		} else {
-			strlcat(dest_filepath, pfh->userFileName, MAX_FILE_PATH_LEN);
-		}
+		strlcat(dest_filepath, dest_folder, MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, file_name, MAX_FILE_PATH_LEN);
+	} else {
+		/* Just build the folder path if we are going to use the user-filename*/
+		strlcpy(dest_filepath, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, dest_folder, MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, pfh->userFileName, MAX_FILE_PATH_LEN);
 	}
 
 	FILE * outfile = fopen(dest_filepath, "wb");
@@ -622,9 +626,24 @@ int pfh_extract_file(char *src_filename, char *dest_filename) {
 
 	fclose(infile);
 	fclose(outfile);
-	debug_print("Extracted %s from %s\n",dest_filename, src_filename);
+	debug_print("Extracted %s from %s\n",dest_filepath, src_filename);
 
-	free(pfh);
+	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
+		char command[MAX_FILE_PATH_LEN];
+		char output_folder[MAX_FILE_PATH_LEN];
+
+		strlcpy(output_folder, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(output_folder, "/", MAX_FILE_PATH_LEN);
+		strlcat(output_folder, dest_folder, MAX_FILE_PATH_LEN);
+
+		strlcpy(command, "unzip -o -d", MAX_FILE_PATH_LEN);
+		strlcat(command, output_folder, MAX_FILE_PATH_LEN);
+		strlcat(command, " ", MAX_FILE_PATH_LEN);
+		strlcat(command, dest_filepath, MAX_FILE_PATH_LEN);
+		// TODO System needs cancellation headers if this runs in seperate thread
+		system(command);
+	}
+
 	return EXIT_SUCCESS;
 }
 

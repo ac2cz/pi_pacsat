@@ -750,13 +750,14 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			}
 			case SWCmdPacsatInstallFile: {
 				/* Args are 32 bit fild id, folder id, flag to use id or user_file_name */
-				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
-				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
-				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
+				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
+				int folder_id = sw_command->comArg.arguments[2];
+//				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
+//				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
 
 				//dir_debug_print(NULL);
 
-				if (*arg1 == FolderDir) {
+				if (folder_id == FolderDir) {
 					debug_print("Error - cant install into Directory\n");
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 					if (r != EXIT_SUCCESS) {
@@ -765,10 +766,18 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 
-				DIR_NODE *node = dir_get_node_by_id(*arg0);
+				DIR_NODE *node = dir_get_node_by_id(file_id);
+				if (node == NULL) {
+					error_print("File %d not available\n",file_id);
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					break;
+				}
 				//debug_print("Installing %d into %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
 
-				char *folder = get_folder_str(*arg1);
+				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) {
 					debug_print("Error - invalid folder\n");
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
@@ -778,28 +787,28 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 
-				char source_file[MAX_FILE_PATH_LEN];
-				dir_get_file_path_from_file_id(*arg0, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
-
-				char dest_file[MAX_FILE_PATH_LEN];
-				if (strlen(node->pfh->userFileName) == 0) {
-					/* Build the full path if we use fild-id as the destination file name */
-					char file_name[10];
-					snprintf(file_name, 10, "%04x",*arg0);
-					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
-					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
-					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
-				} else {
-					/* Just build the folder path if we are going to use the user-filename*/
-					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
-					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
-				}
+//				char source_file[MAX_FILE_PATH_LEN];
+//				dir_get_file_path_from_file_id(file_id, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
+//
+//				char dest_file[MAX_FILE_PATH_LEN];
+//				if (strlen(node->pfh->userFileName) == 0) {
+//					/* Build the full path if we use fild-id as the destination file name */
+//					char file_name[10];
+//					snprintf(file_name, 10, "%04x",file_id);
+//					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
+//					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+//					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
+//					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+//					strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
+//				} else {
+//					/* Just build the folder path if we are going to use the user-filename*/
+//					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
+//					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
+//					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
+//				}
 				//debug_print("Install File: %04x : %s into dir: %d - %s | File Name:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
-				if (pfh_extract_file(source_file, dest_file) != EXIT_SUCCESS) {
-					debug_print("Error extracting file %s\n",source_file);
+				if (pfh_extract_file(node->pfh, folder) != EXIT_SUCCESS) {
+					debug_print("Error extracting file into %s\n",folder);
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
@@ -827,17 +836,28 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 			case SWCmdPacsatDeleteFile: {
-				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
-				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
-				uint16_t *arg2 = (uint16_t *)&sw_command->comArg.arguments[3];
+//				debug_print("Arg: %02x %02x\n",sw_command->comArg.arguments[0],sw_command->comArg.arguments[1]);
+				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
+				int folder_id = sw_command->comArg.arguments[2];
+//				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
+//				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
 
-				DIR_NODE *node = dir_get_node_by_id(*arg0);
 
-				char *folder = get_folder_str(*arg1);
+				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) break;
 				int is_directory_folder = false;
-				if (*arg1 == FolderDir)
+				if (folder_id == FolderDir)
 					is_directory_folder = true;
+
+				DIR_NODE *node = dir_get_node_by_id(file_id);
+				if (node == NULL) {
+					error_print("File %ld not available\n",file_id);
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					break;
+				}
 
 				int rc = pb_delete_file_from_folder(node, folder, is_directory_folder);
 				if (rc == EXIT_SUCCESS) {
@@ -862,13 +882,14 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 			case SWCmdPacsatDeleteFolder: {
-				uint16_t *arg0 = (uint16_t *)&sw_command->comArg.arguments[0];
+				int folder_id = sw_command->comArg.arguments[0];
+//				uint16_t *arg0 = (uint16_t *)&sw_command->comArg.arguments[0];
 
-				char *folder = get_folder_str(*arg0);
+				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) break;
 
 				int is_directory_folder = false;
-				if (*arg0 == FolderDir)
+				if (folder_id == FolderDir)
 					is_directory_folder = true;
 
 				DIR_NODE *node;
