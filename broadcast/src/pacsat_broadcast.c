@@ -70,6 +70,7 @@ packet: NO
 #include <string.h>
 #include <time.h>
 #include <dirent.h>
+#include <sys/stat.h>
 
 /* Program Include Files */
 #include "config.h"
