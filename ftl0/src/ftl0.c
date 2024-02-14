@@ -796,7 +796,7 @@ int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel
 
 	char tmp_filename[MAX_FILE_PATH_LEN];
 	dir_get_upload_file_path_from_file_id(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
-	debug_print("Saving data to file: %s\n",tmp_filename);
+	//debug_print("Saving data to file: %s\n",tmp_filename);
 	FILE * f = fopen(tmp_filename, "ab"); /* Open the file for append of data to the end */
 	if (f == NULL) {
 		return ER_NO_SUCH_FILE_NUMBER;
@@ -1356,7 +1356,7 @@ void ftl0_maintenance(time_t now, char *upload_folder) {
     pDirEnt = readdir(pDir);
     while (pDirEnt != NULL) {
     	if ((strcmp(pDirEnt->d_name, ".") != 0) && (strcmp(pDirEnt->d_name, "..") != 0)){
-            debug_print("Checking: %s\n",pDirEnt->d_name);
+            //debug_print("Checking: %s\n",pDirEnt->d_name);
 
             char file_name_with_path[MAX_FILE_PATH_LEN];
             strlcpy(file_name_with_path, upload_folder, MAX_FILE_PATH_LEN);

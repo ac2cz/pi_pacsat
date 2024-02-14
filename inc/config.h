@@ -24,7 +24,7 @@
 
 #include "common_config.h"
 
-#define VERSION __DATE__ " PARISS - Version 0.5"
+#define VERSION __DATE__ " ARISS FS - Version 0.6"
 
 /* These global variables are not in the config file */
 extern int g_run_self_test;    /* true when the self test is running */

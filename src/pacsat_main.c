@@ -287,14 +287,16 @@ int main(int argc, char *argv[]) {
 				debug_print("Set BBS Callsign: %s:\n",frame.header->call_from);
 				break;
 			case 'T': // Response to sending a UI frame
-				/* The T frame is a confirm that a frame was sent.  We use this event to query the TNC and ask how many
-				 * frames are outstanding.  Note that this process has a delay, so we actually increase the frame counter
-				 * whenever we send a UI frame. But the received y frame below will then set it to the right value.  We
-				 * can still get a bit ahead of ourselves and end up with more frames queued than expected. */
-				tnc_frames_queued();
+				/* The T frame is a confirm that a frame was sent.  We use this event to decrement how many
+				 * frames are outstanding.  We actually increase the frame counter whenever we send a UI frame.
+				 * We can still get a bit ahead of ourselves and end up with more frames queued than expected. */
+				if (g_common_frames_queued)
+					g_common_frames_queued--;
+
+//				tnc_frames_queued();
 				break;
 			case 'y': // Response to query of number of frames outstanding -- but this does not work with DireWolf
-				process_frames_queued (frame.data, frame.header->data_len);
+				//process_frames_queued (frame.data, frame.header->data_len);
 				break;
 			case 'S': // Supervisory frame.  Only received if monitoring with 'm'.  Only needed for debugging
 				break;
@@ -370,12 +372,12 @@ int main(int argc, char *argv[]) {
 	exit(EXIT_SUCCESS);
 }
 
-void process_frames_queued(unsigned char * data, int len) {
-	uint32_t *num = (uint32_t *)data;
-	g_common_frames_queued = *num;
-	frame_queue_status_known = true;
-//	debug_print("***** Received y: %d\n", g_frames_queued);
-}
+//void process_frames_queued(unsigned char * data, int len) {
+//	uint32_t *num = (uint32_t *)data;
+//	g_common_frames_queued = *num;
+//	frame_queue_status_known = true;
+//	//debug_print("***** Received y: %d\n", g_common_frames_queued);
+//}
 
 
 
