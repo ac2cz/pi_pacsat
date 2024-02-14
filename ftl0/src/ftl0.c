@@ -27,6 +27,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/statvfs.h>
+#include <sys/stat.h>
 #include <errno.h>
 #include <dirent.h>
 
