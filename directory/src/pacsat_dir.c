@@ -678,7 +678,8 @@ void dir_maintenance(time_t now) {
 		dir_maint_node = dir_maint_node->next;
 	} else if (age > g_dir_max_file_age_in_seconds) {
 		// Remove this file it is over the max age
-
+//TODO - this does not purge a file that was installed into a folder.  Is that what we want??  If we later delete the file
+		// to try to remove the file in the installed folder then it will fail.
 		debug_print("Purging: %s\n",file_name_with_path);
 		if (remove(file_name_with_path) != 0) {
 			error_print("Could not remove the temp file: %s\n", file_name_with_path);

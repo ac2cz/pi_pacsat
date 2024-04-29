@@ -707,11 +707,11 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			return EXIT_FAILURE;
 		}
 		if (cmd_rc == EXIT_DUPLICATE) {
-			return EXIT_SUCCESS; // Duplicate
 			int rc = pb_send_ok(from_callsign);
 			if (rc != EXIT_SUCCESS) {
 				debug_print("\n Error : Could not send OK Response to TNC \n");
 			}
+			return EXIT_SUCCESS; // Duplicate
 		}
 
 //		debug_print("Auth Command\n");
@@ -753,9 +753,6 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				/* Args are 32 bit fild id, folder id, flag to use id or user_file_name */
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
 				int folder_id = sw_command->comArg.arguments[2];
-//				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
-//				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
-
 				//dir_debug_print(NULL);
 
 				if (folder_id == FolderDir) {
@@ -788,25 +785,6 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 
-//				char source_file[MAX_FILE_PATH_LEN];
-//				dir_get_file_path_from_file_id(file_id, get_dir_folder(), source_file, MAX_FILE_PATH_LEN);
-//
-//				char dest_file[MAX_FILE_PATH_LEN];
-//				if (strlen(node->pfh->userFileName) == 0) {
-//					/* Build the full path if we use fild-id as the destination file name */
-//					char file_name[10];
-//					snprintf(file_name, 10, "%04x",file_id);
-//					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
-//					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-//					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
-//					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-//					strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
-//				} else {
-//					/* Just build the folder path if we are going to use the user-filename*/
-//					strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
-//					strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-//					strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
-//				}
 				//debug_print("Install File: %04x : %s into dir: %d - %s | File Name:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
 				if (pfh_extract_file(node->pfh, folder) != EXIT_SUCCESS) {
 					debug_print("Error extracting file into %s\n",folder);
@@ -840,9 +818,6 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 //				debug_print("Arg: %02x %02x\n",sw_command->comArg.arguments[0],sw_command->comArg.arguments[1]);
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
 				int folder_id = sw_command->comArg.arguments[2];
-//				uint32_t *arg0 = (uint32_t *)&sw_command->comArg.arguments[0];
-//				uint16_t *arg1 = (uint16_t *)&sw_command->comArg.arguments[2];
-
 
 				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) break;
@@ -884,10 +859,22 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			}
 			case SWCmdPacsatDeleteFolder: {
 				int folder_id = sw_command->comArg.arguments[0];
-//				uint16_t *arg0 = (uint16_t *)&sw_command->comArg.arguments[0];
+				int purge_orphan_files = sw_command->comArg.arguments[1];
 
 				char *folder = get_folder_str(folder_id);
-				if (folder == NULL) break;
+				if (folder == NULL) {
+					int r = pb_send_err(from_callsign, 1);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					break;
+				}
+
+				/* Send Ok here as command is valid and any other errors below are ignored. */
+				int rc = pb_send_ok(from_callsign);
+				if (rc != EXIT_SUCCESS) {
+					debug_print("\n Error : Could not send OK Response to TNC \n");
+				}
 
 				int is_directory_folder = false;
 				if (folder_id == FolderDir)
@@ -915,9 +902,30 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					}
 				}
 
-				int rc = pb_send_ok(from_callsign);
-				if (rc != EXIT_SUCCESS) {
-					debug_print("\n Error : Could not send OK Response to TNC \n");
+				// Purge all other files
+				if (purge_orphan_files) {
+					char dir_folder[MAX_FILE_PATH_LEN];
+					strlcpy(dir_folder, get_data_folder(), MAX_FILE_PATH_LEN);
+					strlcat(dir_folder, "/", MAX_FILE_PATH_LEN);
+					strlcat(dir_folder, folder, MAX_FILE_PATH_LEN);
+					debug_print("Purging remaining files from: %s\n",dir_folder);
+					DIR * d = opendir(dir_folder);
+					if (d == NULL) {
+						error_print("** Could not open dir: %s\n",dir_folder);
+					} else {
+						struct dirent *de;
+						for (de = readdir(d); de != NULL; de = readdir(d)) {
+							char orphan_file_name[MAX_FILE_PATH_LEN];
+							strlcpy(orphan_file_name, dir_folder, sizeof(orphan_file_name));
+							strlcat(orphan_file_name, "/", sizeof(orphan_file_name));
+							strlcat(orphan_file_name, de->d_name, sizeof(orphan_file_name));
+							if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0)) {
+								debug_print("Purging: %s\n",orphan_file_name);
+								remove(orphan_file_name);
+							}
+						}
+						closedir(d);
+					}
 				}
 
 				/* We update the PACSAT dir. Reload. */
@@ -938,7 +946,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 		return EXIT_SUCCESS;
 }
 
-int pb_delete_file_from_folder(DIR_NODE *node, char*folder, int is_directory_folder) {
+int pb_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder) {
 //	debug_print("Deleting %d from %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
 	char dest_file[MAX_FILE_PATH_LEN];
 	char file_name[10];
