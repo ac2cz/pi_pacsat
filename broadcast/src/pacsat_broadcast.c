@@ -431,7 +431,7 @@ int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len) {
 	/* least sig 2 bits of flags are 00 if this is a fill request */
 	if ((dir_header->flags & 0b11) == 0b00) {
 		pb_debug_print_dir_req(data, len);
-		debug_print("DIR FILL REQUEST: flags: %02x BLK_SIZE: %04x\n", dir_header->flags & 0xff, dir_header->block_size &0xffff);
+		//debug_print("DIR FILL REQUEST: flags: %02x BLK_SIZE: %04x\n", dir_header->flags & 0xff, dir_header->block_size &0xffff);
 
 		/* Get the number of holes in this request and make sure it is in a valid range */
 		int num_of_holes = get_num_of_dir_holes(len);
@@ -546,7 +546,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 	FILE_REQ_HEADER *file_header;
 	file_header = (FILE_REQ_HEADER *)(data + sizeof(AX25_HEADER));
 
-	debug_print("FILE REQUEST: flags: %02x file: %04x BLK_SIZE: %04x\n", file_header->flags & 0xff, file_header->file_id &0xffff, file_header->block_size &0xffff);
+	//debug_print("FILE REQUEST: flags: %02x file: %04x BLK_SIZE: %04x\n", file_header->flags & 0xff, file_header->file_id &0xffff, file_header->block_size &0xffff);
 
 	/* First, does the file exist */
 	DIR_NODE * node = dir_get_node_by_id(file_header->file_id);
@@ -592,7 +592,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 	case PB_START_SENDING_FILE :
 		/* least sig 2 bits of flags are 00 if this is a request to send a new file */
 		// Add to the PB
-		debug_print(" - send whole file\n");
+		//debug_print(" - send whole file\n");
 		if (pb_add_request(from_callsign, PB_FILE_REQUEST_TYPE, node, file_header->file_id, 0, 0, 0) == EXIT_SUCCESS) {
 			// ACK the station
 			rc = pb_send_ok(from_callsign);
@@ -614,7 +614,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 
 	case PB_STOP_SENDING_FILE :
 		/* A station can only stop a file broadcast if they started it */
-		debug_print(" - stop sending file\n");
+		//debug_print(" - stop sending file\n");
 		error_print("\n NOT IMPLEMENTED YET : Unable to handle a file download cancel request \n");
 		return EXIT_FAILURE;
 		break;
@@ -632,7 +632,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 			return EXIT_FAILURE;
 		}
 		FILE_DATE_PAIR * holes = get_file_holes_list(data);
-		pb_debug_print_file_holes(holes, num_of_holes);
+		//pb_debug_print_file_holes(holes, num_of_holes);
 		/* We could check the integrity of the holes list.  The offset should be inside the file length
 		 * but note that the ground station can just give FFFF as the upper length for a hole*/
 //		for (int i=0; i < num_of_holes; i++) {
@@ -777,7 +777,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) {
-					debug_print("Error - invalid folder\n");
+					//debug_print("Error - invalid folder\n");
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
@@ -908,7 +908,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 					strlcpy(dir_folder, get_data_folder(), MAX_FILE_PATH_LEN);
 					strlcat(dir_folder, "/", MAX_FILE_PATH_LEN);
 					strlcat(dir_folder, folder, MAX_FILE_PATH_LEN);
-					debug_print("Purging remaining files from: %s\n",dir_folder);
+					//debug_print("Purging remaining files from: %s\n",dir_folder);
 					DIR * d = opendir(dir_folder);
 					if (d == NULL) {
 						error_print("** Could not open dir: %s\n",dir_folder);
@@ -920,7 +920,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 							strlcat(orphan_file_name, "/", sizeof(orphan_file_name));
 							strlcat(orphan_file_name, de->d_name, sizeof(orphan_file_name));
 							if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0)) {
-								debug_print("Purging: %s\n",orphan_file_name);
+								//debug_print("Purging: %s\n",orphan_file_name);
 								remove(orphan_file_name);
 							}
 						}
@@ -967,7 +967,7 @@ int pb_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_fo
 		strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
 		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 		strlcat(dest_file, node->pfh->userFileName, MAX_FILE_PATH_LEN);
-		debug_print("Delete File by userfilename: %04x in dir: %s - %s\n",node->pfh->fileId, folder, dest_file);
+		//debug_print("Delete File by userfilename: %04x in dir: %s - %s\n",node->pfh->fileId, folder, dest_file);
 	}
 //	debug_print("Remove: %s\n",dest_file);
 	if (remove(dest_file) == EXIT_SUCCESS) {
@@ -1068,7 +1068,7 @@ int pb_next_action() {
 			/* We found a dir header */
 
 			//debug_print("DIR BD Offset %d: ", pb_list[current_station_on_pb].offset);
-			pfh_debug_print(node->pfh);
+			//pfh_debug_print(node->pfh);
 
 			/* Store the offset and pass it into the function that makes the broadcast packet.  The offset after
 			 * the broadcast is returned in this offset variable.  It equals the length of the PFH if the whole header
@@ -1225,7 +1225,7 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
 		return EXIT_SUCCESS;
 	}
 	int number_of_bytes_read = fread(broadcast_buffer, sizeof(char), PB_FILE_DEFAULT_BLOCK_SIZE, f);
-	debug_print("Read %d bytes from %s\n", number_of_bytes_read, psf_filename);
+	//debug_print("Read %d bytes from %s\n", number_of_bytes_read, psf_filename);
 	fclose(f);
 
 	int chunk_includes_last_byte = false;
@@ -1233,8 +1233,8 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
 	if (offset + number_of_bytes_read >= file_size)
 		chunk_includes_last_byte = true;
 
-	debug_print("FILE BB to send: ");
-	pfh_debug_print(pfh);
+	//debug_print("FILE BB to send: ");
+	//pfh_debug_print(pfh);
 
 	int data_len = pb_make_file_broadcast_packet(pfh, packet_buffer, broadcast_buffer,
 			number_of_bytes_read, offset, chunk_includes_last_byte);
