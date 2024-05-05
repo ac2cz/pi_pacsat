@@ -518,7 +518,7 @@ void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes) {
 void pb_debug_print_dir_req(unsigned char *data, int len) {
 	DIR_REQ_HEADER *dir_header;
 	dir_header = (DIR_REQ_HEADER *)(data + sizeof(AX25_HEADER));
-	debug_print("DIR REQ: flags: %02x BLK_SIZE: %04x ", dir_header->flags & 0xff, dir_header->block_size &0xffff);
+	//debug_print("DIR REQ: flags: %02x BLK_SIZE: %04x ", dir_header->flags & 0xff, dir_header->block_size &0xffff);
 	if ((dir_header->flags & 0b11) == 0b00) {
 		/* There is a holes list */
 		int num_of_holes = get_num_of_dir_holes(len);

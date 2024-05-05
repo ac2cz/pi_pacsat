@@ -313,8 +313,8 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 			dir_delete_node(new_node);
 			return NULL;
 		} else {
-			debug_print("Saved:");
-			pfh_debug_print(new_node->pfh);
+			//debug_print("Saved:");
+			//pfh_debug_print(new_node->pfh);
 		}
 	}
 	return new_node;
