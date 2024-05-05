@@ -688,11 +688,11 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 
 		char file_name_with_path[MAX_FILE_PATH_LEN];
 		dir_get_file_path_from_file_id(state->file_id, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
-		debug_print("Checking if file: %s is already uploaded\n",file_name_with_path);
+		//debug_print("Checking if file: %s is already uploaded\n",file_name_with_path);
 
 		FILE * f = fopen(file_name_with_path, "rb");
 		if (f != NULL) { // File is already on disk
-			debug_print("File is already on disk\n");
+			//debug_print("File is already on disk\n");
 			int32_t off = fseek(f, 0, SEEK_END);
 			int32_t rc = fclose(f);
 			if (rc != 0) {
@@ -737,7 +737,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 		char tmp_filename[MAX_FILE_PATH_LEN];
 		dir_get_upload_file_path_from_file_id(state->file_id, tmp_filename, MAX_FILE_PATH_LEN);
 
-		debug_print("Checking continue file: %s\n",tmp_filename);
+		//debug_print("Checking continue file: %s\n",tmp_filename);
 		f = fopen(tmp_filename, "rb");
 		if (f == NULL) {
 			error_print("No such file number \n");
@@ -751,7 +751,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 			return ER_NO_SUCH_FILE_NUMBER;
 		} else {
 			state->offset = off;
-			debug_print("FTL0[%d]: Continuing file %04x at offset %d\n",state->channel, state->file_id, state->offset);
+			//debug_print("FTL0[%d]: Continuing file %04x at offset %d\n",state->channel, state->file_id, state->offset);
 		}
 		fclose(f);
 
@@ -1204,7 +1204,7 @@ int ftl0_clear_upload_table() {
  * Load the upload table from disk.
  */
 int ftl0_load_upload_table() {
-	debug_print("Loading upload table from: %s:\n", g_upload_table_path);
+	//debug_print("Loading upload table from: %s:\n", g_upload_table_path);
 	FILE *file = fopen ( g_upload_table_path, "r" );
 	if ( file == NULL ) {
 		error_print("Could not load upload table file: %s\n", g_upload_table_path);
