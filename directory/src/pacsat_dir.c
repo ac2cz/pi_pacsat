@@ -257,6 +257,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 		if (new_pfh->uploadTime == 0) {
 			new_pfh->uploadTime = now;
 			//debug_print("Resave new PFH at head of list\n");
+			new_pfh->expireTime = 0; /* This means use the upload time to calculate expiry */
 			resave = true;
 		}
 		new_node->next = NULL;
@@ -269,6 +270,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 		} else {
 			new_pfh->uploadTime = now;
 		}
+		new_pfh->expireTime = 0; /* This means use the upload time to calculate expiry */
 		insert_after(dir_tail, new_node);
 		//debug_print("Resave new PFH with upload time 0\n");
 		resave = true;
@@ -419,7 +421,7 @@ int dir_load_pacsat_file(char *psf_name) {
 		error_print("Err: %d - validating: %s\n", err, psf_name);
 		return EXIT_FAILURE;
 	}
-	if (g_run_self_test)
+	//if (g_run_self_test)
 		pfh_debug_print(pfh);
 	DIR_NODE *p = dir_add_pfh(pfh, psf_name);
 	if (p == NULL) {
@@ -671,17 +673,23 @@ void dir_maintenance(time_t now) {
 	dir_get_file_path_from_file_id(dir_maint_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
 	//    	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
 	//    			file_name_with_path, dir_maint_node->pfh->uploadTime, now-dir_maint_node->pfh->uploadTime);
-	int32_t age = now-dir_maint_node->pfh->uploadTime;
+	long age = 0;
+	if (dir_maint_node->pfh->expireTime == 0) {
+		/* Then expiry is based on a fixed time after upload */
+		age = now - dir_maint_node->pfh->uploadTime;
+	} else {
+		/* Then expiry is a fixed time stored in the file */
+		age = now - dir_maint_node->pfh->expireTime + g_dir_max_file_age_in_seconds;
+	}
+	//debug_print("%s Age: %ld \n",file_name_with_path, age);
 	if (age < 0) {
-		// this looks wrong, something is corrupt.  Skip it
+		// We have not reached the expire time or this looks wrong, something is corrupt.  Skip it
 		dir_maint_node = dir_maint_node->next;
 	} else if (pb_is_file_in_use(dir_maint_node->pfh->fileId)) {
 		// This file is currently being broadcast then skip it until next time
 		dir_maint_node = dir_maint_node->next;
 	} else if (age > g_dir_max_file_age_in_seconds) {
 		// Remove this file it is over the max age
-//TODO - this does not purge a file that was installed into a folder.  Is that what we want??  If we later delete the file
-		// to try to remove the file in the installed folder then it will fail.
 		debug_print("Purging: %s\n",file_name_with_path);
 		if (remove(file_name_with_path) != 0) {
 			error_print("Could not remove the temp file: %s\n", file_name_with_path);
@@ -693,7 +701,6 @@ void dir_maintenance(time_t now) {
 			dir_maint_node = dir_maint_node->next;
 			dir_delete_node(node);
 		}
-
 	} else {
 		// TODO - Check if there is an expiry date in the header
 		dir_maint_node = dir_maint_node->next;

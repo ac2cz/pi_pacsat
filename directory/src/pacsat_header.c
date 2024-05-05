@@ -616,6 +616,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int upd
 	if (ch == EOF) {
 		fclose(infile);
 		fclose(outfile);
+		remove(tmp_filename);
 		return EXIT_FAILURE; // we could not read from to the infile
 	}
 	while (ch!=EOF) {
@@ -623,6 +624,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int upd
 		if (c == EOF) {
 			fclose(infile);
 			fclose(outfile);
+			remove(tmp_filename);
 			return EXIT_FAILURE; // we could not write to the file
 		}
 		ch=fgetc(infile);
@@ -696,7 +698,7 @@ HEADER * pfh_load_from_file(char *filename) {
 	}
 	int size;
 	int crc_passed;
-	pfh = pfh_extract_header(buffer, MAX_PFH_LENGTH, &size, &crc_passed);
+	pfh = pfh_extract_header(buffer, num, &size, &crc_passed);
 	//debug_print("Read: %d Header size: %d\n",num, size);
 
 	if (!crc_passed) {
@@ -751,6 +753,9 @@ void pfh_debug_print(HEADER *pfh) {
 	now = pfh->uploadTime;
 	strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&now));
 	debug_print("Up:%s ", buf);
+	now = pfh->expireTime;
+	strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&now));
+	debug_print("Ex:%s ", buf);
 	debug_print(" Contains:%s\n", pfh->userFileName);
 }
 
