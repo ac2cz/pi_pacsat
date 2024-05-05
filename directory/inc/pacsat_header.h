@@ -134,6 +134,7 @@ int pfh_add_keyword(HEADER *pfh, char *key);
 int pfh_remove_keyword(HEADER *pfh, char *key);
 int pfh_contains_keyword(HEADER *pfh, char *key);
 int pfh_extract_file(HEADER *pfh, char *dest_folder);
+int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int update_keywords_and_expiry);
 int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder);
 int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder);
 HEADER * pfh_load_from_file(char *filename);

@@ -750,9 +750,9 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 			case SWCmdPacsatInstallFile: {
-				/* Args are 32 bit fild id, folder id, flag to use id or user_file_name */
+				/* Args are 32 bit fild id, 16 bit folder id */
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
-				int folder_id = sw_command->comArg.arguments[2];
+				uint16_t folder_id = sw_command->comArg.arguments[2];
 				//dir_debug_print(NULL);
 
 				if (folder_id == FolderDir) {
@@ -786,20 +786,13 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				}
 
 				//debug_print("Install File: %04x : %s into dir: %d - %s | File Name:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
-				if (pfh_extract_file(node->pfh, folder) != EXIT_SUCCESS) {
+				if (pfh_extract_file_and_update_keywords(node->pfh, folder, true) != EXIT_SUCCESS) {
 					debug_print("Error extracting file into %s\n",folder);
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
 					break;
-				}
-				/* If successful we change the header to include a keyword for the installed dir and set the upload and expiry dates */
-				pfh_add_keyword(node->pfh, folder);
-				node->pfh->uploadTime = time(0);
-				node->pfh->expireTime = 0xFFFFFF7F; // 2038
-				if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
-					debug_print("** Failed to re-write header in file.\n");
 				}
 
 				int rc = pb_send_ok(from_callsign);
@@ -817,7 +810,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 			case SWCmdPacsatDeleteFile: {
 //				debug_print("Arg: %02x %02x\n",sw_command->comArg.arguments[0],sw_command->comArg.arguments[1]);
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
-				int folder_id = sw_command->comArg.arguments[2];
+				uint16_t folder_id = sw_command->comArg.arguments[2];
 
 				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) break;
@@ -858,7 +851,7 @@ int pb_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 			case SWCmdPacsatDeleteFolder: {
-				int folder_id = sw_command->comArg.arguments[0];
+				uint16_t folder_id = sw_command->comArg.arguments[0];
 				int purge_orphan_files = sw_command->comArg.arguments[1];
 
 				char *folder = get_folder_str(folder_id);

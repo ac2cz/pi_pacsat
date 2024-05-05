@@ -79,6 +79,7 @@ static DIR_NODE *dir_head = NULL;  // the head of the directory linked list
 static DIR_NODE *dir_tail = NULL;  // the tail of the directory linked list
 DIR_NODE *dir_maint_node = NULL;   // the node where we are performing directory maintenance
 static char data_folder[MAX_FILE_PATH_LEN]; // Directory path of the data folder
+static char tmp_folder[MAX_FILE_PATH_LEN]; // Directory path of the tmp folder
 static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory folder
 static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
 static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
@@ -109,6 +110,11 @@ int dir_make_dir(char * folder) {
 int dir_init(char *folder) {
 	strlcpy(data_folder, folder, sizeof(data_folder));
 	if (dir_make_dir(data_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	strlcpy(dir_folder, data_folder, sizeof(tmp_folder));
+	strlcat(tmp_folder, "/", sizeof(tmp_folder));
+	strlcat(tmp_folder, FolderTmp, sizeof(tmp_folder));
+	if (dir_make_dir(tmp_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	strlcpy(dir_folder, data_folder, sizeof(dir_folder));
 	strlcat(dir_folder, "/", sizeof(dir_folder));

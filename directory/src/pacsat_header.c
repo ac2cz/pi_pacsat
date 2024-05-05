@@ -567,7 +567,7 @@ int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
  * it could not.
  *
  */
-int pfh_extract_file(HEADER *pfh, char *dest_folder) {
+int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int update_keywords_and_expiry) {
 
 	char src_filename[MAX_FILE_PATH_LEN];
 	char dest_filepath[MAX_FILE_PATH_LEN];
@@ -592,7 +592,11 @@ int pfh_extract_file(HEADER *pfh, char *dest_folder) {
 		strlcat(dest_filepath, pfh->userFileName, MAX_FILE_PATH_LEN);
 	}
 
-	FILE * outfile = fopen(dest_filepath, "wb");
+	char tmp_filename[MAX_FILE_PATH_LEN];
+	strlcpy(tmp_filename, dest_filepath, sizeof(tmp_filename));
+	strlcat(tmp_filename, ".tmp", sizeof(tmp_filename));
+
+	FILE * outfile = fopen(tmp_filename, "wb");
 	if (outfile == NULL) {
 		return EXIT_FAILURE;
 	}
@@ -626,8 +630,25 @@ int pfh_extract_file(HEADER *pfh, char *dest_folder) {
 
 	fclose(infile);
 	fclose(outfile);
+
+	if (update_keywords_and_expiry) {
+		/* If successful we change the header to include a keyword for the installed dir and set the upload and expiry dates */
+		pfh_add_keyword(pfh, dest_folder);
+		pfh->uploadTime = time(0);
+		pfh->expireTime = 0xFFFFFF7F; // 2038
+		if (pfh_update_pacsat_header(pfh, get_dir_folder()) != EXIT_SUCCESS) {
+			debug_print("** Failed to re-write header in file.\n");
+			remove(tmp_filename);
+			return EXIT_FAILURE;
+		}
+	}
+
+	/* Commit the file */
+	rename(tmp_filename, dest_filepath);
 	//debug_print("Extracted %s from %s\n",dest_filepath, src_filename);
 
+	/* Try to uncompress. We do this after the commit as the keywords are now updated. Unzip can change the filename
+	 * TODO - failure scenarios here need more testing */
 	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
 		char command[MAX_FILE_PATH_LEN];
 		char output_folder[MAX_FILE_PATH_LEN];
@@ -645,6 +666,10 @@ int pfh_extract_file(HEADER *pfh, char *dest_folder) {
 	}
 
 	return EXIT_SUCCESS;
+}
+
+int pfh_extract_file(HEADER *pfh, char *dest_folder) {
+	return pfh_extract_file_and_update_keywords(pfh, dest_folder, false);
 }
 
 /**
