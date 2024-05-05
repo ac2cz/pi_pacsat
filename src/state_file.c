@@ -30,7 +30,7 @@
 #include "str_util.h"
 
 /* Forward functions */
-void save_int_key_value(char * key, int val, FILE *file);
+int save_int_key_value(char * key, int val, FILE *file);
 
 static char filename[MAX_FILE_PATH_LEN];
 
@@ -88,29 +88,37 @@ void load_state(char *filepath) {
 }
 
 void save_state() {
-	debug_print("Saving state to: %s:\n", filename);
-	FILE *file = fopen ( filename, "w" );
+	char tmp_filename[MAX_FILE_PATH_LEN];
+	strlcpy(tmp_filename, filename, sizeof(tmp_filename));
+	strlcat(tmp_filename, ".tmp", sizeof(tmp_filename));
+
+	debug_print("Saving state to: %s:\n", tmp_filename);
+	FILE *file = fopen ( tmp_filename, "w" );
 	if ( file != NULL ) {
-		save_int_key_value(STATE_PB_OPEN, g_state_pb_open, file);
-		save_int_key_value(STATE_UPLINK_OPEN, g_state_uplink_open, file);
-		save_int_key_value(PB_STATUS_PERIOD_IN_SECONDS, g_pb_status_period_in_seconds, file);
-		save_int_key_value(PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_pb_max_period_for_client_in_seconds, file);
-		save_int_key_value(UPLINK_STATUS_PERIOD_IN_SECONDS, g_uplink_status_period_in_seconds, file);
-		save_int_key_value(UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_uplink_max_period_for_client_in_seconds, file);
-		save_int_key_value(DIR_MAX_FILE_AGE_IN_SECONDS, g_dir_max_file_age_in_seconds, file);
-		save_int_key_value(DIR_MAINTENANCE_IN_SECONDS, g_dir_maintenance_period_in_seconds, file);
-		save_int_key_value(FTL0_MAX_FILE_SIZE, g_ftl0_max_file_size, file);
-		save_int_key_value(FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS, g_ftl0_max_upload_age_in_seconds, file);
+		if(save_int_key_value(STATE_PB_OPEN, g_state_pb_open, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(STATE_UPLINK_OPEN, g_state_uplink_open, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(PB_STATUS_PERIOD_IN_SECONDS, g_pb_status_period_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(PB_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_pb_max_period_for_client_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(UPLINK_STATUS_PERIOD_IN_SECONDS, g_uplink_status_period_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_uplink_max_period_for_client_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(DIR_MAX_FILE_AGE_IN_SECONDS, g_dir_max_file_age_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(DIR_MAINTENANCE_IN_SECONDS, g_dir_maintenance_period_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(FTL0_MAX_FILE_SIZE, g_ftl0_max_file_size, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS, g_ftl0_max_upload_age_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
 	}
 	fclose(file);
+	/* This rename is atomic and overwrites the existing file.  So we either get the whole new file or we stay with the old one.*/
+	rename(tmp_filename, filename);
 }
 
-void save_int_key_value(char * key, int val, FILE *file) {
+int save_int_key_value(char * key, int val, FILE *file) {
 	char buf[MAX_CONFIG_LINE_LENGTH];
 	strlcpy(buf, key, sizeof(buf));
 	strlcat(buf, "=", sizeof(buf));
 	char int_str[25];
 	snprintf(int_str, 25, "%d\n",val);
 	strlcat(buf, int_str, sizeof(buf));
-	fputs(buf, file);
+	int rc = fputs(buf, file);
+	if (rc == EOF) return EXIT_FAILURE;
+		return EXIT_SUCCESS;
 }

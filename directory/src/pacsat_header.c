@@ -626,7 +626,7 @@ int pfh_extract_file(HEADER *pfh, char *dest_folder) {
 
 	fclose(infile);
 	fclose(outfile);
-	debug_print("Extracted %s from %s\n",dest_filepath, src_filename);
+	//debug_print("Extracted %s from %s\n",dest_filepath, src_filename);
 
 	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
 		char command[MAX_FILE_PATH_LEN];

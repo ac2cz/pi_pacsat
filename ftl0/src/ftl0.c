@@ -1252,12 +1252,16 @@ int ftl0_load_upload_table() {
 }
 
 int ftl0_save_upload_table() {
+	int rc = 0;
+	char tmp_filename[MAX_FILE_PATH_LEN];
+	strlcpy(tmp_filename, g_upload_table_path, sizeof(tmp_filename));
+	strlcat(tmp_filename, ".tmp", sizeof(tmp_filename));
 	//debug_print("Saving upload table to: %s:\n", g_upload_table_path);
 	int i;
 	char buf[MAX_CONFIG_LINE_LENGTH];
-	FILE *file = fopen ( g_upload_table_path, "w" );
+	FILE *file = fopen ( tmp_filename, "w" );
 	if (file == NULL) {
-		debug_print("Unable to open %s for writing: %s\n", g_upload_table_path, strerror(errno));
+		debug_print("Unable to open %s for writing: %s\n", tmp_filename, strerror(errno));
 		return EXIT_FAILURE;
 	}
 
@@ -1267,9 +1271,16 @@ int ftl0_save_upload_table() {
 
 		snprintf(buf, MAX_CONFIG_LINE_LENGTH, "%d,%d,%d,%s,%d\n",upload_table[i].file_id,upload_table[i].length,upload_table[i].request_time
 				,upload_table[i].callsign,upload_table[i].offset);
-		fputs(buf, file);
+		rc = fputs(buf, file);
+		if (rc == EOF) {
+			debug_print("ERROR: Writing upload table. Error: %d\n",rc);
+			fclose(file);
+			return EXIT_FAILURE;
+		}
 	}
 	fclose(file);
+	rename(tmp_filename, g_upload_table_path);
+
 	return EXIT_SUCCESS;
 }
 
