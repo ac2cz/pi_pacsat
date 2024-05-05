@@ -77,6 +77,7 @@ int g_uplink_status_period_in_seconds = 30;
 int g_uplink_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds
 int g_dir_max_file_age_in_seconds = 4320000; // 50 Days or 50 * 24 * 60 * 60 seconds
 int g_dir_maintenance_period_in_seconds = 5; // check one node after this delay
+int g_dir_next_file_number = 1; // this is updated from the state file and then when the dir is loaded
 int g_ftl0_max_file_size = 153600; // 150k max file size
 int g_ftl0_max_upload_age_in_seconds = 5 * 24 * 60 * 60; // 5 days
 

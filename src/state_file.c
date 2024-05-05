@@ -72,6 +72,8 @@ void load_state(char *filepath) {
 					g_dir_max_file_age_in_seconds = atoi(value);
 				} else if (strcmp(key, DIR_MAINTENANCE_IN_SECONDS) == 0) {
 					g_dir_maintenance_period_in_seconds = atoi(value);
+				} else if (strcmp(key, DIR_NEXT_FILE_NUMBER) == 0) {
+					g_dir_next_file_number = atoi(value);
 				} else if (strcmp(key, FTL0_MAX_FILE_SIZE) == 0) {
 					g_ftl0_max_file_size = atoi(value);
 				} else if (strcmp(key, FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS) == 0) {
@@ -92,7 +94,7 @@ void save_state() {
 	strlcpy(tmp_filename, filename, sizeof(tmp_filename));
 	strlcat(tmp_filename, ".tmp", sizeof(tmp_filename));
 
-	debug_print("Saving state to: %s:\n", tmp_filename);
+	//debug_print("Saving state to: %s:\n", tmp_filename);
 	FILE *file = fopen ( tmp_filename, "w" );
 	if ( file != NULL ) {
 		if(save_int_key_value(STATE_PB_OPEN, g_state_pb_open, file) == EXIT_FAILURE) { fclose(file); return;}
@@ -103,6 +105,7 @@ void save_state() {
 		if(save_int_key_value(UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_uplink_max_period_for_client_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(DIR_MAX_FILE_AGE_IN_SECONDS, g_dir_max_file_age_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(DIR_MAINTENANCE_IN_SECONDS, g_dir_maintenance_period_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(DIR_NEXT_FILE_NUMBER, g_dir_next_file_number, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(FTL0_MAX_FILE_SIZE, g_ftl0_max_file_size, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS, g_ftl0_max_upload_age_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
 	}

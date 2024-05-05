@@ -430,7 +430,7 @@ int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len) {
 
 	/* least sig 2 bits of flags are 00 if this is a fill request */
 	if ((dir_header->flags & 0b11) == 0b00) {
-		pb_debug_print_dir_req(data, len);
+		//pb_debug_print_dir_req(data, len);
 		//debug_print("DIR FILL REQUEST: flags: %02x BLK_SIZE: %04x\n", dir_header->flags & 0xff, dir_header->block_size &0xffff);
 
 		/* Get the number of holes in this request and make sure it is in a valid range */

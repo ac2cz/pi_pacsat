@@ -79,11 +79,10 @@ static DIR_NODE *dir_head = NULL;  // the head of the directory linked list
 static DIR_NODE *dir_tail = NULL;  // the tail of the directory linked list
 DIR_NODE *dir_maint_node = NULL;   // the node where we are performing directory maintenance
 static char data_folder[MAX_FILE_PATH_LEN]; // Directory path of the data folder
-static char tmp_folder[MAX_FILE_PATH_LEN]; // Directory path of the tmp folder
 static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory folder
 static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
 static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
-static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
+//static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
 unsigned char pfh_byte_buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
 
 
@@ -110,11 +109,6 @@ int dir_make_dir(char * folder) {
 int dir_init(char *folder) {
 	strlcpy(data_folder, folder, sizeof(data_folder));
 	if (dir_make_dir(data_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
-
-	strlcpy(dir_folder, data_folder, sizeof(tmp_folder));
-	strlcat(tmp_folder, "/", sizeof(tmp_folder));
-	strlcat(tmp_folder, FolderTmp, sizeof(tmp_folder));
-	if (dir_make_dir(tmp_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	strlcpy(dir_folder, data_folder, sizeof(dir_folder));
 	strlcat(dir_folder, "/", sizeof(dir_folder));
@@ -194,8 +188,9 @@ uint32_t dir_get_file_id_from_filename(char *file_name) {
  *
  */
 int dir_next_file_number() {
-	next_file_id++;
-	return next_file_id;
+	g_dir_next_file_number++;
+	save_state();
+	return g_dir_next_file_number;
 }
 
 char *get_data_folder() {
@@ -432,8 +427,8 @@ int dir_load_pacsat_file(char *psf_name) {
 		if (pfh != NULL) free(pfh);
 		return EXIT_FAILURE;
 	} else {
-		if (pfh->fileId > next_file_id)
-			next_file_id = pfh->fileId;
+		if (pfh->fileId > g_dir_next_file_number)
+			g_dir_next_file_number = pfh->fileId;
 		return EXIT_SUCCESS;
 	}
 	return EXIT_SUCCESS;
@@ -469,6 +464,7 @@ int dir_load() {
 			}
 	}
 	closedir(d);
+	save_state(); // in case the next file number changed
 
 	return EXIT_SUCCESS;
 }

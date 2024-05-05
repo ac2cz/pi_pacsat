@@ -176,7 +176,7 @@ int ftl0_add_request(char *from_callsign, int channel, int file_id) {
 int ftl0_remove_request(int pos) {
 	time_t now = time(0);
 	int duration = (int)(now - uplink_list[pos].request_time);
-	debug_print("SESSION TIME: %s connected for %d seconds\n",uplink_list[number_on_uplink].callsign, duration);
+	//debug_print("SESSION TIME: %s connected for %d seconds\n",uplink_list[number_on_uplink].callsign, duration);
 	if (number_on_uplink == 0) return EXIT_FAILURE;
 	if (pos >= number_on_uplink) return EXIT_FAILURE;
 	if (pos != number_on_uplink-1) {
@@ -299,7 +299,7 @@ variables to UL_CMD_WAIT
  *
  */
 int ftl0_connection_received(char *from_callsign, char *to_callsign, int channel, int incomming, unsigned char * data) {
-	debug_print("Connection for File Upload from: %s\n",from_callsign);
+	//debug_print("Connection for File Upload from: %s\n",from_callsign);
 
 	/* Add the request, which initializes their uplink state machine. At this point we don't know the
 	 * file number, offset or dir node */
@@ -309,8 +309,8 @@ int ftl0_connection_received(char *from_callsign, char *to_callsign, int channel
 		ftl0_disconnect(from_callsign, channel);
 		return EXIT_SUCCESS;
 	} else {
-		debug_print("Added %s to uplink list\n",from_callsign);
-		ftl0_debug_print_list();
+		debug_print("TO-LOG: Added %s to uplink list\n",from_callsign);
+		//ftl0_debug_print_list();
 	}
 
 	int frame_type = LOGIN_RESP;
@@ -418,7 +418,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 		break;
 
 	case UL_CMD_OK:
-		debug_print("%s: UL_CMD_OK - %s\n",uplink_list[selected_station].callsign, ftl0_packet_type_names[ftl0_type]);
+		//debug_print("%s: UL_CMD_OK - %s\n",uplink_list[selected_station].callsign, ftl0_packet_type_names[ftl0_type]);
 
 		/* Process the EVENT through the UPLINK STATE MACHINE */
 		switch (ftl0_type) {
@@ -628,7 +628,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 			unsigned long available = (buffer.f_bavail * buffer.f_frsize);
 			//debug_print("Disk Space: %d --> %.0fG\n", (int)total, total/GB);
 			// TODO - this does not quite agree with typing df . in the same file system
-			debug_print(" Available: %ld blks %ld --> %.0fG\n", buffer.f_bavail, (long)available, available/GB);
+			//debug_print(" Available: %ld blks %ld --> %.0fG\n", buffer.f_bavail, (long)available, available/GB);
 
 			/* Need to check all the partially uploaded files to see what remaining space they have claimed. */
 			uint32_t upload_table_space = 0; //ftl0_get_space_reserved_by_upload_table();
@@ -644,7 +644,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 			return ER_NO_ROOM;  // TODO - is this the best error to send?  File system is unavailable it seems
 		}
 		ul_go_data.server_file_no = state->file_id;
-		debug_print("Allocated file id: %d\n",ul_go_data.server_file_no);
+		//debug_print("Allocated file id: %d\n",ul_go_data.server_file_no);
 		ul_go_data.byte_offset = 0;
 		state->offset = 0;
 
