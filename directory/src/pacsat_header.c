@@ -755,7 +755,7 @@ void pfh_debug_print(HEADER *pfh) {
 	debug_print("Up:%s ", buf);
 	now = pfh->expireTime;
 	strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&now));
-	debug_print("Ex:%s ", buf);
+	debug_print("Ex:%u %s ", pfh->expireTime, buf);
 	debug_print(" Contains:%s\n", pfh->userFileName);
 }
 

@@ -886,6 +886,7 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 		}
 		return ER_NO_ROOM;
 	}
+	debug_print("ADDED: "); pfh_debug_print(pfh);
 	return ER_NONE;
 }
 

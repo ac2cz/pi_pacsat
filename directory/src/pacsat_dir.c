@@ -244,6 +244,14 @@ void insert_after(DIR_NODE *p, DIR_NODE *new_node) {
  *
  * If the upload_time was modified then the pacsat file header is resaved to disk
  *
+ * New files have their expiry time set to zero.  This means that expiry is based on the upload time.
+ * We use this system so it is possible to change the expiry time for all files at once.  i.e. if we
+ * reduce the expiry time from 5 days to 3 then all files uploaded more than 3 days ago will be purged
+ * straight away.  When we set expiryTime that gives a fixed point in the future that a file expires.
+ * We only allow that to be set by a system process or by a command station.
+ * e.g. we might give telem or wod files a very short expiry time.  Installed files are set to never expire
+ * by giving it an expiry time way in the future.
+ *
  */
 DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 	int resave = false;
@@ -669,6 +677,12 @@ void dir_maintenance(time_t now) {
 	if (dir_maint_node == NULL)
 		dir_maint_node = dir_head;
 
+	if (pb_is_file_in_use(dir_maint_node->pfh->fileId)) {
+		// This file is currently being broadcast then skip it until next time
+		dir_maint_node = dir_maint_node->next;
+		return;
+	}
+
 	char file_name_with_path[MAX_FILE_PATH_LEN];
 	dir_get_file_path_from_file_id(dir_maint_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
 	//    	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
@@ -684,9 +698,6 @@ void dir_maintenance(time_t now) {
 	//debug_print("%s Age: %ld \n",file_name_with_path, age);
 	if (age < 0) {
 		// We have not reached the expire time or this looks wrong, something is corrupt.  Skip it
-		dir_maint_node = dir_maint_node->next;
-	} else if (pb_is_file_in_use(dir_maint_node->pfh->fileId)) {
-		// This file is currently being broadcast then skip it until next time
 		dir_maint_node = dir_maint_node->next;
 	} else if (age > g_dir_max_file_age_in_seconds) {
 		// Remove this file it is over the max age
