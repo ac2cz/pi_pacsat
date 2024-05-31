@@ -101,9 +101,10 @@ int ftl0_remove_upload_file(uint32_t file_id);
  */
 int ftl0_send_status() {
 	if (g_state_uplink_open == FTL0_STATE_SHUT) {
-		unsigned char shut[] = "Shut: ABCD";
-		int rc = send_raw_packet(g_bbs_callsign, BBSTAT, PID_NO_PROTOCOL, shut, sizeof(shut));
-		return rc;
+		return EXIT_SUCCESS;
+//		unsigned char shut[] = "Shut: ABCD";
+//		int rc = send_raw_packet(g_bbs_callsign, BBSTAT, PID_NO_PROTOCOL, shut, sizeof(shut));
+//		return rc;
 	} else 	if (number_on_uplink == MAX_UPLINK_LIST_LENGTH) {
 		unsigned char full[] = "Full: ABCD";
 		int rc = send_raw_packet(g_bbs_callsign, BBSTAT, PID_NO_PROTOCOL, full, sizeof(full));

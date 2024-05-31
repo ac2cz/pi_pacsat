@@ -38,6 +38,7 @@
 #define PB_ERR_TEMPORARY 1
 #define PB_ERR_FILE_NOT_AVAILABLE 2
 #define PB_ERR_FILE_NOT_DOWNLOADABLE 3
+#define PB_ERR_COMMAND_NOT_AVAILABLE 4
 #define PB_ERR_FILE_INVALID_PACKET 5
 
 #define EXIT_LAST_CHUNK_SENT 2 /* This exit code is used when we have sent the last chunk of a file */
@@ -113,7 +114,8 @@ struct t_dir_pair {
 } __attribute__ ((__packed__));
 typedef struct t_dir_pair DIR_DATE_PAIR;
 
-
+int pb_send_ok(char *from_callsign);
+int pb_send_err(char *from_callsign, int err);
 int pb_next_action();
 void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len);
 int pb_is_file_in_use(uint32_t file_id);
