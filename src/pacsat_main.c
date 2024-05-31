@@ -77,6 +77,9 @@ int g_uplink_status_period_in_seconds = 30;
 int g_uplink_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds
 int g_dir_max_file_age_in_seconds = 4320000; // 50 Days or 50 * 24 * 60 * 60 seconds
 int g_dir_maintenance_period_in_seconds = 5; // check one node after this delay
+int g_ftl0_maintenance_period_in_seconds = 60; // check after this delay
+int g_file_queue_check_period_in_seconds = 5; // check after this delay
+
 int g_dir_next_file_number = 1; // this is updated from the state file and then when the dir is loaded
 int g_ftl0_max_file_size = 153600; // 150k max file size
 int g_ftl0_max_upload_age_in_seconds = 5 * 24 * 60 * 60; // 5 days
@@ -88,6 +91,8 @@ int frame_queue_status_known = false;
 char config_file_name[MAX_FILE_PATH_LEN] = "pi_pacsat.config";
 char data_folder_path[MAX_FILE_PATH_LEN] = "./pacsat";
 time_t last_dir_maint_time;
+time_t last_ftl0_maint_time;
+time_t last_file_queue_check_time;
 
 
 /**
@@ -357,13 +362,20 @@ int main(int argc, char *argv[]) {
 		if ((now - last_dir_maint_time) > g_dir_maintenance_period_in_seconds) {
 			last_dir_maint_time = now;
 			dir_maintenance(now);
-
-			// TODO - we could run ftl0 main less frequently as it checks the whole list e.g. once per hour or per day
+		}
+		if (last_ftl0_maint_time == 0) last_ftl0_maint_time = now; // Initialize at startup
+		if ((now - last_ftl0_maint_time) > g_ftl0_maintenance_period_in_seconds) {
+			last_ftl0_maint_time = now;
 			char *path = get_upload_folder();
 			ftl0_maintenance(now, path);
 		}
+		if (last_file_queue_check_time == 0) last_file_queue_check_time = now; // Initialize at startup
+		if ((now - last_file_queue_check_time) > g_file_queue_check_period_in_seconds) {
+			last_file_queue_check_time = now;
+			dir_file_queue_check(now, get_wod_folder(), PFH_TYPE_WOD, "WOD");
+			dir_file_queue_check(now, get_log_folder(), PFH_TYPE_ASCII, "LOG");
+		}
 	}
-
 
 
 	/* Wait until the TNC thread returns.  Otherwise the program just ends.

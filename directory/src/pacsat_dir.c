@@ -81,6 +81,7 @@ DIR_NODE *dir_maint_node = NULL;   // the node where we are performing directory
 static char data_folder[MAX_FILE_PATH_LEN]; // Directory path of the data folder
 static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory folder
 static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
+static char log_folder[MAX_FILE_PATH_LEN]; // Directory path of the log folder
 static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
 //static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
 unsigned char pfh_byte_buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
@@ -119,6 +120,11 @@ int dir_init(char *folder) {
 	strlcat(wod_folder, "/", sizeof(wod_folder));
 	strlcat(wod_folder, get_folder_str(FolderWod), sizeof(wod_folder));
 	if (dir_make_dir(wod_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	strlcpy(log_folder, data_folder, sizeof(log_folder));
+	strlcat(log_folder, "/", sizeof(log_folder));
+	strlcat(log_folder, get_folder_str(FolderLog), sizeof(log_folder));
+	if (dir_make_dir(log_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	strlcpy(upload_folder, data_folder, sizeof(upload_folder));
 	strlcat(upload_folder, "/", sizeof(upload_folder));
@@ -207,6 +213,10 @@ char *get_upload_folder() {
 
 char *get_wod_folder() {
 	return wod_folder; // We can return this because it is static
+}
+
+char *get_log_folder() {
+	return log_folder; // We can return this because it is static
 }
 
 /**
@@ -429,7 +439,7 @@ int dir_load_pacsat_file(char *psf_name) {
 		error_print("Err: %d - validating: %s\n", err, psf_name);
 		return EXIT_FAILURE;
 	}
-	//if (g_run_self_test)
+	if (g_run_self_test)
 		pfh_debug_print(pfh);
 	DIR_NODE *p = dir_add_pfh(pfh, psf_name);
 	if (p == NULL) {
@@ -457,8 +467,8 @@ int dir_load() {
 	DIR * d = opendir(dir_folder);
 	if (d == NULL) { error_print("** Could not open dir: %s\n",dir_folder); return EXIT_FAILURE; }
 	struct dirent *de;
+	char psf_name[MAX_FILE_PATH_LEN];
 	for (de = readdir(d); de != NULL; de = readdir(d)) {
-		char psf_name[MAX_FILE_PATH_LEN];
 		strlcpy(psf_name, dir_folder, sizeof(psf_name));
 		strlcat(psf_name, "/", sizeof(psf_name));
 		strlcat(psf_name, de->d_name, sizeof(psf_name));
@@ -719,6 +729,76 @@ void dir_maintenance(time_t now) {
 
 }
 
+void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * destination) {
+	//debug_print("Checking for files in queue: %s\n",folder);
+	DIR * d = opendir(folder);
+	if (d == NULL) { error_print("** Could not open dir: %s\n",folder); return; }
+	struct dirent *de;
+	char file_name[MAX_FILE_PATH_LEN];
+	char user_file_name[MAX_FILE_PATH_LEN];
+	char psf_name[MAX_FILE_PATH_LEN];
+	for (de = readdir(d); de != NULL; de = readdir(d)) {
+		strlcpy(user_file_name, de->d_name, sizeof(user_file_name));
+		strlcpy(file_name, folder, sizeof(file_name));
+		strlcat(file_name, "/", sizeof(file_name));
+		strlcat(file_name, de->d_name, sizeof(file_name));
+		if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0)) {
+			uint32_t id = dir_next_file_number();
+			char compression_type = BODY_NOT_COMPRESSED;
+			/* Stat the file before we add the header to capture the create date */
+			struct stat st;
+			time_t create_time = now;
+			if (stat(file_name, &st) == EXIT_SUCCESS) {
+				create_time = st.st_atim.tv_sec; /* We use the time of last access as the create time.  So for a wod file this is the time the last data was written. */
+				if (st.st_size > UNCOMPRESSED_FILE_SIZE_LIMIT) {
+					/* Compress if more than 200 bytes used */
+					char zip_command[MAX_FILE_PATH_LEN];
+					char compressed_file_name[MAX_FILE_PATH_LEN];
+
+					strlcpy(compressed_file_name, file_name, sizeof(compressed_file_name));
+					strlcat(compressed_file_name,".zip", sizeof(compressed_file_name));
+
+					strlcpy(zip_command, "zip -j -q ",sizeof(zip_command)); // -j to "junk" or not store the paths.  -q quiet
+					strlcat(zip_command, compressed_file_name,sizeof(zip_command));
+					strlcat(zip_command, " ",sizeof(zip_command));
+					strlcat(zip_command, file_name,sizeof(zip_command));
+					int zip_rc = system(zip_command);
+					if (zip_rc == EXIT_SUCCESS) {
+						/* We could compress it */
+						strlcat(user_file_name,".zip", sizeof(user_file_name));
+						compression_type = BODY_COMPRESSED_PKZIP;
+						remove(file_name);
+						strlcpy(file_name, compressed_file_name, sizeof(file_name));
+					}
+				}
+			}
+			HEADER *pfh = pfh_make_internal_header(now, file_type, id, "", g_bbs_callsign, destination, de->d_name, user_file_name,
+					create_time, 0, compression_type);
+			dir_get_file_path_from_file_id(pfh->fileId, dir_folder, psf_name, MAX_FILE_PATH_LEN);
+
+			debug_print("Adding file in queue: %s\n",folder);	pfh_debug_print(pfh);
+			dir_get_file_path_from_file_id(id, dir_folder, psf_name, sizeof(psf_name));
+
+			int rc;
+			rc = pfh_make_internal_file(pfh, dir_folder, file_name);
+			if (rc != EXIT_SUCCESS) {
+				printf("** Failed to make pacsat file %s\n", file_name);
+				remove(psf_name); // remove this in case it was partially written, ignore any error
+				if (pfh != NULL) free(pfh);
+				continue;
+			}
+
+			rc = dir_load_pacsat_file(psf_name);
+			if (rc != EXIT_SUCCESS) {
+				debug_print("May need to remove potentially corrupt file from queue: %s\n", file_name);
+				continue;
+			}
+			remove(file_name);
+		}
+	}
+	closedir(d);
+}
+
 /**
  * This saves a big endian 4 byte int into little endian format in the MRAM
  */
@@ -855,7 +935,7 @@ int make_big_test_dir() {
 
 		write_test_msg(dir_folder, userfilename1, msg, strlen(msg));
 		HEADER *pfh1 = make_test_header(f, snum, "ve2xyz", "g0kla", title, userfilename1);
-		rc = pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
+		rc = test_pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
 		/* Add to the dir */
 		DIR_NODE *p = dir_add_pfh(pfh1,psf_name); if (p == NULL) { printf("** Could not add pfh1 to dir\n"); return EXIT_FAILURE; }
 		sleep(1);
@@ -885,18 +965,18 @@ int make_three_test_entries() {
 	write_test_msg(dir_folder, userfilename3, msg3, strlen(msg3));
 
 	HEADER *pfh1 = make_test_header(1, "1", "ve2xyz", "g0kla", "Test Msg 1", userfilename1);
-	rc = pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
+	rc = test_pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
 	/* Add to the dir */
 	DIR_NODE *p = dir_add_pfh(pfh1,filename1); if (p == NULL) { printf("** Could not add pfh1 to dir\n"); return EXIT_FAILURE; }
 
 	sleep(2);
 	HEADER *pfh2 = make_test_header(2, "2", "ve2xyz", "g0kla", "Test Msg 2", userfilename2);
-	rc = pfh_make_pacsat_file(pfh2,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file2\n"); return EXIT_FAILURE; }
+	rc = test_pfh_make_pacsat_file(pfh2,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file2\n"); return EXIT_FAILURE; }
 	p = dir_add_pfh(pfh2,filename2); if (p == NULL) { printf("** Could not add pfh2 to dir\n"); return EXIT_FAILURE; }
 
 	// no sleep between these adds to test the case where two files have same upload time
 	HEADER *pfh3 = make_test_header(3, "3", "ve2xyz", "g0kla", "Test Msg 3", userfilename3);
-	rc = pfh_make_pacsat_file(pfh3,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file3\n"); return EXIT_FAILURE; }
+	rc = test_pfh_make_pacsat_file(pfh3,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file3\n"); return EXIT_FAILURE; }
 	p = dir_add_pfh(pfh3,filename3);  if (p == NULL) { printf("** Could not add pfh3 to dir\n"); return EXIT_FAILURE; }
 
 	sleep(1);
@@ -913,7 +993,7 @@ int make_three_test_entries() {
 		if (c != EXIT_SUCCESS) { printf("** Could not copy pfh_spec.txt to dir. Rc %d errno %d\n",c,errno); return EXIT_FAILURE; }
 	}
 	HEADER *pfh4 = make_test_header(4, "4", "ac2cz", "g0kla", "Pacsat Header Definition", userfilename4);
-	rc = pfh_make_pacsat_file(pfh4,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file4\n"); return EXIT_FAILURE; }
+	rc = test_pfh_make_pacsat_file(pfh4,  dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file4\n"); return EXIT_FAILURE; }
 	p = dir_add_pfh(pfh4,filename4);  if (p == NULL) { printf("** Could not add pfh4 to dir\n"); return EXIT_FAILURE; }
 
 	return rc;
@@ -940,7 +1020,7 @@ int test_pacsat_dir_one() {
 	HEADER *pfh1 = make_test_header(1, "1", "ve2xyz", "g0kla", "Test Msg 1", userfilename1);
 
 	pfh_debug_print(pfh1);
-	rc = pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
+	rc = test_pfh_make_pacsat_file(pfh1, dir_folder); if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file1\n"); return EXIT_FAILURE; }
 	pfh_debug_print(pfh1);
 
 	debug_print(".. then load it\n");

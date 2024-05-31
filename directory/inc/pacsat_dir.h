@@ -45,6 +45,7 @@ char *get_data_folder();
 char *get_dir_folder();
 char *get_upload_folder();
 char *get_wod_folder();
+char *get_log_folder();
 int dir_next_file_number();
 void dir_get_upload_file_path_from_file_id(int file_id, char *filename, int max_len);
 void dir_get_file_path_from_file_id(int file_id, char *dir_name, char *filename, int max_len);
@@ -58,6 +59,7 @@ DIR_NODE * dir_get_pfh_by_date(DIR_DATE_PAIR pair, DIR_NODE *p);
 DIR_NODE * dir_get_pfh_by_folder_id(char *folder, DIR_NODE *p);
 DIR_NODE * dir_get_node_by_id(int file_id);
 void dir_maintenance();
+void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * destination);
 
 int test_pacsat_dir();
 int test_pacsat_dir_one();

@@ -33,6 +33,8 @@
 #define UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS "uplink_max_period_for_client_in_seconds"
 #define DIR_MAX_FILE_AGE_IN_SECONDS "dir_max_file_age_in_seconds"
 #define DIR_MAINTENANCE_IN_SECONDS "dir_maintenance_period_in_seconds"
+#define FTL0_MAINTENANCE_IN_SECONDS "ftl0_maintenance_period_in_seconds"
+#define FILE_QUEUE_CHECK_IN_SECONDS "file_queue_check_period_in_seconds"
 #define DIR_NEXT_FILE_NUMBER "dir_next_file_number"
 #define FTL0_MAX_FILE_SIZE "ftl0_max_file_size"
 #define FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS "ftl0_max_upload_age_in_seconds"
@@ -45,6 +47,8 @@ extern int g_uplink_status_period_in_seconds;
 extern int g_uplink_max_period_for_client_in_seconds;
 extern int g_dir_max_file_age_in_seconds;
 extern int g_dir_maintenance_period_in_seconds;
+extern int g_ftl0_maintenance_period_in_seconds;
+extern int g_file_queue_check_period_in_seconds;
 extern int g_dir_next_file_number;
 extern int g_ftl0_max_file_size;
 extern int g_ftl0_max_upload_age_in_seconds;

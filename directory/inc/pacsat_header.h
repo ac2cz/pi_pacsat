@@ -64,6 +64,8 @@
 #define  BODY_COMPRESSED_PKZIP 0x02
 #define  BODY_COMPRESSED_GZIP 0x03
 
+#define UNCOMPRESSED_FILE_SIZE_LIMIT 200 /* Compress files over this size before header added */
+
 #define PFH_TYPE_ASCII 0
 #define PFH_TYPE_WOD 3
 #define PFH_TYPE_IMAGES 211
@@ -136,12 +138,16 @@ int pfh_contains_keyword(HEADER *pfh, char *key);
 int pfh_extract_file(HEADER *pfh, char *dest_folder);
 int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int update_keywords_and_expiry);
 int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder);
-int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder);
 HEADER * pfh_load_from_file(char *filename);
 void pfh_debug_print(HEADER *pfh);
 unsigned char * pfh_store_short(unsigned char *buffer, unsigned short n);
 unsigned char * pfh_store_int(unsigned char *buffer, unsigned int n);
+HEADER * pfh_make_internal_header(time_t now, uint8_t file_type, unsigned int id, char *filename,
+		char *source, char *destination, char *title, char *user_filename, time_t update_time,
+		int expire_time, char compression_type);
+int pfh_make_internal_file(HEADER *pfh, char *dir_folder, char *body_filename);
 
+int test_pfh_make_pacsat_file(HEADER *pfh, char *dir_folder);
 int test_pacsat_header();
 int write_test_msg(char *dir_folder, char *pfh_filename, char *contents, int length);
 int test_pfh_checksum() ;

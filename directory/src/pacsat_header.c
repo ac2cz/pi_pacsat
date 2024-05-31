@@ -443,8 +443,10 @@ int pfh_generate_header_bytes(HEADER *pfh, int body_size, unsigned char *header_
  * save the new bytes to the start of the file.  All fields except the header
  * checksum need to be correct.
  *
- * NOTE - this does not preserve any PFH fields that we do not know about. It
- * is better to update fields in place using the routines in dir.
+ * NOTE - this does not preserve PFH fields that we do not know about. But it does
+ * allow 5 arbitrary fields that the ground station can add.  If more unknown fields are
+ * included then they will be lost in this update.
+ * It may be better to update fields in place using the routines in dir.
  *
  */
 int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
@@ -512,49 +514,6 @@ int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
 	return EXIT_SUCCESS;
 }
 
-/**
- * pfh_make_pacsat_file()
- *
- * Create a new PACSAT File based on a Header and body file.  Save the new file
- * into out_filename
- *
- * Returns: EXIT SUCCESS or EXIT_FAILURE
- */
-int pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
-	if (pfh == NULL) return EXIT_FAILURE;
-
-	char body_filename[MAX_FILE_PATH_LEN];
-	char out_filename[MAX_FILE_PATH_LEN];
-	pfh_get_user_filename(pfh, dir_folder, body_filename, MAX_FILE_PATH_LEN);
-	//pfh_get_filename(pfh,dir_folder, out_filename, MAX_FILE_PATH_LEN);
-
-	dir_get_file_path_from_file_id(pfh->fileId, dir_folder, out_filename, MAX_FILE_PATH_LEN);
-
-	/* Measure body_size and calculate body_checksum */
-	short int body_checksum = 0;
-	unsigned int body_size = 0;
-
-	FILE *infile = fopen(body_filename, "rb");
-	if (infile == NULL) return EXIT_FAILURE;
-
-	int ch=fgetc(infile);
-
-	while (ch!=EOF) {
-		body_checksum += ch & 0xff;
-		body_size++;
-		ch=fgetc(infile);
-	}
-	fclose(infile);
-	pfh->bodyCRC = body_checksum;
-
-	/* Build Pacsat File Header */
-	unsigned char buffer[MAX_PFH_LENGTH];
-	int len = pfh_generate_header_bytes(pfh, body_size, buffer);
-
-	int rc = pfh_save_pacsatfile(buffer, len, out_filename, body_filename);
-
-	return rc;
-}
 
 /**
  * pfh_extract_file()
@@ -792,7 +751,7 @@ int pfh_save_pacsatfile(unsigned char * header, int header_len, char *filename, 
 	if (ch == EOF) {
 		fclose(infile);
 		fclose(outfile);
-		return EXIT_FAILURE; // we could not read from to the infile
+		return EXIT_FAILURE; // we could not read from the infile
 	}
 	while (ch!=EOF) {
 		int c = fputc((unsigned int)ch,outfile);
@@ -930,10 +889,142 @@ unsigned char * add_optional_header(unsigned char *p, HEADER *pfh) {
 	return p;
 }
 
+/**
+ * pfh_make_internal_header()
+ * Make a header for an internal file such as a log file or wod
+ * Return a pointer to the header.  The caller is responsible for freeing
+ *
+ * the memory later.
+ *
+ * The id needs to be obtained from the dir before the header is created. This is then an
+ * unused but allocated id until the file is added or discarded.  Similar to the upload
+ * queue.
+ *
+ * An expire_time of 0 will use the default expire time for all files.
+ *
+ * Returns NULL if the header could not be created.
+ *
+ */
+HEADER * pfh_make_internal_header(time_t now, uint8_t file_type, unsigned int id, char *filename,
+		char *source, char *destination, char *title, char *user_filename, time_t update_time,
+		int expire_time, char compression_type) {
+
+	HEADER *pfh= pfh_new_header();
+	if (pfh != NULL) {
+		/* Required Header Information */
+		pfh->fileId = id;
+		strlcpy(pfh->fileName,filename, sizeof(pfh->fileName));
+		strlcpy(pfh->fileExt,PSF_FILE_EXT, sizeof(pfh->fileExt));
+
+		pfh->createTime = (uint32_t)update_time;
+		pfh->modifiedTime = now;
+		pfh->fileType = file_type;
+
+		/* Extended Header Information */
+		strlcpy(pfh->source,source, sizeof(pfh->source));
+
+		strlcpy(pfh->destination,destination, sizeof(pfh->destination));
+		if (expire_time != 0)
+			pfh->expireTime = now + expire_time;
+
+		/* Optional Header Information */
+		strlcpy(pfh->title,title, sizeof(pfh->title));
+		strlcpy(pfh->userFileName,user_filename, sizeof(pfh->userFileName));
+		pfh->compression = compression_type;
+	}
+	return pfh;
+}
+
+/**
+ * test_pfh_make_pacsat_file()
+ *
+ * Create a new PACSAT File based on a Header and the body file.  Save the new file
+ * into out_filename which will be file_id.act and saved into dir_folder
+ *
+ * Returns: EXIT SUCCESS or EXIT_FAILURE
+ */
+int pfh_make_internal_file(HEADER *pfh, char *dir_folder, char *body_filename) {
+	if (pfh == NULL) return EXIT_FAILURE;
+
+	char out_filename[MAX_FILE_PATH_LEN];
+
+	dir_get_file_path_from_file_id(pfh->fileId, dir_folder, out_filename, MAX_FILE_PATH_LEN);
+
+	/* Measure body_size and calculate body_checksum */
+	short int body_checksum = 0;
+	unsigned int body_size = 0;
+
+	FILE *infile = fopen(body_filename, "rb");
+	if (infile == NULL) return EXIT_FAILURE;
+
+	int ch=fgetc(infile);
+
+	while (ch!=EOF) {
+		body_checksum += ch & 0xff;
+		body_size++;
+		ch=fgetc(infile);
+	}
+	fclose(infile);
+	pfh->bodyCRC = body_checksum;
+
+	/* Build Pacsat File Header */
+	unsigned char buffer[MAX_PFH_LENGTH];
+	int len = pfh_generate_header_bytes(pfh, body_size, buffer);
+
+	int rc = pfh_save_pacsatfile(buffer, len, out_filename, body_filename);
+
+	return rc;
+}
+
+
 
 /*
  * SELF TESTS FOLLOW
  */
+
+/**
+ * test_pfh_make_pacsat_file()
+ *
+ * Create a new PACSAT File based on a Header and the body file specified by the file id.  Save the new file
+ * into out_filename which will be file_id.act
+ *
+ * Returns: EXIT SUCCESS or EXIT_FAILURE
+ */
+int test_pfh_make_pacsat_file(HEADER *pfh, char *dir_folder) {
+	if (pfh == NULL) return EXIT_FAILURE;
+
+	char body_filename[MAX_FILE_PATH_LEN];
+	char out_filename[MAX_FILE_PATH_LEN];
+	pfh_get_user_filename(pfh, dir_folder, body_filename, MAX_FILE_PATH_LEN);
+	//pfh_get_filename(pfh,dir_folder, out_filename, MAX_FILE_PATH_LEN);
+
+	dir_get_file_path_from_file_id(pfh->fileId, dir_folder, out_filename, MAX_FILE_PATH_LEN);
+
+	/* Measure body_size and calculate body_checksum */
+	short int body_checksum = 0;
+	unsigned int body_size = 0;
+
+	FILE *infile = fopen(body_filename, "rb");
+	if (infile == NULL) return EXIT_FAILURE;
+
+	int ch=fgetc(infile);
+
+	while (ch!=EOF) {
+		body_checksum += ch & 0xff;
+		body_size++;
+		ch=fgetc(infile);
+	}
+	fclose(infile);
+	pfh->bodyCRC = body_checksum;
+
+	/* Build Pacsat File Header */
+	unsigned char buffer[MAX_PFH_LENGTH];
+	int len = pfh_generate_header_bytes(pfh, body_size, buffer);
+
+	int rc = pfh_save_pacsatfile(buffer, len, out_filename, body_filename);
+
+	return rc;
+}
 
 void pfh_populate_test_header(int id, HEADER *pfh, char *user_file_name) {
 	if (pfh != NULL) {
@@ -1036,7 +1127,7 @@ int test_pacsat_header() {
 	rc = write_test_msg(".", userfilename1, msg, strlen(msg));
 	if (rc != EXIT_SUCCESS) { printf("** Failed to make file.txt file.\n"); return EXIT_FAILURE; }
 
-	rc = pfh_make_pacsat_file(pfh, ".");
+	rc = test_pfh_make_pacsat_file(pfh, ".");
 	if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file.  Make sure there is a test file called %s\n",userfilename1); return EXIT_FAILURE; }
 	pfh_debug_print(pfh);
 	if (pfh->fileId != 0x1234) { 				printf("** Wrong fileId\n"); rc = EXIT_FAILURE; }
@@ -1160,7 +1251,7 @@ int test_pacsat_header_disk_access() {
 	rc = write_test_msg(".", userfilename1, msg, strlen(msg));
 	if (rc != EXIT_SUCCESS) { printf("** Failed to make 999_file.txt file.\n"); return EXIT_FAILURE; }
 
-	rc = pfh_make_pacsat_file(pfh, ".");
+	rc = test_pfh_make_pacsat_file(pfh, ".");
 	if (rc != EXIT_SUCCESS) { printf("** Failed to make pacsat file.  Make sure there is a test file called %s\n",userfilename1); return EXIT_FAILURE; }
 	if (pfh->fileId != 0x999) { 				printf("** Wrong fileId\n"); rc = EXIT_FAILURE; }
 

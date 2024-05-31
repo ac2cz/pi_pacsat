@@ -72,6 +72,10 @@ void load_state(char *filepath) {
 					g_dir_max_file_age_in_seconds = atoi(value);
 				} else if (strcmp(key, DIR_MAINTENANCE_IN_SECONDS) == 0) {
 					g_dir_maintenance_period_in_seconds = atoi(value);
+				} else if (strcmp(key, FTL0_MAINTENANCE_IN_SECONDS) == 0) {
+					g_ftl0_maintenance_period_in_seconds = atoi(value);
+				} else if (strcmp(key, FILE_QUEUE_CHECK_IN_SECONDS) == 0) {
+					g_file_queue_check_period_in_seconds = atoi(value);
 				} else if (strcmp(key, DIR_NEXT_FILE_NUMBER) == 0) {
 					g_dir_next_file_number = atoi(value);
 				} else if (strcmp(key, FTL0_MAX_FILE_SIZE) == 0) {
@@ -105,6 +109,8 @@ void save_state() {
 		if(save_int_key_value(UPLINK_MAX_PERIOD_FOR_CLIENT_IN_SECONDS, g_uplink_max_period_for_client_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(DIR_MAX_FILE_AGE_IN_SECONDS, g_dir_max_file_age_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(DIR_MAINTENANCE_IN_SECONDS, g_dir_maintenance_period_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(FTL0_MAINTENANCE_IN_SECONDS, g_ftl0_maintenance_period_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(FILE_QUEUE_CHECK_IN_SECONDS, g_file_queue_check_period_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(DIR_NEXT_FILE_NUMBER, g_dir_next_file_number, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(FTL0_MAX_FILE_SIZE, g_ftl0_max_file_size, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS, g_ftl0_max_upload_age_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
