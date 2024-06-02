@@ -443,7 +443,7 @@ int pfh_generate_header_bytes(HEADER *pfh, int body_size, unsigned char *header_
  * save the new bytes to the start of the file.  All fields except the header
  * checksum need to be correct.
  *
- * NOTE - this does not preserve PFH fields that we do not know about. But it does
+ * TODO - this does not preserve PFH fields that we do not know about. But it does
  * allow 5 arbitrary fields that the ground station can add.  If more unknown fields are
  * included then they will be lost in this update.
  * It may be better to update fields in place using the routines in dir.
@@ -463,6 +463,8 @@ int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
 	strlcpy(tmp_filename, out_filename, MAX_FILE_PATH_LEN);
 	strlcat(tmp_filename, ".", MAX_FILE_PATH_LEN);
 	strlcat(tmp_filename, "tmp", MAX_FILE_PATH_LEN); /* This will give it a name like 0005.act.tmp */
+
+	///////////// TODO - we do this back to front.  Should write updated file into tmp file and then rename as last step to overwrite original.
 
 	if (rename(out_filename, tmp_filename) != EXIT_SUCCESS) {
 		return EXIT_FAILURE;
