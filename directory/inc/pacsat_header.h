@@ -67,8 +67,10 @@
 #define UNCOMPRESSED_FILE_SIZE_LIMIT 200 /* Compress files over this size before header added */
 
 #define PFH_TYPE_ASCII 0
-#define PFH_TYPE_WOD 3
+//#define PFH_TYPE_WOD 3
 #define PFH_TYPE_AL 201
+#define PFH_TYPE_BL 202
+#define PFH_TYPE_WL 203 // WOD Log
 #define PFH_TYPE_IMAGES 211
 
 // These offsets are to the start of the field, i.e. they point to the ID number not the data.
