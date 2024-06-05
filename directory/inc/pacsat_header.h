@@ -68,6 +68,7 @@
 
 #define PFH_TYPE_ASCII 0
 #define PFH_TYPE_WOD 3
+#define PFH_TYPE_AL 201
 #define PFH_TYPE_IMAGES 211
 
 // These offsets are to the start of the field, i.e. they point to the ID number not the data.
@@ -79,7 +80,8 @@
 
 #define MAX_PFH_LENGTH 2048
 
-#define PSF_FILE_EXT "act"
+#define PSF_FILE_EXT ".act"
+#define PSF_FILE_TMP ".tmp"
 
 #define PFH_NUM_OF_SPARE_FIELDS 5
 #define PFH_SHORT_CHAR_FIELD_LEN 33

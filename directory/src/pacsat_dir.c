@@ -167,7 +167,6 @@ void dir_get_file_path_from_file_id(int file_id, char *dir_name, char *filename,
 	strlcpy(filename, dir_name, MAX_FILE_PATH_LEN);
 	strlcat(filename, "/", MAX_FILE_PATH_LEN);
 	strlcat(filename, file_id_str, MAX_FILE_PATH_LEN);
-	strlcat(filename, ".", MAX_FILE_PATH_LEN);
 	strlcat(filename, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
 }
 
@@ -472,7 +471,7 @@ int dir_load() {
 		strlcpy(psf_name, dir_folder, sizeof(psf_name));
 		strlcat(psf_name, "/", sizeof(psf_name));
 		strlcat(psf_name, de->d_name, sizeof(psf_name));
-		if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0))
+		if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0)) {
 			if (str_ends_with(de->d_name, PSF_FILE_EXT)) {
 				int rc = dir_load_pacsat_file(psf_name);
 				if (rc != EXIT_SUCCESS) {
@@ -481,7 +480,10 @@ int dir_load() {
 					 * files! BUT - if we clean dir before loading it should be safe. There is danger they will not
 					 * be expired if not loaded into dir */
 				}
+			} else {
+				debug_print("Skipping %s\n",de->d_name);
 			}
+		}
 	}
 	closedir(d);
 	save_state(); // in case the next file number changed
@@ -743,6 +745,10 @@ void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * d
 		strlcat(file_name, "/", sizeof(file_name));
 		strlcat(file_name, de->d_name, sizeof(file_name));
 		if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0)) {
+			if (str_ends_with(de->d_name, PSF_FILE_TMP)) {
+//				debug_print("Skiping file: %s\n",de->d_name);
+				continue;
+			}
 			uint32_t id = dir_next_file_number();
 			char compression_type = BODY_NOT_COMPRESSED;
 			/* Stat the file before we add the header to capture the create date */

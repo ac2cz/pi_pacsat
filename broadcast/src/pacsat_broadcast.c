@@ -768,7 +768,7 @@ int pb_next_action() {
 			int offset = pb_list[current_station_on_pb].offset;
 			int data_len = pb_make_dir_broadcast_packet(node, packet_data_bytes, &offset);
 			if (data_len == 0) {
-				debug_print("ERROR: ** Could not create the test DIR Broadcast frame\n");
+				debug_print("ERROR: ** Could not create the DIR Broadcast frame\n");
 				/* To avoid a loop where we keep hitting this error, we remove the station from the PB */
 				// TODO - this only occirs if we cant read from file system, so requested file is corrupt perhaps.
 				// We can't now send ER as we already sent OK.  But can remove the entry from the dir and Mark as unavailable?
@@ -1043,6 +1043,7 @@ int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int 
 	dir_get_file_path_from_file_id(node->pfh->fileId,get_dir_folder(), psf_filename, MAX_FILE_PATH_LEN);
 	FILE * f = fopen(psf_filename, "r");
 	if (f == NULL) {
+		error_print("** Can't open psf: %s\n",psf_filename);
 		return 0;
 	}
 	int buffer_size = node->pfh->bodyOffset - *offset;  /* This is how much we have left to read */

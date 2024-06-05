@@ -373,7 +373,7 @@ int main(int argc, char *argv[]) {
 		if ((now - last_file_queue_check_time) > g_file_queue_check_period_in_seconds) {
 			last_file_queue_check_time = now;
 			dir_file_queue_check(now, get_wod_folder(), PFH_TYPE_WOD, "WOD");
-			dir_file_queue_check(now, get_log_folder(), PFH_TYPE_ASCII, "LOG");
+			dir_file_queue_check(now, get_log_folder(), PFH_TYPE_AL, "LOG");
 		}
 	}
 
