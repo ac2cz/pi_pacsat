@@ -59,11 +59,14 @@ typedef enum
 	UL_GO_RESP,
 	UL_ERROR_RESP,			/* 5 */
 	UL_ACK_RESP,
-	UL_NAK_RESP			/* 7 */
+	UL_NAK_RESP,			/* 7 */
+	/* Note that there are commands defined from 8 - 17 for legacy dir and download commands */
+	AUTH_UPLOAD_CMD = 20,       /* Authenticated upload cmd */
+	AUTH_DATA_END = 21
 }
 PACKET_TYPE;
 
-#define MAX_PACKET_ID 7
+#define MAX_PACKET_ID 21
 
 typedef enum
 {
@@ -103,6 +106,13 @@ typedef struct {
 	uint32_t continue_file_no;
 	uint32_t file_length;
 } FTL0_UPLOAD_CMD;
+
+typedef struct {
+	uint32_t dateTime;
+	uint32_t continue_file_no;
+	uint32_t file_length;
+	uint8_t AuthenticationVector[32];
+} FTL0_AUTH_UPLOAD_CMD;
 
 /* This stores the details of an in process file upload */
 typedef struct InProcessFileUpload {

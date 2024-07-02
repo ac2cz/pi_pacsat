@@ -40,6 +40,7 @@
 #include "pacsat_dir.h"
 #include "ftl0.h"
 #include "pacsat_dir.h"
+#include "iors_command.h"
 
 /* An entry on the uplink list keeps track of the file upload and where we are in the upload process */
 struct ftl0_state_machine_t {
@@ -69,7 +70,31 @@ static int current_station_on_uplink = 0; /* This keeps track of which station w
 
 time_t last_uplink_status_time;
 time_t last_uplink_frames_queued_time;
-char * ftl0_packet_type_names[] = {"DATA","DATA_END","LOGIN_RESP","UPLOAD_CMD","UL_GO_RESP","UL_ERROR_RESP","UL_ACK_RESP","UL_NAL_RESP"};
+char * ftl0_packet_type_names[] = {
+		"DATA",
+		"DATA_END",
+		"LOGIN_RESP",
+		"UPLOAD_CMD"
+		,"UL_GO_RESP"
+		,"UL_ERROR_RESP"
+		,"UL_ACK_RESP"
+		,"UL_NAL_RESP"
+		,"NOP"
+		,"NOP"
+		,"NOP" // 10
+		,"NOP"
+		,"NOP"
+		,"NOP"
+		,"NOP"
+		,"NOP" // 15
+		,"NOP"
+		,"NOP"
+		,"NOP"
+		,"NOP"
+		,"AUTH_UPLOAD_CMD" //20
+		,"AUTH_DATA_END"
+
+};
 
 /* Forward declarations */
 int ftl0_send_status();
@@ -82,6 +107,7 @@ void ftl0_disconnect(char *to_callsign, int channel);
 int ftl0_send_err(char *from_callsign, int channel, int err);
 int ftl0_send_ack(char *from_callsign, int channel);
 int ftl0_send_nak(char *from_callsign, int channel, int err);
+int ftl0_process_auth_upload_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
 int ftl0_process_upload_cmd(int list_num, char *from_callsign, int channel, unsigned char *data, int len);
 int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
 int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
@@ -175,8 +201,8 @@ int ftl0_add_request(char *from_callsign, int channel, int file_id) {
  *
  */
 int ftl0_remove_request(int pos) {
-	time_t now = time(0);
-	int duration = (int)(now - uplink_list[pos].request_time);
+	//time_t now = time(0);
+	//int duration = (int)(now - uplink_list[pos].request_time);
 	//debug_print("SESSION TIME: %s connected for %d seconds\n",uplink_list[number_on_uplink].callsign, duration);
 	if (number_on_uplink == 0) return EXIT_FAILURE;
 	if (pos >= number_on_uplink) return EXIT_FAILURE;
@@ -295,6 +321,8 @@ here is 0.
 Upon transmitting the LOGIN_RESP packet the server should initialize its state
 variables to UL_CMD_WAIT
 
+If the clock is not set then we refuse logins as uploaded files can corrupt the directory
+
 // TODO - Falconsat3 transmits a UI frame to confirm the login as well, perhaps so that
  * other stations can see who has logged in??
  *
@@ -318,7 +346,12 @@ int ftl0_connection_received(char *from_callsign, char *to_callsign, int channel
 	FTL0_LOGIN_DATA login_data;
 	unsigned char data_bytes[sizeof(login_data)+2];
 
-	time_t now = time(0); // TODO - we don't really need to call this again, we should use the time in the uplink_list for the station
+	time_t now = time(0);
+	if (now < CLOCK_2024_01_01) { // 2024-01-01
+		/* Do not allow uploads if the clock is not set */
+		ftl0_disconnect(from_callsign, channel);
+		return EXIT_FAILURE;
+	}
 	unsigned char flag = 0;
 	flag |= 1UL << FTL0_VERSION_BIT1;
 	flag |= 1UL << FTL0_VERSION_BIT2;
@@ -414,7 +447,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 
 	switch (uplink_list[selected_station].state) {
 	case UL_UNINIT:
-		debug_print("%s: UNINIT - %s\n",uplink_list[selected_station].callsign, ftl0_packet_type_names[ftl0_type]);
+		//debug_print("%s: UNINIT - %s\n",uplink_list[selected_station].callsign, ftl0_packet_type_names[ftl0_type]);
 
 		break;
 
@@ -423,13 +456,40 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 
 		/* Process the EVENT through the UPLINK STATE MACHINE */
 		switch (ftl0_type) {
+		case AUTH_UPLOAD_CMD:
+			int auth_err = ftl0_process_auth_upload_cmd(selected_station, from_callsign, channel, data, len);
+			if (auth_err != ER_NONE) {
+				// send the error
+				rc = ftl0_send_err(from_callsign, channel, auth_err);
+				if (rc != EXIT_SUCCESS) {
+					/* We likely could not send the error.  Something serious has gone wrong.
+					 * But the best we can do is remove the station and return the error code. */
+					ftl0_disconnect(uplink_list[selected_station].callsign, uplink_list[selected_station].channel);
+					ftl0_remove_request(selected_station);
+				}
+				// If we sent error successfully then we stay in state UL_CMD_OK and the station can try another file
+				return rc;
+			}
+			// We move to state UL_DATA_RX
+			uplink_list[selected_station].state = UL_DATA_RX;
+			break;
 		case UPLOAD_CMD :
+			if (g_state_uplink_open != FTL0_STATE_OPEN) {
+				rc = ftl0_send_err(from_callsign, channel, auth_err);
+				ftl0_disconnect(uplink_list[selected_station].callsign, uplink_list[selected_station].channel);
+				ftl0_remove_request(selected_station);
+			}
 			/* if OK to upload send UL_GO_RESP.  We determine if it is OK by checking if we have space
 			 * and that it is a valid continue of file_id != 0
 			 * This will send UL_GO_DATA packet if checks pass
 			 * TODO - the code would be clearer if this parses the request then returns here and then we
 			 * send the packet from here.  Then all packet sends are from this level of the state machine*/
-			int err = ftl0_process_upload_cmd(selected_station, from_callsign, channel, data, len);
+			int err = ER_NONE;
+			int ftl0_length = ftl0_parse_packet_length(data);
+			if (ftl0_length != 8)
+				err = ER_ILL_FORMED_CMD;
+			else
+				err = ftl0_process_upload_cmd(selected_station, from_callsign, channel, (uint8_t *)(data+2), len);
 			if (err != ER_NONE) {
 				// send the error
 				rc = ftl0_send_err(from_callsign, channel, err);
@@ -486,12 +546,12 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 			break;
 
 		case DATA_END :
-//			debug_print("%s: UL_DATA_RX - DATA END RECEIVED\n",uplink_list[selected_station].callsign);
+			//debug_print("%s: UL_DATA_RX - DATA END RECEIVED\n",uplink_list[selected_station].callsign);
 			err = ftl0_process_data_end_cmd(selected_station, from_callsign, channel, data, len);
 			if (err != ER_NONE) {
 				rc = ftl0_send_nak(from_callsign, channel, err);
 			} else {
-//				debug_print(" *** SENDING ACK *** \n");
+				debug_print(" *** SENDING ACK *** \n");
 				rc = ftl0_send_ack(from_callsign, channel);
 			}
 			uplink_list[selected_station].state = UL_CMD_OK;
@@ -571,6 +631,28 @@ int ftl0_send_nak(char *from_callsign, int channel, int err) {
 	return EXIT_SUCCESS;
 }
 
+int ftl0_process_auth_upload_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len) {
+	struct ftl0_state_machine_t *state = &uplink_list[selected_station];
+
+	int ftl0_length = ftl0_parse_packet_length(data);
+	if (ftl0_length != 44)
+		return ER_ILL_FORMED_CMD;
+
+	FTL0_AUTH_UPLOAD_CMD *upload_cmd = (FTL0_AUTH_UPLOAD_CMD *)(data + 2); /* Point to the data just past the header */
+
+	state->file_id = upload_cmd->continue_file_no;
+	state->length = upload_cmd->file_length;
+
+	int pkt_len = len - 36; // Subtract the length of the datatime and the authentication vector
+    debug_print("Processing AUTH UPLOAD CMD\n");
+
+    if (AuthenticatePacket(upload_cmd->dateTime, (uint8_t *) upload_cmd, ftl0_length - 32, upload_cmd->AuthenticationVector)) {
+    	return ftl0_process_upload_cmd(selected_station, from_callsign, channel, (uint8_t *)(data + 6), pkt_len);
+    } else {
+    	return ER_ILL_FORMED_CMD;
+    }
+}
+
 /**
  * ftl0_process_upload_cmd()
  *
@@ -595,12 +677,7 @@ file.
 int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len) {
 	struct ftl0_state_machine_t *state = &uplink_list[selected_station];
 
-
-	int ftl0_length = ftl0_parse_packet_length(data);
-	if (ftl0_length != 8)
-		return ER_ILL_FORMED_CMD;
-
-	FTL0_UPLOAD_CMD *upload_cmd = (FTL0_UPLOAD_CMD *)(data + 2); /* Point to the data just past the header */
+	FTL0_UPLOAD_CMD *upload_cmd = (FTL0_UPLOAD_CMD *)(data); /* Point to the data just past the header */
 
 	state->file_id = upload_cmd->continue_file_no;
 	state->length = upload_cmd->file_length;
@@ -624,7 +701,7 @@ int ftl0_process_upload_cmd(int selected_station, char *from_callsign, int chann
 			error_print("Cant check file system space: %s\n",strerror(errno));
 			return ER_NO_ROOM;
 		} else {
-			double GB = (1024 * 1024) * 1024;
+			//double GB = (1024 * 1024) * 1024;
 			//unsigned long total = (double)(buffer.f_blocks * buffer.f_frsize);
 			unsigned long available = (buffer.f_bavail * buffer.f_frsize);
 			//debug_print("Disk Space: %d --> %.0fG\n", (int)total, total/GB);
