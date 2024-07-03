@@ -114,6 +114,13 @@ typedef struct {
 	uint8_t AuthenticationVector[32];
 } FTL0_AUTH_UPLOAD_CMD;
 
+typedef struct {
+	uint32_t dateTime;
+	uint16_t header_check;
+	uint16_t body_check;
+	uint8_t AuthenticationVector[32];
+} FTL0_AUTH_DATA_END;
+
 /* This stores the details of an in process file upload */
 typedef struct InProcessFileUpload {
     char callsign[MAX_CALLSIGN_LEN]; /* The callsign of the stations that initiated the upload */

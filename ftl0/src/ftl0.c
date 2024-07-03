@@ -110,7 +110,8 @@ int ftl0_send_nak(char *from_callsign, int channel, int err);
 int ftl0_process_auth_upload_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
 int ftl0_process_upload_cmd(int list_num, char *from_callsign, int channel, unsigned char *data, int len);
 int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
-int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
+int ftl0_process_auth_data_end_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
+int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, uint16_t header_check, uint16_t body_check);
 int ftl0_make_packet(unsigned char *data_bytes, unsigned char *info, int length, int frame_type);
 int ftl0_parse_packet_type(unsigned char * data);
 int ftl0_parse_packet_length(unsigned char * data);
@@ -475,15 +476,13 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 			break;
 		case UPLOAD_CMD :
 			if (g_state_uplink_open != FTL0_STATE_OPEN) {
-				rc = ftl0_send_err(from_callsign, channel, auth_err);
+				rc = ftl0_send_err(from_callsign, channel, ER_ILL_FORMED_CMD);
 				ftl0_disconnect(uplink_list[selected_station].callsign, uplink_list[selected_station].channel);
 				ftl0_remove_request(selected_station);
 			}
 			/* if OK to upload send UL_GO_RESP.  We determine if it is OK by checking if we have space
 			 * and that it is a valid continue of file_id != 0
-			 * This will send UL_GO_DATA packet if checks pass
-			 * TODO - the code would be clearer if this parses the request then returns here and then we
-			 * send the packet from here.  Then all packet sends are from this level of the state machine*/
+			 * This will send UL_GO_DATA packet if checks pass */
 			int err = ER_NONE;
 			int ftl0_length = ftl0_parse_packet_length(data);
 			if (ftl0_length != 8)
@@ -516,7 +515,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 		break;
 
 	case UL_DATA_RX:
-//		debug_print("%s: UL_DATA_RX - %s\n",uplink_list[selected_station].callsign, ftl0_packet_type_names[ftl0_type]);
+		//debug_print("%s: UL_DATA_RX - %s\n",uplink_list[selected_station].callsign, ftl0_packet_type_names[ftl0_type]);
 
 		switch (ftl0_type) {
 		case DATA :
@@ -544,10 +543,32 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 				}
 			}
 			break;
-
+		case AUTH_DATA_END :
+			//debug_print("%s: UL_DATA_RX - AUTH DATA END RECEIVED\n",uplink_list[selected_station].callsign);
+			err = ftl0_process_auth_data_end_cmd(selected_station, from_callsign, channel, data, len);
+			if (err != ER_NONE) {
+				rc = ftl0_send_nak(from_callsign, channel, err);
+			} else {
+				debug_print(" *** SENDING ACK *** \n");
+				rc = ftl0_send_ack(from_callsign, channel);
+			}
+			uplink_list[selected_station].state = UL_CMD_OK;
+			if (rc != EXIT_SUCCESS) {
+				/*  We likely could not send the error.  Something serious has gone wrong.
+				 * But the best we can do is remove the station and return the error code. */
+				ftl0_disconnect(uplink_list[selected_station].callsign, uplink_list[selected_station].channel);
+				ftl0_remove_request(selected_station);
+			}
+			return rc;
+			break;
 		case DATA_END :
 			//debug_print("%s: UL_DATA_RX - DATA END RECEIVED\n",uplink_list[selected_station].callsign);
-			err = ftl0_process_data_end_cmd(selected_station, from_callsign, channel, data, len);
+			int ftl0_length = ftl0_parse_packet_length(data);
+			if (ftl0_length != 0) {
+				err = ER_BAD_HEADER; /* This will cause a NAK to be sent as the data is corrupt in some way */
+			} else {
+				err = ftl0_process_data_end_cmd(selected_station, from_callsign, channel, 0, 0);
+			}
 			if (err != ER_NONE) {
 				rc = ftl0_send_nak(from_callsign, channel, err);
 			} else {
@@ -632,21 +653,21 @@ int ftl0_send_nak(char *from_callsign, int channel, int err) {
 }
 
 int ftl0_process_auth_upload_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len) {
-	struct ftl0_state_machine_t *state = &uplink_list[selected_station];
+	//struct ftl0_state_machine_t *state = &uplink_list[selected_station];
 
 	int ftl0_length = ftl0_parse_packet_length(data);
-	if (ftl0_length != 44)
+	if (ftl0_length != sizeof(FTL0_AUTH_UPLOAD_CMD))
 		return ER_ILL_FORMED_CMD;
 
 	FTL0_AUTH_UPLOAD_CMD *upload_cmd = (FTL0_AUTH_UPLOAD_CMD *)(data + 2); /* Point to the data just past the header */
 
-	state->file_id = upload_cmd->continue_file_no;
-	state->length = upload_cmd->file_length;
+//	state->file_id = upload_cmd->continue_file_no;
+//	state->length = upload_cmd->file_length;
 
-	int pkt_len = len - 36; // Subtract the length of the datatime and the authentication vector
-    debug_print("Processing AUTH UPLOAD CMD\n");
+	int pkt_len = len - 36; // Subtract the length of the datetime and the authentication vector
+    //debug_print("Processing AUTH UPLOAD CMD\n");
 
-    if (AuthenticatePacket(upload_cmd->dateTime, (uint8_t *) upload_cmd, ftl0_length - 32, upload_cmd->AuthenticationVector)) {
+    if (AuthenticatePacket(upload_cmd->dateTime, (uint8_t *) upload_cmd, ftl0_length - 32, upload_cmd->AuthenticationVector) == EXIT_SUCCESS) {
     	return ftl0_process_upload_cmd(selected_station, from_callsign, channel, (uint8_t *)(data + 6), pkt_len);
     } else {
     	return ER_ILL_FORMED_CMD;
@@ -897,16 +918,24 @@ int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel
 	return ER_NONE;
 }
 
-int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len) {
-	int ftl0_type = ftl0_parse_packet_type(data);
-	if (ftl0_type != DATA_END) {
-		return ER_ILL_FORMED_CMD; /* We should never get this */
-	}
+int ftl0_process_auth_data_end_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len) {
 	int ftl0_length = ftl0_parse_packet_length(data);
-	if (ftl0_length != 0) {
-		return ER_BAD_HEADER; /* This will cause a NAK to be sent as the data is corrupt in some way */
+	if (ftl0_length != sizeof(FTL0_AUTH_DATA_END)) {
+		return ER_ILL_FORMED_CMD;
 	}
 
+	FTL0_AUTH_DATA_END *data_end_cmd = (FTL0_AUTH_DATA_END *)(data + 2); /* Point to the data just past the header */
+
+	//debug_print("Processing AUTH DATA END CMD\n");
+
+	if (AuthenticatePacket(data_end_cmd->dateTime, (uint8_t *) data_end_cmd, ftl0_length - 32, data_end_cmd->AuthenticationVector)  == EXIT_SUCCESS) {
+		return ftl0_process_data_end_cmd(selected_station, from_callsign, channel, data_end_cmd->header_check, data_end_cmd->body_check);
+	} else {
+		return ER_ILL_FORMED_CMD;
+	}
+}
+
+int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, uint16_t header_check, uint16_t body_check) {
 	char tmp_filename[MAX_FILE_PATH_LEN];
 	dir_get_upload_file_path_from_file_id(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
 
@@ -924,6 +953,16 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 		return ER_BAD_HEADER;
 	}
 
+	if (g_state_uplink_open == FTL0_STATE_COMMAND) {
+		//debug_print("HEADER: File: %4x Pkt: %4x\n", pfh->headerCRC, header_check);
+		if (header_check != pfh->headerCRC) {
+			return ER_HEADER_CHECK;
+		}
+		//debug_print("BODY: File: %4x Pkt: %4x\n", pfh->bodyCRC, body_check);
+		if (body_check != pfh->bodyCRC) {
+			return ER_BODY_CHECK;
+		}
+	}
 	int rc = dir_validate_file(pfh, tmp_filename);
 	if (rc != ER_NONE) {
 		free(pfh);
