@@ -206,7 +206,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					if (rc != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send OK Response to TNC \n");
 					}
-					node->pfh->uploadTime = time(0);
+					node->pfh->uploadTime = 0; /* This will be allocated the current time when we reload the dir below */
 					if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
 						debug_print("** Failed to re-write header in file.\n");
 					}
@@ -250,7 +250,6 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				DIR_NODE *node;
 				DIR_NODE *next_node = NULL;
-				time_t now = time(0);
 
 				while(node != NULL) {
 					node = dir_get_pfh_by_folder_id(folder, next_node );
@@ -258,7 +257,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 						/* We have a header installed in this folder */
 						//debug_print("Removing: File id %d from folder %s\n", node->pfh->fileId, folder);
 						pc_delete_file_from_folder(node, folder, is_directory_folder);
-						node->pfh->uploadTime = now++;
+						node->pfh->uploadTime = 0; /* These will all be allocated upload times when we reload below */
 						if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
 							debug_print("** Failed to re-write header in file.\n");
 						}

@@ -595,7 +595,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int upd
 	if (update_keywords_and_expiry) {
 		/* If successful we change the header to include a keyword for the installed dir and set the upload and expiry dates */
 		pfh_add_keyword(pfh, dest_folder);
-		pfh->uploadTime = time(0);
+		pfh->uploadTime = 0; /* Requires dir reload to set this correctly */
 		pfh->expireTime = 0xFFFFFF7F; // 2038
 		if (pfh_update_pacsat_header(pfh, get_dir_folder()) != EXIT_SUCCESS) {
 			debug_print("** Failed to re-write header in file.\n");
