@@ -47,6 +47,7 @@ char *get_upload_folder();
 char *get_wod_folder();
 char *get_log_folder();
 int dir_next_file_number();
+uint32_t dir_get_upload_time_now();
 void dir_get_upload_file_path_from_file_id(int file_id, char *filename, int max_len);
 void dir_get_file_path_from_file_id(int file_id, char *dir_name, char *filename, int max_len);
 void dir_get_filename_from_file_id(uint32_t file_id, char *file_name, int max_len);

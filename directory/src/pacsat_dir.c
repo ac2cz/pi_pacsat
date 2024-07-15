@@ -198,6 +198,17 @@ int dir_next_file_number() {
 	return g_dir_next_file_number;
 }
 
+/**
+ * Return the upload time for a record that we are updating and guarantee that it is unique.
+ *
+ */
+uint32_t dir_get_upload_time_now() {
+	uint32_t now = time(0);
+	if (dir_tail->pfh->uploadTime == now)
+		now = now + 1;
+	return now;
+}
+
 char *get_data_folder() {
 	return data_folder; // We can return this because it is static
 }

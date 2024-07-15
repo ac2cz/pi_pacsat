@@ -450,31 +450,26 @@ int pfh_generate_header_bytes(HEADER *pfh, int body_size, unsigned char *header_
  *
  */
 int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
-	char out_filename[MAX_FILE_PATH_LEN];
-	dir_get_file_path_from_file_id(pfh->fileId, dir_folder, out_filename, MAX_FILE_PATH_LEN);
+	char in_filename[MAX_FILE_PATH_LEN];
+	dir_get_file_path_from_file_id(pfh->fileId, dir_folder, in_filename, MAX_FILE_PATH_LEN);
 
 	/* Build Pacsat File Header */
-	unsigned char buffer[MAX_PFH_LENGTH];
+	unsigned char pfh_buffer[MAX_PFH_LENGTH];
 	int original_body_offset = pfh->bodyOffset;
 	int body_size = pfh->fileSize - pfh->bodyOffset;
-	int len = pfh_generate_header_bytes(pfh, body_size, buffer);
+	int pfh_len = pfh_generate_header_bytes(pfh, body_size, pfh_buffer);
 
 	char tmp_filename[MAX_FILE_PATH_LEN];
-	strlcpy(tmp_filename, out_filename, MAX_FILE_PATH_LEN);
+	strlcpy(tmp_filename, in_filename, MAX_FILE_PATH_LEN);
 	strlcat(tmp_filename, ".", MAX_FILE_PATH_LEN);
 	strlcat(tmp_filename, "tmp", MAX_FILE_PATH_LEN); /* This will give it a name like 0005.act.tmp */
 
-	///////////// TODO - we do this back to front.  Should write updated file into tmp file and then rename as last step to overwrite original.
-
-	if (rename(out_filename, tmp_filename) != EXIT_SUCCESS) {
-		return EXIT_FAILURE;
-	}
-	FILE * outfile = fopen(out_filename, "wb");
+	FILE * outfile = fopen(tmp_filename, "wb");
 	if (outfile == NULL) return EXIT_FAILURE;
 
 	/* Save the header bytes, which might be shorter or longer than the original header */
-	for (int i=0; i<len; i++) {
-		int c = fputc(buffer[i],outfile);
+	for (int i=0; i<pfh_len; i++) {
+		int c = fputc(pfh_buffer[i],outfile);
 		if (c == EOF) {
 			fclose(outfile);
 			return EXIT_FAILURE; // we could not write to the file
@@ -482,7 +477,7 @@ int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
 	}
 
 	/* Add the file contents */
-	FILE * infile=fopen(tmp_filename,"rb");
+	FILE * infile=fopen(in_filename,"rb");
 	if (infile == NULL) {
 		fclose(outfile);
 		return EXIT_FAILURE;
@@ -510,8 +505,11 @@ int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
 	fclose(outfile);
 	if (check_size != body_size)
 		error_print("WARNING! Wrote different sized file body for %s\n",tmp_filename)
-	if (remove(tmp_filename) != EXIT_SUCCESS) {
-		error_print("Could not remove tmp file %s\n",tmp_filename)
+//	if (remove(tmp_filename) != EXIT_SUCCESS) {
+//		error_print("Could not remove tmp file %s\n",tmp_filename)
+//	}
+	if (rename(tmp_filename, in_filename) != EXIT_SUCCESS) {
+		return EXIT_FAILURE;
 	}
 	return EXIT_SUCCESS;
 }
