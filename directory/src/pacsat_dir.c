@@ -381,6 +381,8 @@ void dir_free() {
 		p = p->next;
 		dir_delete_node(node);
 	}
+	dir_head = NULL;
+	dir_maint_node = NULL;
 	//debug_print("Dir List Cleared\n");
 }
 
@@ -688,6 +690,12 @@ void dir_maintenance(time_t now) {
 
 	if (dir_maint_node == NULL)
 		dir_maint_node = dir_head;
+
+	/* Safety to prevent crash, though this is an integrity issue and should not happen.  TODO - Log this */
+	if (dir_maint_node->pfh == NULL) {
+		dir_maint_node = dir_maint_node->next;
+		return;
+	}
 
 	if (pb_is_file_in_use(dir_maint_node->pfh->fileId)) {
 		// This file is currently being broadcast then skip it until next time

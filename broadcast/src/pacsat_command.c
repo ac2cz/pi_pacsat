@@ -410,6 +410,13 @@ int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_fo
 		//debug_print("Delete File by userfilename: %04x in dir: %s - %s\n",node->pfh->fileId, folder, dest_file);
 	}
 //	debug_print("Remove: %s\n",dest_file);
+	struct stat st = {0};
+	if (stat(dest_file, &st) == -1) {
+		// No file exists, but try to remove the redundant keywords
+		pfh_remove_keyword(node->pfh, folder);
+		return EXIT_SUCCESS;
+	}
+
 	if (remove(dest_file) == EXIT_SUCCESS) {
 		/* If successful we change the header to remove the keyword for the installed dir and set the upload date */
 		pfh_remove_keyword(node->pfh, folder);
