@@ -68,7 +68,7 @@
 
 #define PFH_TYPE_ASCII 0
 //#define PFH_TYPE_WOD 3
-#define PFH_TYPE_AL 201
+#define PFH_TYPE_AL 223
 #define PFH_TYPE_BL 202
 #define PFH_TYPE_WL 203 // WOD Log
 #define PFH_TYPE_IMAGES 211

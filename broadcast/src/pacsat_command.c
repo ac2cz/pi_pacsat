@@ -24,6 +24,7 @@
 #include "pacsat_dir.h"
 #include "str_util.h"
 #include "ax25_tools.h"
+#include "iors_log.h"
 
 /* Static vars*/
 static int last_command_rc = EXIT_SUCCESS;;
@@ -79,6 +80,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 		last_command_rc = EXIT_SUCCESS; // We can also change this if we in fact send an err or ok command
 
 //		debug_print("Auth Command\n");
+		log_alog2f(WARN_LOG, g_log_filename, ALOG_COMMAND, from_callsign, 0, sw_command->namespaceNumber, sw_command->comArg.command,
+				sw_command->comArg.arguments[0],sw_command->comArg.arguments[1],sw_command->comArg.arguments[2],sw_command->comArg.arguments[3]);
 
 		switch (sw_command->comArg.command) {
 			case SWCmdPacsatEnablePB: {

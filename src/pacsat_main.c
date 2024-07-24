@@ -40,6 +40,7 @@
 #include "pacsat_dir.h"
 #include "pacsat_broadcast.h"
 #include "ftl0.h"
+#include "iors_log.h"
 
 
 /* Forward declarations */
@@ -47,7 +48,6 @@
 void help(void);
 void signal_exit (int sig);
 void signal_load_config (int sig);
-void process_frames_queued(unsigned char * data, int len);
 
 /*
  *  GLOBAL VARIABLES defined here.  They are declared in config.h
@@ -56,6 +56,7 @@ void process_frames_queued(unsigned char * data, int len);
  *
  */
 int g_verbose = false;
+char g_log_filename[MAX_FILE_PATH_LEN];
 
 /* These global variables are in the config file */
 int g_bit_rate = 1200;
@@ -79,6 +80,7 @@ int g_dir_max_file_age_in_seconds = 4320000; // 50 Days or 50 * 24 * 60 * 60 sec
 int g_dir_maintenance_period_in_seconds = 5; // check one node after this delay
 int g_ftl0_maintenance_period_in_seconds = 60; // check after this delay
 int g_file_queue_check_period_in_seconds = 5; // check after this delay
+int g_state_pacsat_log_level = INFO_LOG;
 
 int g_dir_next_file_number = 1; // this is updated from the state file and then when the dir is loaded
 int g_ftl0_max_file_size = 153600; // 150k max file size
@@ -113,7 +115,7 @@ void help(void) {
 void signal_exit (int sig) {
 	debug_print (" Signal received, exiting ...\n");
 	// TODO - unregister the callsign and close connection to AGW
-
+	log_alog1(INFO_LOG, g_log_filename, ALOG_FS_SHUTDOWN, 0);
 	exit (0);
 }
 
@@ -178,9 +180,21 @@ int main(int argc, char *argv[]) {
 	load_config(config_file_name);
 	load_state("pacsat.state");
 
+	char log_path[MAX_FILE_PATH_LEN];
+	//make_dir_path(get_folder_str(FolderLog), data_folder_path, data_folder_path, log_path);
+	strlcpy(log_path, data_folder_path,MAX_FILE_PATH_LEN);
+	strlcat(log_path,"/",MAX_FILE_PATH_LEN);
+	strlcat(log_path,get_folder_str(FolderLog),MAX_FILE_PATH_LEN);
+
+	log_init(get_log_name_str(LOG_NAME), log_path, g_log_filename, false); /* Pass roll logs at startup as false as only restarting iors_control can roll the logs */
+	log_set_level(g_state_pacsat_log_level);
+	log_alog1(INFO_LOG, g_log_filename, ALOG_FS_STARTUP, 0);
+
 	rc = tnc_connect("127.0.0.1", AGW_PORT, g_bit_rate, g_max_frames_in_tx_buffer);
 	if (rc != EXIT_SUCCESS) {
 		error_print("\n Error : Could not connect to TNC on port: %d\n",IORS_PORT);
+		log_err(g_log_filename, IORS_ERR_FS_TNC_FAILURE);
+		log_alog1(INFO_LOG, g_log_filename, ALOG_FS_SHUTDOWN, EXIT_FAILURE);
 		exit(EXIT_FAILURE);
 	}
 
@@ -188,6 +202,8 @@ int main(int argc, char *argv[]) {
 	rc = tnc_start_monitoring('m'); // monitors connected frames, also required to monitor T frames to manage the TX frame queue
 	if (rc != EXIT_SUCCESS) {
 		error_print("\n Error : Could not monitor TNC \n");
+		log_err(g_log_filename, IORS_ERR_FS_TNC_FAILURE);
+		log_alog1(INFO_LOG, g_log_filename, ALOG_FS_SHUTDOWN, EXIT_FAILURE);
 		exit(EXIT_FAILURE);
 	}
 
@@ -235,6 +251,9 @@ int main(int argc, char *argv[]) {
 	rc = tnc_register_callsign(g_bbs_callsign);
 	if (rc != EXIT_SUCCESS) {
 		error_print("\n Error : Could not register callsign with TNC \n");
+		//TODO - split call and ssid!
+		log_alog2(ERR_LOG, g_log_filename, ALOG_IORS_ERR, g_bbs_callsign, 0, IORS_ERR_FS_TNC_FAILURE);
+		log_alog1(INFO_LOG, g_log_filename, ALOG_FS_SHUTDOWN, EXIT_FAILURE);
 		exit(EXIT_FAILURE);
 	}
 
@@ -250,6 +269,8 @@ int main(int argc, char *argv[]) {
 	rc = pthread_create( &tnc_listen_pthread, NULL, tnc_listen_process, (void*) name);
 	if (rc != EXIT_SUCCESS) {
 		error_print("FATAL. Could not start the TNC listen thread.\n");
+		log_err(g_log_filename, IORS_ERR_TNC_FAILURE);
+		log_alog1(INFO_LOG, g_log_filename, ALOG_FS_SHUTDOWN, rc);
 		exit(rc);
 	}
 
@@ -382,6 +403,7 @@ int main(int argc, char *argv[]) {
 	 * Use a signal to end the program externally. */
 
 	pthread_join(tnc_listen_pthread, NULL);
+	log_alog1(INFO_LOG, g_log_filename, ALOG_FS_SHUTDOWN, EXIT_SUCCESS);
 	exit(EXIT_SUCCESS);
 }
 

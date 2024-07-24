@@ -29,6 +29,7 @@
 /* These global variables are not in the config file */
 extern int g_run_self_test;    /* true when the self test is running */
 extern int g_verbose;          /* print verbose output when set */
+extern char g_log_filename[MAX_FILE_PATH_LEN];
 /* Frames are queued by the TNC until they are transmitted.  Only hold this many before pausing
  * the broadcasts. If set too high then stations wait to receive OK confirms or for their own
  * broadcast to start */

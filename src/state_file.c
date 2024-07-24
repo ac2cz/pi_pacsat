@@ -82,6 +82,8 @@ void load_state(char *filepath) {
 					g_ftl0_max_file_size = atoi(value);
 				} else if (strcmp(key, FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS) == 0) {
 					g_ftl0_max_upload_age_in_seconds = atoi(value);
+				} else if (strcmp(key, STATE_PACSAT_LOG_LEVEL) == 0) {
+					g_state_pacsat_log_level = atoi(value);
 				} else {
 					error_print("Unknown key in state file: %s : %s\n",filename, key);
 				}
@@ -114,6 +116,7 @@ void save_state() {
 		if(save_int_key_value(DIR_NEXT_FILE_NUMBER, g_dir_next_file_number, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(FTL0_MAX_FILE_SIZE, g_ftl0_max_file_size, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS, g_ftl0_max_upload_age_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(STATE_PACSAT_LOG_LEVEL, g_state_pacsat_log_level, file) == EXIT_FAILURE) { fclose(file); return;}
 	}
 	fclose(file);
 	/* This rename is atomic and overwrites the existing file.  So we either get the whole new file or we stay with the old one.*/

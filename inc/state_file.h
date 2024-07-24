@@ -38,6 +38,7 @@
 #define DIR_NEXT_FILE_NUMBER "dir_next_file_number"
 #define FTL0_MAX_FILE_SIZE "ftl0_max_file_size"
 #define FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS "ftl0_max_upload_age_in_seconds"
+#define STATE_PACSAT_LOG_LEVEL "pacsat_log_level"
 
 extern int g_state_pb_open;
 extern int g_state_uplink_open;
@@ -52,6 +53,7 @@ extern int g_file_queue_check_period_in_seconds;
 extern int g_dir_next_file_number;
 extern int g_ftl0_max_file_size;
 extern int g_ftl0_max_upload_age_in_seconds;
+extern int g_state_pacsat_log_level;
 
 void load_state(char *filename);
 void save_state();

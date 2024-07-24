@@ -66,6 +66,7 @@
 #include "ftl0.h"
 #include "str_util.h"
 #include "debug.h"
+#include "iors_log.h"
 
 /* Forward declarations */
 void dir_free();
@@ -477,7 +478,11 @@ int dir_load_pacsat_file(char *psf_name) {
 int dir_load() {
 	dir_free();
 	DIR * d = opendir(dir_folder);
-	if (d == NULL) { error_print("** Could not open dir: %s\n",dir_folder); return EXIT_FAILURE; }
+	if (d == NULL) {
+		log_err(g_log_filename, IORS_ERR_FS_DIR_LOAD_FAILURE);
+		error_print("** Could not open dir: %s\n",dir_folder);
+		return EXIT_FAILURE;
+	}
 	struct dirent *de;
 	char psf_name[MAX_FILE_PATH_LEN];
 	for (de = readdir(d); de != NULL; de = readdir(d)) {
@@ -753,7 +758,10 @@ void dir_maintenance(time_t now) {
 void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * destination) {
 	//debug_print("Checking for files in queue: %s\n",folder);
 	DIR * d = opendir(folder);
-	if (d == NULL) { error_print("** Could not open dir: %s\n",folder); return; }
+	if (d == NULL) {
+		error_print("** Could not open dir: %s\n",folder);
+		return;
+	}
 	struct dirent *de;
 	char file_name[MAX_FILE_PATH_LEN];
 	char user_file_name[MAX_FILE_PATH_LEN];
