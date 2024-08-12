@@ -630,6 +630,17 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int upd
 		if (shell_rc != 0) debug_print("Error: unzip returned %d\n",shell_rc);
 	}
 
+	/* Ascii files need to be made linux compatible */
+	if (pfh->fileType == PFH_TYPE_ASCII) {
+		char line_endings_cmd[MAX_FILE_PATH_LEN];
+		strlcpy(line_endings_cmd, "dos2unix ",MAX_FILE_PATH_LEN);
+		strlcat(line_endings_cmd, dest_filepath, sizeof(dest_filepath));
+		if (system(line_endings_cmd) != EXIT_SUCCESS) {
+			error_print("%s: Could not convert line endings to linux\n",dest_filepath);
+		};
+
+	}
+
 	return EXIT_SUCCESS;
 }
 

@@ -68,6 +68,7 @@
 #include "debug.h"
 #include "iors_log.h"
 
+
 /* Forward declarations */
 void dir_free();
 void dir_delete_node(DIR_NODE *node);
@@ -84,6 +85,7 @@ static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory fo
 static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
 static char log_folder[MAX_FILE_PATH_LEN]; // Directory path of the log folder
 static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
+static char txt_folder[MAX_FILE_PATH_LEN]; // Directory path of the txt folder
 //static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
 unsigned char pfh_byte_buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
 
@@ -131,6 +133,11 @@ int dir_init(char *folder) {
 	strlcat(upload_folder, "/", sizeof(upload_folder));
 	strlcat(upload_folder, get_folder_str(FolderUpload), sizeof(upload_folder));
 	if (dir_make_dir(upload_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	strlcpy(txt_folder, data_folder, sizeof(txt_folder));
+	strlcat(txt_folder, "/", sizeof(txt_folder));
+	strlcat(txt_folder, get_folder_str(FolderTxt), sizeof(txt_folder));
+	if (dir_make_dir(txt_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	debug_print("Pacsat Initialized in: %s\n", data_folder);
 	return EXIT_SUCCESS;
@@ -228,6 +235,10 @@ char *get_wod_folder() {
 
 char *get_log_folder() {
 	return log_folder; // We can return this because it is static
+}
+
+char *get_txt_folder() {
+	return txt_folder; // We can return this because it is static
 }
 
 /**
@@ -776,6 +787,7 @@ void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * d
 //				debug_print("Skiping file: %s\n",de->d_name);
 				continue;
 			}
+
 			uint32_t id = dir_next_file_number();
 			char compression_type = BODY_NOT_COMPRESSED;
 			/* Stat the file before we add the header to capture the create date */
