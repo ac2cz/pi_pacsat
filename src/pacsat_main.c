@@ -186,7 +186,7 @@ int main(int argc, char *argv[]) {
 	strlcat(log_path,"/",MAX_FILE_PATH_LEN);
 	strlcat(log_path,get_folder_str(FolderLog),MAX_FILE_PATH_LEN);
 
-	log_init(get_log_name_str(LOG_NAME), log_path, g_log_filename, false); /* Pass roll logs at startup as false as only restarting iors_control can roll the logs */
+	log_init(get_log_name_str(LOG_NAME), log_path, g_log_filename);
 	log_set_level(g_state_pacsat_log_level);
 	log_alog1(INFO_LOG, g_log_filename, ALOG_FS_STARTUP, 0);
 
