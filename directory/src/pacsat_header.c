@@ -604,14 +604,11 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int upd
 		}
 	}
 
-	/* Commit the file */
-	rename(tmp_filename, dest_filepath);
-	//debug_print("Extracted %s from %s\n",dest_filepath, src_filename);
 
 	/* Try to uncompress. We do this after the commit as the keywords are now updated. Unzip can change the filename
 	 * TODO - failure scenarios here need more testing */
 	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
-
+		/* Uncompress and form the final file */
 		char command[MAX_FILE_PATH_LEN];
 		char output_folder[MAX_FILE_PATH_LEN];
 
@@ -622,12 +619,18 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int upd
 		strlcpy(command, "unzip -o -d", MAX_FILE_PATH_LEN);
 		strlcat(command, output_folder, MAX_FILE_PATH_LEN);
 		strlcat(command, " ", MAX_FILE_PATH_LEN);
-		strlcat(command, dest_filepath, MAX_FILE_PATH_LEN);
+		strlcat(command, tmp_filename, MAX_FILE_PATH_LEN);
 		debug_print("Uncomnpressing file: %s\n",command);
 		// TODO System needs cancellation headers if this runs in seperate thread
 		int shell_rc = system(command);
 		if (shell_rc == -1) debug_print("Error: Unable to start shell for unzip command\n");
 		if (shell_rc != 0) debug_print("Error: unzip returned %d\n",shell_rc);
+		remove(tmp_filename);
+	} else {
+		/* Commit the file without uncompressing */
+		rename(tmp_filename, dest_filepath);
+		//debug_print("Extracted %s from %s\n",dest_filepath, src_filename);
+
 	}
 
 	/* Ascii files need to be made linux compatible */
