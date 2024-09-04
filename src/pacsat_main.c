@@ -60,9 +60,9 @@ char g_log_filename[MAX_FILE_PATH_LEN];
 
 /* These global variables are in the config file */
 int g_bit_rate = 1200;
-char g_bbs_callsign[10] = "PFS3-12";
-char g_broadcast_callsign[10] = "PFS3-11";
-char g_digi_callsign[10] = "PFS3-1";
+char g_bbs_callsign[10] = "NA1SS-12";
+char g_broadcast_callsign[10] = "NA1SS-11";
+char g_digi_callsign[10] = "NA1SS-1";
 int g_max_frames_in_tx_buffer = 2;
 int g_serial_fd = -1;
 char g_iors_last_command_time_path[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";

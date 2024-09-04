@@ -29,7 +29,7 @@
 /* Static vars*/
 static int last_command_rc = EXIT_SUCCESS;;
 
-int pc_execute_file_in_folder(DIR_NODE *node, char *folder);
+int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, uint16_t exec_arg2);
 int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder);
 
 /**
@@ -184,24 +184,15 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 			case SwCmdPacsatExecuteFile: {
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
-				uint16_t folder_id = sw_command->comArg.arguments[2];
+				uint16_t exec_arg1 = sw_command->comArg.arguments[2];
+				uint16_t exec_arg2 = sw_command->comArg.arguments[3];
 
-				if (folder_id == FolderDir) {
-					debug_print("Error - cant install into Directory\n");
-					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
-					if (r != EXIT_SUCCESS) {
-						debug_print("\n Error : Could not send ERR Response to TNC \n");
-					}
-					break;
-				}
-				char *folder = get_folder_str(folder_id);
+				char *folder = get_folder_str(FolderBin);
 				if (folder == NULL) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
 					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					break;
 				}
-
 
 				DIR_NODE *node = dir_get_node_by_id(file_id);
 				if (node == NULL) {
@@ -214,7 +205,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 
-				int rc = pc_execute_file_in_folder(node, folder);
+				int rc = pc_execute_file_in_folder(node, folder, exec_arg1, exec_arg2);
 				if (rc == EXIT_SUCCESS) {
 					last_command_rc = EXIT_SUCCESS;
 					int rc = pb_send_ok(from_callsign);
@@ -444,17 +435,16 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 		return EXIT_SUCCESS;
 }
 
-int pc_execute_file_in_folder(DIR_NODE *node, char *folder) {
+int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, uint16_t exec_arg2) {
 	char dest_file[MAX_FILE_PATH_LEN];
-		char file_name[10];
-		snprintf(file_name, 10, "%04x",node->pfh->fileId);
+		//char file_name[10];
+		//snprintf(file_name, 10, "%04x",node->pfh->fileId);
 		strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
 		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 		strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
 		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 		strlcat(dest_file, node->pfh->userFileName, MAX_FILE_PATH_LEN);
 
-		debug_print("Execute File by userfilename: %04x in dir: %s - %s\n",node->pfh->fileId, folder, dest_file);
 		struct stat st = {0};
 		if (stat(dest_file, &st) == -1) {
 			// No file exists, cant execute
@@ -469,6 +459,11 @@ int pc_execute_file_in_folder(DIR_NODE *node, char *folder) {
 			}
 		}
 
+		char args[25];
+		snprintf(args, 25, " %d %d",exec_arg1, exec_arg2);
+		strlcat(dest_file, args, MAX_FILE_PATH_LEN);
+
+		debug_print("Execute File by userfilename: %04x in dir: %s\n",node->pfh->fileId, dest_file);
 		int cmd_rc = system(dest_file);
 
 		if (cmd_rc == EXIT_SUCCESS) {
