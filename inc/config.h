@@ -42,7 +42,6 @@ extern int g_serial_fd; // file handle for the serial port for Rig control
 #define BROADCST_CALLSIGN "broadcast_callsign"
 #define DIGI_CALLSIGN "digi_callsign"
 #define MAX_FRAMES_IN_TX_BUFFER "max_frames_in_tx_buffer"
-#define CONFIG_IORS_LAST_COMMAND_TIME_PATH "iors_last_command_time_path"
 #define CONFIG_UPLOAD_TABLE_PATH "upload_table_path"
 
 extern int g_bit_rate;		   /* the bit rate of the TNC - 1200 4800 9600 - this is only used to calculate delays.  Change actual value in DireWolf) */
@@ -50,7 +49,6 @@ extern char g_bbs_callsign[MAX_CALLSIGN_LEN];
 extern char g_broadcast_callsign[MAX_CALLSIGN_LEN];
 extern char g_digi_callsign[MAX_CALLSIGN_LEN];
 extern int g_max_frames_in_tx_buffer;
-extern char g_iors_last_command_time_path[MAX_FILE_PATH_LEN];
 extern char g_upload_table_path[MAX_FILE_PATH_LEN];
 
 void load_config(char *filename);

@@ -41,6 +41,7 @@
 #include "pacsat_broadcast.h"
 #include "ftl0.h"
 #include "iors_log.h"
+#include "keyfile.h"
 
 
 /* Forward declarations */
@@ -65,7 +66,7 @@ char g_broadcast_callsign[10] = "NA1SS-11";
 char g_digi_callsign[10] = "NA1SS-1";
 int g_max_frames_in_tx_buffer = 2;
 int g_serial_fd = -1;
-char g_iors_last_command_time_path[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";
+
 char g_upload_table_path[MAX_FILE_PATH_LEN] = "pacsat_upload_table.dat";
 
 /* These global variables are in the state file and are resaved when changed.  These default values are
@@ -106,6 +107,7 @@ void help(void) {
 			"-h,--help                        help\n"
 			"-c,--config                      use config file specified\n"
 			"-d,--dir                         use this data directory, rather than default\n"
+			"-k,--key                         use this command key file, rather than default\n"
 			"-t,--test                        Run self test functions and exit\n"
 			"-v,--verbose                     print additional status and progress messages\n"
 	);
@@ -134,6 +136,7 @@ int main(int argc, char *argv[]) {
 	struct option long_option[] = {
 			{"help", no_argument, NULL, 'h'},
 			{"dir", required_argument, NULL, 'd'},
+			{"key-no", required_argument, NULL, 'k'},
 			{"config", required_argument, NULL, 'c'},
 			{"test", no_argument, NULL, 't'},
 			{"verbose", no_argument, NULL, 'v'},
@@ -141,11 +144,12 @@ int main(int argc, char *argv[]) {
 	};
 
 	int more_help = false;
+	char command_key_file[MAX_FILE_PATH_LEN];
 	strlcpy(config_file_name, "pacsat.config", sizeof(config_file_name));
 
 	while (1) {
 		int c;
-		if ((c = getopt_long(argc, argv, "htvc:d:", long_option, NULL)) < 0)
+		if ((c = getopt_long(argc, argv, "htvc:d:k:", long_option, NULL)) < 0)
 			break;
 		switch (c) {
 		case 'h': // help
@@ -162,6 +166,9 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'd': // data folder
 			strlcpy(data_folder_path, optarg, sizeof(data_folder_path));
+			break;
+		case 'k': // key file
+			strlcpy(command_key_file, optarg, sizeof(command_key_file));
 			break;
 		}
 	}
@@ -277,7 +284,9 @@ int main(int argc, char *argv[]) {
 	/* Initialize the directory */
 	if (dir_init(data_folder_path) != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
-	init_commanding(g_iors_last_command_time_path);
+    key_load(command_key_file);
+
+	init_commanding();
 	ftl0_load_upload_table();
 
 	/**
