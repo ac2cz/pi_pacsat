@@ -29,5 +29,14 @@ uplink_max_period_for_client_in_seconds=36000
 ```
 
 To run the program start direwolf in one terminal and then run Pacsat in another.  It should connect to the direwolf AGW engine to send and receive packets.
-
+To run pi_pacsat you need to have a library path for the library.  Run this first:
+```
+export LD_LIBRARY_PATH=/mnt/usb-disk/ariss/lib:/usr/local/lib/iors_common:$LD_LIBRARY_PATH
+```
+Then you need to pass it some switches:
+pi_pacsat -h will show you what they are.
+You need to tell it where the data will be saved and where the config file is.  So something like:
+```
+./pi_pacsat -c ~/pacsat.cfg -d ~/pacsat_data
+```
 This supports broadcast requests, transmissions and file uploads.
