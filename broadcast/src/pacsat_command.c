@@ -350,7 +350,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 
-			case SWCmdPacsatDefaultFileExpiryPeriod:
+			case SWCmdPacsatDefaultFileExpiryPeriod: {
 				uint16_t age = sw_command->comArg.arguments[0] ;
 				g_dir_max_file_age_in_seconds = age * 24 * 60 * 60;
 				save_state();
@@ -361,7 +361,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
 				break;
-			case SWCmdPacsatFileExpiryPeriod:
+			}
+			case SWCmdPacsatFileExpiryPeriod: {
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16);
 				uint32_t file_age = sw_command->comArg.arguments[2] + (sw_command->comArg.arguments[3] << 16);
 				//This needs to set the expiry time on a specific file
@@ -381,7 +382,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					debug_print("** Failed to re-write header in file.\n");
 				}
 				break;
-			case SWCmdPacsatDirMaintPeriod:
+			}
+			case SWCmdPacsatDirMaintPeriod: {
 				uint16_t dir_period = sw_command->comArg.arguments[0];
 				g_dir_maintenance_period_in_seconds = dir_period;
 				save_state();
@@ -389,7 +391,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				last_command_rc = EXIT_SUCCESS;
 				pb_send_ok(from_callsign);
 				break;
-			case SWCmdPacsatFtl0MaintPeriod:
+			}
+			case SWCmdPacsatFtl0MaintPeriod: {
 				uint16_t ftl0_period = sw_command->comArg.arguments[0];
 				g_ftl0_maintenance_period_in_seconds = ftl0_period;
 				save_state();
@@ -397,7 +400,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				last_command_rc = EXIT_SUCCESS;
 				pb_send_ok(from_callsign);
 				break;
-			case SWCmdPacsatFileQueueCheckPeriod:
+			}
+			case SWCmdPacsatFileQueueCheckPeriod: {
 				uint16_t check_period = sw_command->comArg.arguments[0];
 				g_file_queue_check_period_in_seconds = check_period;
 				save_state();
@@ -405,7 +409,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				last_command_rc = EXIT_SUCCESS;
 				pb_send_ok(from_callsign);
 				break;
-			case SWCmdPacsatMaxFileSize:
+			}
+			case SWCmdPacsatMaxFileSize: {
 				uint16_t file_size = sw_command->comArg.arguments[0];
 				g_ftl0_max_file_size = file_size * 1024;
 				save_state();
@@ -413,7 +418,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				last_command_rc = EXIT_SUCCESS;
 				pb_send_ok(from_callsign);
 				break;
-			case SWCmdPacsatMaxUploadAge:
+			}
+			case SWCmdPacsatMaxUploadAge: {
 				uint16_t upload_file_age = sw_command->comArg.arguments[0];
 				g_ftl0_max_upload_age_in_seconds = upload_file_age * 24 * 60 * 60;
 				save_state();
@@ -421,6 +427,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				last_command_rc = EXIT_SUCCESS;
 				pb_send_ok(from_callsign);
 				break;
+			}
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
 				last_command_rc = PB_ERR_COMMAND_NOT_AVAILABLE;
