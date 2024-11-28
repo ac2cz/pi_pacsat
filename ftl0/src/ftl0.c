@@ -133,7 +133,7 @@ int ftl0_send_status() {
 //		int rc = send_raw_packet(g_bbs_callsign, BBSTAT, PID_NO_PROTOCOL, shut, sizeof(shut));
 //		return rc;
 	} else 	if (number_on_uplink == MAX_UPLINK_LIST_LENGTH) {
-		unsigned char full[] = "Full: ABCD";
+		unsigned char full[] = "Full: A";
 		int rc = send_raw_packet(g_bbs_callsign, BBSTAT, PID_NO_PROTOCOL, full, sizeof(full));
 		return rc;
 	} else  {
@@ -251,16 +251,16 @@ void ftl0_make_list_str(char *buffer, int len) {
 		strlcpy(buffer, "Open: ", len);
 
 	if (number_on_uplink == 0)
-		strlcat(buffer, "ABCD.", len);
+		strlcat(buffer, "A.", len);
 	else {
 		strlcat(buffer, "A ", len);
 		for (int i=0; i < number_on_uplink; i++) {
 			strlcat(buffer, uplink_list[i].callsign, len);
 			strlcat(buffer, " ", len);
 		}
-		// TODO - this does not print the right callsigns against the right channels!
-		// TODO - this truncates the last character i.e. the D.
-		strlcat(buffer, " BCD", len);
+//		// TODO - this does not print the right callsigns against the right channels!
+//		// TODO - this truncates the last character i.e. the D.
+//		strlcat(buffer, " BCD", len);
 	}
 }
 
@@ -445,6 +445,8 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 
 	//int ftl0_length = ftl0_parse_packet_length(data);
 	int rc = EXIT_SUCCESS;
+	int err = ER_NONE;
+	int ftl0_length = 0;
 
 	switch (uplink_list[selected_station].state) {
 	case UL_UNINIT:
@@ -458,10 +460,10 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 		/* Process the EVENT through the UPLINK STATE MACHINE */
 		switch (ftl0_type) {
 		case AUTH_UPLOAD_CMD:
-			int auth_err = ftl0_process_auth_upload_cmd(selected_station, from_callsign, channel, data, len);
-			if (auth_err != ER_NONE) {
+			err = ftl0_process_auth_upload_cmd(selected_station, from_callsign, channel, data, len);
+			if (err != ER_NONE) {
 				// send the error
-				rc = ftl0_send_err(from_callsign, channel, auth_err);
+				rc = ftl0_send_err(from_callsign, channel, err);
 				if (rc != EXIT_SUCCESS) {
 					/* We likely could not send the error.  Something serious has gone wrong.
 					 * But the best we can do is remove the station and return the error code. */
@@ -520,7 +522,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 		switch (ftl0_type) {
 		case DATA :
 //			debug_print("%s: UL_DATA_RX - DATA RECEIVED\n",uplink_list[selected_station].callsign);
-			int err = ftl0_process_data_cmd(selected_station, from_callsign, channel, data, len);
+			err = ftl0_process_data_cmd(selected_station, from_callsign, channel, data, len);
 			if (err != ER_NONE) {
 				rc = ftl0_send_nak(from_callsign, channel, err);
 				if (rc != EXIT_SUCCESS) {
@@ -563,7 +565,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 			break;
 		case DATA_END :
 			//debug_print("%s: UL_DATA_RX - DATA END RECEIVED\n",uplink_list[selected_station].callsign);
-			int ftl0_length = ftl0_parse_packet_length(data);
+			ftl0_length = ftl0_parse_packet_length(data);
 			if (ftl0_length != 0) {
 				err = ER_BAD_HEADER; /* This will cause a NAK to be sent as the data is corrupt in some way */
 			} else {
