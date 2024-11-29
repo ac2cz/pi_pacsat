@@ -20,12 +20,6 @@ digi_callsign=XY2ZZ-1
 # If a lot of frames are queued by the tnc then broadcast confirms can
 # feel slugish.  Keep this value low.
 max_frames_in_tx_buffer=2
-# PACSAT Broadcast
-pb_status_period_in_seconds=10
-pb_max_period_for_client_in_seconds=36000
-# UPLINK
-uplink_status_period_in_seconds=15
-uplink_max_period_for_client_in_seconds=36000
 ```
 
 To run the program start direwolf in one terminal and then run Pacsat in another.  It should connect to the direwolf AGW engine to send and receive packets.
