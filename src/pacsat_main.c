@@ -122,8 +122,8 @@ void signal_exit (int sig) {
 }
 
 void signal_load_config (int sig) {
-	error_print (" Signal received, updating config not yet implemented...\n");
-	// TODO SIHUP should reload the config perhaps
+	load_config(config_file_name);
+	load_state("pacsat.state");
 }
 
 int main(int argc, char *argv[]) {
