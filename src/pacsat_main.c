@@ -87,14 +87,6 @@ int g_dir_next_file_number = 1; // this is updated from the state file and then 
 int g_ftl0_max_file_size = 153600; // 150k max file size
 int g_ftl0_max_upload_age_in_seconds = 5 * 24 * 60 * 60; // 5 days
 
-/* These are in sensors_state_file.h in iors_common.  We can ignore these here. */
-int g_state_sensors_enabled = 0;
-int g_state_sensors_period_to_send_telem_in_seconds = 120;
-int g_state_sensors_period_to_store_wod_in_seconds = 60;
-int g_state_sensors_wod_max_file_size = 200000; // bytes.  Note that WOD every min for a 128 byte layout gives 184320 bytes in 24 hours.  So keep layout under 128 bytes or wod frequency greater
-int g_state_sensors_log_level = INFO_LOG;
-int g_state_sensors_period_to_sample_telem_in_seconds = 60;
-
 /* Local variables */
 pthread_t tnc_listen_pthread;
 int g_run_self_test = false;
