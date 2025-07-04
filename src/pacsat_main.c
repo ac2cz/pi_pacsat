@@ -403,6 +403,7 @@ int main(int argc, char *argv[]) {
 		if ((now - last_file_queue_check_time) > g_file_queue_check_period_in_seconds) {
 			last_file_queue_check_time = now;
 			dir_file_queue_check(now, get_wod_folder(), PFH_TYPE_WL, "WOD");
+			dir_file_queue_check(now, get_senwod_folder(), PFH_TYPE_SEN_WOD, "SENWOD");
 			dir_file_queue_check(now, get_log_folder(), PFH_TYPE_AL, "LOG");
 			dir_file_queue_check(now, get_txt_folder(), PFH_TYPE_ASCII, "TXT");
 		}

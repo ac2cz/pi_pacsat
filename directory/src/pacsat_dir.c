@@ -83,6 +83,7 @@ DIR_NODE *dir_maint_node = NULL;   // the node where we are performing directory
 static char data_folder[MAX_FILE_PATH_LEN]; // Directory path of the data folder
 static char dir_folder[MAX_FILE_PATH_LEN]; // Directory path of the directory folder
 static char wod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
+static char senwod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telemetry folder
 static char log_folder[MAX_FILE_PATH_LEN]; // Directory path of the log folder
 static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
 static char txt_folder[MAX_FILE_PATH_LEN]; // Directory path of the txt folder
@@ -123,6 +124,11 @@ int dir_init(char *folder) {
 	strlcat(wod_folder, "/", sizeof(wod_folder));
 	strlcat(wod_folder, get_folder_str(FolderWod), sizeof(wod_folder));
 	if (dir_make_dir(wod_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	strlcpy(senwod_folder, data_folder, sizeof(wod_folder));
+	strlcat(senwod_folder, "/", sizeof(wod_folder));
+	strlcat(senwod_folder, get_folder_str(FolderSenWod), sizeof(wod_folder));
+	if (dir_make_dir(senwod_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 	strlcpy(log_folder, data_folder, sizeof(log_folder));
 	strlcat(log_folder, "/", sizeof(log_folder));
@@ -231,6 +237,10 @@ char *get_upload_folder() {
 
 char *get_wod_folder() {
 	return wod_folder; // We can return this because it is static
+}
+
+char *get_senwod_folder() {
+	return senwod_folder; // We can return this because it is static
 }
 
 char *get_log_folder() {
@@ -766,6 +776,11 @@ void dir_maintenance(time_t now) {
 
 }
 
+/**
+ * Check a file queue and add all files to the directory
+ * The type is based on the queue name
+ * the To callsign is based on the file name.
+ */
 void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * destination) {
 	//debug_print("Checking for files in queue: %s\n",folder);
 	DIR * d = opendir(folder);
