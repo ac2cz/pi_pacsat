@@ -29,7 +29,7 @@
 /* Static vars*/
 static int last_command_rc = EXIT_SUCCESS;;
 
-int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, uint16_t exec_arg2);
+/* int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, uint16_t exec_arg2); */
 int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder);
 
 /**
@@ -181,7 +181,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				break;
 			}
-
+/*
 			case SwCmdPacsatExecuteFile: {
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
 				uint16_t exec_arg1 = sw_command->comArg.arguments[2];
@@ -222,7 +222,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				break;
 			}
-
+*/
 			case SWCmdPacsatDeleteFile: {
 //				debug_print("Arg: %02x %02x\n",sw_command->comArg.arguments[0],sw_command->comArg.arguments[1]);
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
@@ -442,6 +442,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 		return EXIT_SUCCESS;
 }
 
+/*
 int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, uint16_t exec_arg2) {
 	char dest_file[MAX_FILE_PATH_LEN];
 		//char file_name[10];
@@ -480,6 +481,7 @@ int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, 
 		}
 
 }
+*/
 
 int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder) {
 //	debug_print("Deleting %d from %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
