@@ -74,7 +74,13 @@ packet: NO
 
 /* Program Include Files */
 #include "config.h"
+#ifdef IORS_CONTROL_BUILD
+#include "iors_command.h"
+#include "iors_log.h"
+#else
 #include "uplink_command.h"
+#include "pacsat_log.h"
+#endif
 #include "state_file.h"
 #include "debug.h"
 #include "agw_tnc.h"

@@ -12,6 +12,8 @@ RM := rm -rf
 -include ftl0/src/subdir.mk
 -include directory/src/subdir.mk
 -include broadcast/src/subdir.mk
+-include objects.mk
+
 ifneq ($(MAKECMDGOALS),clean)
 ifneq ($(strip $(C_DEPS)),)
 -include $(C_DEPS)
@@ -40,10 +42,10 @@ all: main-build
 main-build: pi_pacsat
 
 # Tool invocations
-pi_pacsat: $(OBJS) $(USER_OBJS) makefile $(OPTIONAL_TOOL_DEPS)
+pi_pacsat: $(OBJS) $(USER_OBJS) makefile objects.mk $(OPTIONAL_TOOL_DEPS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C Linker'
-	gcc -L/usr/local/lib/iors_common -o "pi_pacsat" $(OBJS) $(USER_OBJS) $(LIBS) -liors_common -lpthread
+	gcc -L/usr/local/lib/iors_common -o "pi_pacsat" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 

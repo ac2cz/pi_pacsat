@@ -54,8 +54,13 @@
 
 #include <fcntl.h>
 #include <errno.h>
-
-#include <uplink_command.h>
+#ifdef IORS_CONTROL_BUILD
+#include "iors_command.h"
+#include "iors_log.h"
+#else
+#include "uplink_command.h"
+#include "pacsat_log.h"
+#endif
 
 /* Program include files */
 #include "config.h"
@@ -66,7 +71,6 @@
 #include "ftl0.h"
 #include "str_util.h"
 #include "debug.h"
-#include "pacsat_log.h"
 
 
 /* Forward declarations */
@@ -500,7 +504,11 @@ int dir_load() {
 	dir_free();
 	DIR * d = opendir(dir_folder);
 	if (d == NULL) {
+#ifdef IORS_CONTROL_BUILD
+		log_err(g_log_filename, IORS_ERR_FS_DIR_LOAD_FAILURE);
+#else
 		log_err(g_log_filename, ERR_FS_DIR_LOAD_FAILURE);
+#endif
 		error_print("** Could not open dir: %s\n",dir_folder);
 		return EXIT_FAILURE;
 	}

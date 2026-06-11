@@ -33,14 +33,19 @@
 #include "config.h"
 #include "common_config.h"
 #include "state_file.h"
+#ifdef IORS_CONTROL_BUILD
+#include "iors_command.h"
+#include "iors_log.h"
+#else
 #include "uplink_command.h"
+#include "pacsat_log.h"
+#endif
 #include "agw_tnc.h"
 #include "str_util.h"
 #include "pacsat_header.h"
 #include "pacsat_dir.h"
 #include "pacsat_broadcast.h"
 #include "ftl0.h"
-#include "pacsat_log.h"
 #ifdef IORS_CONTROL_BUILD
 #include "keyfile.h"
 #endif
@@ -217,7 +222,11 @@ int main(int argc, char *argv[]) {
 	rc = pthread_create( &tnc_listen_pthread, NULL, tnc_listen_process, (void*) name);
 	if (rc != EXIT_SUCCESS) {
 		error_print("FATAL. Could not start the TNC listen thread.\n");
+#ifdef IORS_CONTROL_BUILD
+		log_err(g_log_filename, IORS_ERR_TNC_FAILURE);
+#else
 		log_err(g_log_filename, ERR_TNC_FAILURE);
+#endif
 		log_alog1(INFO_LOG, g_log_filename, ALOG_FS_SHUTDOWN, rc);
 		exit(rc);
 	}

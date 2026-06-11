@@ -15,7 +15,13 @@
 
 /* Program Include Files */
 #include "config.h"
+#ifdef IORS_CONTROL_BUILD
+#include "iors_command.h"
+#include "iors_log.h"
+#else
 #include "uplink_command.h"
+#include "pacsat_log.h"
+#endif
 #include "state_file.h"
 #include "debug.h"
 #include "pacsat_header.h"
@@ -24,7 +30,6 @@
 #include "pacsat_dir.h"
 #include "str_util.h"
 #include "ax25_tools.h"
-#include "pacsat_log.h"
 
 /* Static vars*/
 static int last_command_rc = EXIT_SUCCESS;;
@@ -125,8 +130,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t folder_id = sw_command->comArg.arguments[2];
 				//dir_debug_print(NULL);
 
-				if (folder_id == FolderDir) {
-					debug_print("Error - cant install into Directory\n");
+				if (folder_id == FolderDir || folder_id == FolderBin || folder_id == FolderLib) {
+					debug_print("Error - cant install into Directory, bin or lib\n");
 					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 					if (r != EXIT_SUCCESS) {
