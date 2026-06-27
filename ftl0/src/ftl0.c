@@ -1382,7 +1382,7 @@ int ftl0_save_upload_table() {
 	strlcat(tmp_filename, ".tmp", sizeof(tmp_filename));
 	//debug_print("Saving upload table to: %s:\n", g_upload_table_path);
 	int i;
-	char buf[MAX_CONFIG_LINE_LENGTH];
+	char buf[MAX_FILE_PATH_LEN + 64];  // path + room for 3 ints, commas, newline, NUL
 	FILE *file = fopen ( tmp_filename, "w" );
 	if (file == NULL) {
 		debug_print("Unable to open %s for writing: %s\n", tmp_filename, strerror(errno));
