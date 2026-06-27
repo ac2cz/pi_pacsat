@@ -64,6 +64,7 @@ void signal_load_config (int sig);
  */
 int g_verbose = false;
 char g_log_filename[MAX_FILE_PATH_LEN];
+char last_command_time_filename[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";
 
 /* These global variables are in the config file */
 int g_bit_rate = 1200;
@@ -194,7 +195,6 @@ int main(int argc, char *argv[]) {
 	load_state("pacsat.state");
 
 	char log_path[MAX_FILE_PATH_LEN];
-	//make_dir_path(get_folder_str(FolderLog), data_folder_path, data_folder_path, log_path);
 	strlcpy(log_path, data_folder_path,MAX_FILE_PATH_LEN);
 	strlcat(log_path,"/",MAX_FILE_PATH_LEN);
 	strlcat(log_path,get_folder_str(FolderLog),MAX_FILE_PATH_LEN);
@@ -271,15 +271,17 @@ int main(int argc, char *argv[]) {
 		exit (rc);
 	}
 
-
-
 	/* Initialize the directory */
 	if (dir_init(data_folder_path) != EXIT_SUCCESS) { error_print("** Could not initialize the dir\n"); return EXIT_FAILURE; }
 	dir_load();
 #ifdef IORS_CONTROL_BUILD
     key_load(command_key_file);
+    char last_command_time_path[MAX_FILE_PATH_LEN];
+	strlcpy(last_command_time_path, data_folder_path,MAX_FILE_PATH_LEN);
+	strlcat(last_command_time_path,"/",MAX_FILE_PATH_LEN);
+	strlcat(last_command_time_path,last_command_time_filename,MAX_FILE_PATH_LEN);
+    init_commanding(last_command_time_path);
 #endif
-	init_commanding();
 	ftl0_load_upload_table();
 
 	/**
