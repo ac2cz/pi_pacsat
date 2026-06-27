@@ -1393,7 +1393,7 @@ int ftl0_save_upload_table() {
 		if (upload_table[i].callsign[0] == 0)
 			strlcpy(upload_table[i].callsign, "NONE",sizeof(upload_table[i].callsign));
 
-		snprintf(buf, MAX_CONFIG_LINE_LENGTH, "%d,%d,%d,%s,%d\n",upload_table[i].file_id,upload_table[i].length,upload_table[i].request_time
+		snprintf(buf, sizeof(buf), "%d,%d,%d,%s,%d\n",upload_table[i].file_id,upload_table[i].length,upload_table[i].request_time
 				,upload_table[i].callsign,upload_table[i].offset);
 		rc = fputs(buf, file);
 		if (rc == EOF) {

@@ -100,6 +100,7 @@ int g_run_self_test = false;
 int frame_queue_status_known = false;
 char config_file_name[MAX_FILE_PATH_LEN] = "pi_pacsat.config";
 char data_folder_path[MAX_FILE_PATH_LEN] = "./pacsat";
+char state_file_path[MAX_FILE_PATH_LEN] = "pacsat.state";
 time_t last_dir_maint_time;
 time_t last_ftl0_maint_time;
 time_t last_file_queue_check_time;
@@ -130,7 +131,7 @@ void signal_exit (int sig) {
 
 void signal_load_config (int sig) {
 	load_config(config_file_name);
-	load_state("pacsat.state");
+	load_state(state_file_path);
 }
 
 int main(int argc, char *argv[]) {
@@ -192,7 +193,10 @@ int main(int argc, char *argv[]) {
 
 	/* Load configuration from the config file */
 	load_config(config_file_name);
-	load_state("pacsat.state");
+	strlcpy(state_file_path, data_folder_path,MAX_FILE_PATH_LEN);
+	strlcat(state_file_path,"/",MAX_FILE_PATH_LEN);
+	strlcat(state_file_path,"pacsat.state",MAX_FILE_PATH_LEN);
+	load_state(state_file_path);
 
 	char log_path[MAX_FILE_PATH_LEN];
 	strlcpy(log_path, data_folder_path,MAX_FILE_PATH_LEN);
