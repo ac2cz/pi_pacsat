@@ -216,7 +216,7 @@ int pb_send_ok(char *from_callsign) {
  */
 int pb_send_err(char *from_callsign, int err) {
 	int rc = EXIT_SUCCESS;
-	char err_str[2];
+	char err_str[3];
 	snprintf(err_str, 3, "%d",err);
 	char buffer[6 + strlen(err_str)+ strlen(from_callsign)]; // NO -XX + 10 char for callsign with SSID
 	char CR = 0x0d;
@@ -224,7 +224,7 @@ int pb_send_err(char *from_callsign, int err) {
 	strlcat(buffer, err_str, sizeof(buffer));
 	strlcat(buffer," ", sizeof(buffer));
 	strlcat(buffer, from_callsign, sizeof(buffer));
-	strncat(buffer,&CR,1); // very specifically add just one char to the end of the string for the CR
+	strncat(buffer,&CR,2); // very specifically add just one char to the end of the string for the CR
 	if (!g_run_self_test)
 		rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
 

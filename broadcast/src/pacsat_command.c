@@ -130,8 +130,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t folder_id = sw_command->comArg.arguments[2];
 				//dir_debug_print(NULL);
 
-				if (folder_id == FolderDir || folder_id == FolderBin || folder_id == FolderLib) {
-					debug_print("Error - cant install into Directory, bin or lib\n");
+				if (folder_id == FolderDir) {
+					debug_print("Error - cant install into Directory\n");
 					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 					if (r != EXIT_SUCCESS) {
