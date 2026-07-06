@@ -4,5 +4,5 @@
 
 USER_OBJS :=
 
-LIBS := -liors_common -lpthread
+LIBS := -liors_common -lpthread -lsodium
 

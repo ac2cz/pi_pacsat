@@ -41,6 +41,7 @@
 #include "ftl0.h"
 #include "pacsat_dir.h"
 #ifdef IORS_CONTROL_BUILD
+#include <sodium.h>
 #include "iors_command.h"
 #else
 #include "uplink_command.h"
@@ -114,7 +115,7 @@ int ftl0_process_auth_upload_cmd(int selected_station, char *from_callsign, int 
 int ftl0_process_upload_cmd(int list_num, char *from_callsign, int channel, unsigned char *data, int len);
 int ftl0_process_data_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
 int ftl0_process_auth_data_end_cmd(int selected_station, char *from_callsign, int channel, unsigned char *data, int len);
-int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, uint16_t header_check, uint16_t body_check);
+int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, FTL0_AUTH_DATA_END *data_end_cmd);
 int ftl0_make_packet(unsigned char *data_bytes, unsigned char *info, int length, int frame_type);
 int ftl0_parse_packet_type(unsigned char * data);
 int ftl0_parse_packet_length(unsigned char * data);
@@ -484,6 +485,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 				rc = ftl0_send_err(from_callsign, channel, ER_ILL_FORMED_CMD);
 				ftl0_disconnect(uplink_list[selected_station].callsign, uplink_list[selected_station].channel);
 				ftl0_remove_request(selected_station);
+				return EXIT_FAILURE;
 			}
 			/* if OK to upload send UL_GO_RESP.  We determine if it is OK by checking if we have space
 			 * and that it is a valid continue of file_id != 0
@@ -572,7 +574,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 			if (ftl0_length != 0) {
 				err = ER_BAD_HEADER; /* This will cause a NAK to be sent as the data is corrupt in some way */
 			} else {
-				err = ftl0_process_data_end_cmd(selected_station, from_callsign, channel, 0, 0);
+				err = ftl0_process_data_end_cmd(selected_station, from_callsign, channel, NULL);
 			}
 			if (err != ER_NONE) {
 				rc = ftl0_send_nak(from_callsign, channel, err);
@@ -934,13 +936,13 @@ int ftl0_process_auth_data_end_cmd(int selected_station, char *from_callsign, in
 	//debug_print("Processing AUTH DATA END CMD\n");
 
 	if (AuthenticatePacket(data_end_cmd->dateTime, (uint8_t *) data_end_cmd, ftl0_length - 32, data_end_cmd->AuthenticationVector)  == EXIT_SUCCESS) {
-		return ftl0_process_data_end_cmd(selected_station, from_callsign, channel, data_end_cmd->header_check, data_end_cmd->body_check);
+		return ftl0_process_data_end_cmd(selected_station, from_callsign, channel, data_end_cmd);
 	} else {
 		return ER_ILL_FORMED_CMD;
 	}
 }
 
-int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, uint16_t header_check, uint16_t body_check) {
+int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int channel, FTL0_AUTH_DATA_END *data_end_cmd) {
 	char tmp_filename[MAX_FILE_PATH_LEN];
 	dir_get_upload_file_path_from_file_id(uplink_list[selected_station].file_id, tmp_filename, MAX_FILE_PATH_LEN);
 
@@ -958,16 +960,31 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 		return ER_BAD_HEADER;
 	}
 
+#ifdef IORS_CONTROL_BUILD
 	if (g_state_uplink_open == FTL0_STATE_COMMAND) {
+		if (data_end_cmd == NULL) {
+			/* A plain, unauthenticated DATA_END cannot finalize an upload in
+		           command mode. Fail closed — this is the bypass we deny. */
+			error_print("FTL0: unauthenticated DATA_END rejected in command mode\n");
+			return ER_ILL_FORMED_CMD;
+		}
 		//debug_print("HEADER: File: %4x Pkt: %4x\n", pfh->headerCRC, header_check);
-		if (header_check != pfh->headerCRC) {
+		if (data_end_cmd->header_check != pfh->headerCRC) {
 			return ER_HEADER_CHECK;
 		}
 		//debug_print("BODY: File: %4x Pkt: %4x\n", pfh->bodyCRC, body_check);
-		if (body_check != pfh->bodyCRC) {
+		if (data_end_cmd->body_check != pfh->bodyCRC) {
 			return ER_BODY_CHECK;
 		}
+
+		/* Really make sure this file was uploaded by a command station with no manipulation of the RF data */
+		uint8_t computed[crypto_hash_sha256_BYTES];
+		if (hash_file(tmp_filename, computed) != EXIT_SUCCESS)
+			return ER_SERVER_FSYS;
+		if (sodium_memcmp(computed, data_end_cmd->file_hash, sizeof(computed)) != 0)
+			return ER_BODY_CHECK;   /* or a new ER_HASH_CHECK */
 	}
+#endif
 	int rc = dir_validate_file(pfh, tmp_filename);
 	if (rc != ER_NONE) {
 		free(pfh);

@@ -118,6 +118,7 @@ typedef struct {
 	uint32_t dateTime;
 	uint16_t header_check;
 	uint16_t body_check;
+	uint8_t  file_hash[32];        /* SHA-256 of the uploaded file */
 	uint8_t AuthenticationVector[32];
 } FTL0_AUTH_DATA_END;
 
