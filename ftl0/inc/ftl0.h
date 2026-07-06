@@ -86,7 +86,8 @@ typedef enum
 	ER_NO_ROOM,
 	ER_BAD_HEADER,
 	ER_HEADER_CHECK,		/* 15 */
-	ER_BODY_CHECK			/* 16 */
+	ER_BODY_CHECK,			/* 16 */
+	ER_HASH_CHECK			/* 17 */
 }
 ERROR_CODES;
 

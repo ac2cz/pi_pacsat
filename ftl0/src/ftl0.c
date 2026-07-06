@@ -121,6 +121,7 @@ int ftl0_parse_packet_type(unsigned char * data);
 int ftl0_parse_packet_length(unsigned char * data);
 int ftl0_clear_upload_table();
 int ftl0_remove_upload_file(uint32_t file_id);
+int ftl0_remove_file_upload_record(uint32_t id);
 
 /**
  * ftl0_send_status()
@@ -970,10 +971,12 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 		}
 		//debug_print("HEADER: File: %4x Pkt: %4x\n", pfh->headerCRC, header_check);
 		if (data_end_cmd->header_check != pfh->headerCRC) {
+			free(pfh);
 			return ER_HEADER_CHECK;
 		}
 		//debug_print("BODY: File: %4x Pkt: %4x\n", pfh->bodyCRC, body_check);
 		if (data_end_cmd->body_check != pfh->bodyCRC) {
+			free(pfh);
 			return ER_BODY_CHECK;
 		}
 
@@ -981,9 +984,13 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 		uint8_t computed[crypto_hash_sha256_BYTES];
 		if (hash_file(tmp_filename, computed) != EXIT_SUCCESS)
 			return ER_SERVER_FSYS;
-		if (sodium_memcmp(computed, data_end_cmd->file_hash, sizeof(computed)) != 0)
-			return ER_BODY_CHECK;   /* or a new ER_HASH_CHECK */
-	}
+		if (sodium_memcmp(computed, data_end_cmd->file_hash, sizeof(computed)) != 0) {
+		    error_print("FTL0: file hash mismatch for %04x - discarding\n",
+		                uplink_list[selected_station].file_id);
+		    free(pfh);
+		    ftl0_remove_file_upload_record(uplink_list[selected_station].file_id); // record + tmp file
+		    return ER_HASH_CHECK;
+		}	}
 #endif
 	int rc = dir_validate_file(pfh, tmp_filename);
 	if (rc != ER_NONE) {
