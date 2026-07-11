@@ -41,6 +41,7 @@ extern int g_serial_fd; // file handle for the serial port for Rig control
 #define BBS_CALLSIGN "bbs_callsign"
 #define BROADCST_CALLSIGN "broadcast_callsign"
 #define DIGI_CALLSIGN "digi_callsign"
+#define TELEM_CALLSIGN "FSTLM"
 #define MAX_FRAMES_IN_TX_BUFFER "max_frames_in_tx_buffer"
 #define CONFIG_UPLOAD_TABLE_PATH "upload_table_path"
 

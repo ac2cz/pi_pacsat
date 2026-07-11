@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <signal.h>
+#include <time.h>
 
 /* Program Include files */
 #include "config.h"
@@ -49,6 +50,7 @@
 #ifdef IORS_CONTROL_BUILD
 #include "keyfile.h"
 #endif
+#include "telemetry.h"
 
 /* Forward declarations */
 //void process_frames_queued(char * data, int len);
@@ -93,6 +95,7 @@ int g_state_pacsat_log_level = INFO_LOG;
 int g_dir_next_file_number = 1; // this is updated from the state file and then when the dir is loaded
 int g_ftl0_max_file_size = 153600; // 150k max file size
 int g_ftl0_max_upload_age_in_seconds = 5 * 24 * 60 * 60; // 5 days
+int g_telem_send_period_in_seconds = 120; // 2 mins
 
 /* Local variables */
 pthread_t tnc_listen_pthread;
@@ -102,6 +105,7 @@ char config_file_name[MAX_FILE_PATH_LEN] = "pi_pacsat.config";
 char data_folder_path[MAX_FILE_PATH_LEN] = "./pacsat";
 char state_file_path[MAX_FILE_PATH_LEN] = "pacsat.state";
 time_t last_dir_maint_time;
+time_t last_telem_send_time;
 time_t last_ftl0_maint_time;
 time_t last_file_queue_check_time;
 
@@ -386,6 +390,12 @@ int main(int argc, char *argv[]) {
 		ftl0_next_action();
 
 		uint32_t now = time(0);
+
+		if (last_telem_send_time == 0) last_telem_send_time = now; // Initialize at startup
+		if ((now - last_telem_send_time) > g_telem_send_period_in_seconds) {
+			last_telem_send_time = now;
+			send_telemetry(now);
+		}
 
 		if (last_dir_maint_time == 0) last_dir_maint_time = now; // Initialize at startup
 		if ((now - last_dir_maint_time) > g_dir_maintenance_period_in_seconds) {
