@@ -6,17 +6,20 @@
 C_SRCS += \
 ../src/config.c \
 ../src/pacsat_main.c \
-../src/state_file.c 
+../src/state_file.c \
+../src/telemetry.c 
 
 C_DEPS += \
 ./src/config.d \
 ./src/pacsat_main.d \
-./src/state_file.d 
+./src/state_file.d \
+./src/telemetry.d 
 
 OBJS += \
 ./src/config.o \
 ./src/pacsat_main.o \
-./src/state_file.o 
+./src/state_file.o \
+./src/telemetry.o 
 
 
 # Each subdirectory must supply rules for building sources it contributes
@@ -31,7 +34,7 @@ src/%.o: ../src/%.c src/subdir.mk
 clean: clean-src
 
 clean-src:
-	-$(RM) ./src/config.d ./src/config.o ./src/pacsat_main.d ./src/pacsat_main.o ./src/state_file.d ./src/state_file.o
+	-$(RM) ./src/config.d ./src/config.o ./src/pacsat_main.d ./src/pacsat_main.o ./src/state_file.d ./src/state_file.o ./src/telemetry.d ./src/telemetry.o
 
 .PHONY: clean-src
 
