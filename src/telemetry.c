@@ -43,6 +43,11 @@ int send_telemetry(time_t now) {
     fstelemetry.UplinkTimeout = g_uplink_max_period_for_client_in_seconds;
     fstelemetry.BytesQueued = ftl0_get_space_reserved_by_upload_table();
 
+    fstelemetry.MaxFileAgeDays = g_dir_max_file_age_in_seconds / (60 * 60 * 24);
+    fstelemetry.FTL0MaxFileSizeKb = g_ftl0_max_file_size / 1024;
+    fstelemetry.FTL0MaxUploadAgeMin = g_ftl0_max_upload_age_in_seconds / 60;
+    fstelemetry.LogLevel = g_state_pacsat_log_level;
+
 	//debug_print("Sending FS Telem\n");
 	int rc = send_raw_packet(g_broadcast_callsign, TELEM_CALLSIGN, PID_NO_PROTOCOL, (unsigned char *)&fstelemetry, sizeof(fstelemetry));
 

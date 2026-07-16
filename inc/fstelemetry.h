@@ -22,6 +22,10 @@ typedef struct __attribute__((__packed__)) {
     unsigned int PBTimeout : 16;
     unsigned int UplinkStatusPeriod : 16;
     unsigned int UplinkTimeout : 16;
+    unsigned int MaxFileAgeDays : 16;
+    unsigned int FTL0MaxFileSizeKb : 16;
+    unsigned int FTL0MaxUploadAgeMin : 16;
+    unsigned int LogLevel : 8;
     unsigned int PBEnabled : 1;
     unsigned int UplinkEnabled : 2;
     unsigned int pad1 : 5;
