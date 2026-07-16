@@ -701,7 +701,10 @@ void header_copy_to_str(unsigned char *header, int length, char *destination, in
 
 	while (length > 0)
 	{
-		*destination++ = *header++;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+    *destination++ = *header++;
+#pragma GCC diagnostic pop
 		length--;
 	}
 
