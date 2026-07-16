@@ -503,8 +503,9 @@ int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
 
 	fclose(infile);
 	fclose(outfile);
-	if (check_size != body_size)
+	if (check_size != body_size) {
 		error_print("WARNING! Wrote different sized file body for %s\n",tmp_filename)
+	}
 //	if (remove(tmp_filename) != EXIT_SUCCESS) {
 //		error_print("Could not remove tmp file %s\n",tmp_filename)
 //	}

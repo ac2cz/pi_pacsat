@@ -95,7 +95,7 @@ int g_state_pacsat_log_level = INFO_LOG;
 int g_dir_next_file_number = 1; // this is updated from the state file and then when the dir is loaded
 int g_ftl0_max_file_size = 153600; // 150k max file size
 int g_ftl0_max_upload_age_in_seconds = 5 * 24 * 60 * 60; // 5 days
-int g_telem_send_period_in_seconds = 120; // 2 mins
+int g_telem_send_period_in_seconds = DEFAULT_PERIOD_TO_SEND_TELEM; // 2 mins
 
 /* Local variables */
 pthread_t tnc_listen_pthread;

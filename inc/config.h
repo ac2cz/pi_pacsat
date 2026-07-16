@@ -45,6 +45,9 @@ extern int g_serial_fd; // file handle for the serial port for Rig control
 #define MAX_FRAMES_IN_TX_BUFFER "max_frames_in_tx_buffer"
 #define CONFIG_UPLOAD_TABLE_PATH "upload_table_path"
 
+#define DEFAULT_PERIOD_TO_SEND_TELEM 120
+#define MIN_PACKET_PERIOD 10
+
 extern int g_bit_rate;		   /* the bit rate of the TNC - 1200 4800 9600 - this is only used to calculate delays.  Change actual value in DireWolf) */
 extern char g_bbs_callsign[MAX_CALLSIGN_LEN];
 extern char g_broadcast_callsign[MAX_CALLSIGN_LEN];

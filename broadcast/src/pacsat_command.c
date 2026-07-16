@@ -186,48 +186,6 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				break;
 			}
-/*
-			case SwCmdPacsatExecuteFile: {
-				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
-				uint16_t exec_arg1 = sw_command->comArg.arguments[2];
-				uint16_t exec_arg2 = sw_command->comArg.arguments[3];
-
-				char *folder = get_folder_str(FolderBin);
-				if (folder == NULL) {
-					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
-					break;
-				}
-
-				DIR_NODE *node = dir_get_node_by_id(file_id);
-				if (node == NULL) {
-					error_print("File %d not available\n",file_id);
-					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
-					if (r != EXIT_SUCCESS) {
-						debug_print("\n Error : Could not send ERR Response to TNC \n");
-					}
-					break;
-				}
-
-				int rc = pc_execute_file_in_folder(node, folder, exec_arg1, exec_arg2);
-				if (rc == EXIT_SUCCESS) {
-					last_command_rc = EXIT_SUCCESS;
-					int rc = pb_send_ok(from_callsign);
-					if (rc != EXIT_SUCCESS) {
-						debug_print("\n Error : Could not send OK Response to TNC \n");
-					}
-				} else {
-					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
-					if (r != EXIT_SUCCESS) {
-						debug_print("\n Error : Could not send ERR Response to TNC \n");
-					}
-				}
-
-				break;
-			}
-*/
 			case SWCmdPacsatDeleteFile: {
 //				debug_print("Arg: %02x %02x\n",sw_command->comArg.arguments[0],sw_command->comArg.arguments[1]);
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
@@ -433,6 +391,26 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				pb_send_ok(from_callsign);
 				break;
 			}
+			case SWCmdPacsatEnableFSTelemetry:
+				uint16_t enable = sw_command->comArg.arguments[0];
+				uint16_t period = sw_command->comArg.arguments[1];
+
+						if (enable) {
+							if (period == 0) {
+								g_telem_send_period_in_seconds = DEFAULT_PERIOD_TO_SEND_TELEM;
+							} else {
+								if (period < MIN_PACKET_PERIOD)
+									period = MIN_PACKET_PERIOD;
+								g_telem_send_period_in_seconds = period;
+							}
+						} else {
+							g_telem_send_period_in_seconds = 0; // disable it
+						}
+						save_state();
+						last_command_rc = EXIT_SUCCESS;
+						pb_send_ok(from_callsign);
+						return true;
+
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
 				last_command_rc = PB_ERR_COMMAND_NOT_AVAILABLE;
