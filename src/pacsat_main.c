@@ -391,30 +391,38 @@ int main(int argc, char *argv[]) {
 
 		uint32_t now = time(0);
 
-		if (last_telem_send_time == 0) last_telem_send_time = now; // Initialize at startup
-		if ((now - last_telem_send_time) > g_telem_send_period_in_seconds) {
-			last_telem_send_time = now;
-			send_telemetry(now);
+		if (g_telem_send_period_in_seconds != 0) {
+			if (last_telem_send_time == 0) last_telem_send_time = now; // Initialize at startup
+			if ((now - last_telem_send_time) > g_telem_send_period_in_seconds) {
+				last_telem_send_time = now;
+				send_telemetry(now);
+			}
 		}
 
-		if (last_dir_maint_time == 0) last_dir_maint_time = now; // Initialize at startup
-		if ((now - last_dir_maint_time) > g_dir_maintenance_period_in_seconds) {
-			last_dir_maint_time = now;
-			dir_maintenance(now);
+		if (g_dir_maintenance_period_in_seconds != 0) {
+			if (last_dir_maint_time == 0) last_dir_maint_time = now; // Initialize at startup
+			if ((now - last_dir_maint_time) > g_dir_maintenance_period_in_seconds) {
+				last_dir_maint_time = now;
+				dir_maintenance(now);
+			}
 		}
-		if (last_ftl0_maint_time == 0) last_ftl0_maint_time = now; // Initialize at startup
-		if ((now - last_ftl0_maint_time) > g_ftl0_maintenance_period_in_seconds) {
-			last_ftl0_maint_time = now;
-			char *path = get_upload_folder();
-			ftl0_maintenance(now, path);
+		if (g_ftl0_maintenance_period_in_seconds != 0) {
+			if (last_ftl0_maint_time == 0) last_ftl0_maint_time = now; // Initialize at startup
+			if ((now - last_ftl0_maint_time) > g_ftl0_maintenance_period_in_seconds) {
+				last_ftl0_maint_time = now;
+				char *path = get_upload_folder();
+				ftl0_maintenance(now, path);
+			}
 		}
-		if (last_file_queue_check_time == 0) last_file_queue_check_time = now; // Initialize at startup
-		if ((now - last_file_queue_check_time) > g_file_queue_check_period_in_seconds) {
-			last_file_queue_check_time = now;
-			dir_file_queue_check(now, get_wod_folder(), PFH_TYPE_WL, "WOD");
-			dir_file_queue_check(now, get_senwod_folder(), PFH_TYPE_SEN_WOD, "SENWOD");
-			dir_file_queue_check(now, get_log_folder(), PFH_TYPE_AL, "LOG");
-			dir_file_queue_check(now, get_txt_folder(), PFH_TYPE_ASCII, "TXT");
+		if (g_file_queue_check_period_in_seconds != 0) {
+			if (last_file_queue_check_time == 0) last_file_queue_check_time = now; // Initialize at startup
+			if ((now - last_file_queue_check_time) > g_file_queue_check_period_in_seconds) {
+				last_file_queue_check_time = now;
+				dir_file_queue_check(now, get_wod_folder(), PFH_TYPE_WL, "WOD");
+				dir_file_queue_check(now, get_senwod_folder(), PFH_TYPE_SEN_WOD, "SENWOD");
+				dir_file_queue_check(now, get_log_folder(), PFH_TYPE_AL, "LOG");
+				dir_file_queue_check(now, get_txt_folder(), PFH_TYPE_ASCII, "TXT");
+			}
 		}
 	}
 

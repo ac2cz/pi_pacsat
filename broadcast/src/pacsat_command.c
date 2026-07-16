@@ -395,21 +395,21 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t enable = sw_command->comArg.arguments[0];
 				uint16_t period = sw_command->comArg.arguments[1];
 
-						if (enable) {
-							if (period == 0) {
-								g_telem_send_period_in_seconds = DEFAULT_PERIOD_TO_SEND_TELEM;
-							} else {
-								if (period < MIN_PACKET_PERIOD)
-									period = MIN_PACKET_PERIOD;
-								g_telem_send_period_in_seconds = period;
-							}
-						} else {
-							g_telem_send_period_in_seconds = 0; // disable it
-						}
-						save_state();
-						last_command_rc = EXIT_SUCCESS;
-						pb_send_ok(from_callsign);
-						return true;
+				if (enable) {
+					if (period == 0) {
+						g_telem_send_period_in_seconds = DEFAULT_PERIOD_TO_SEND_TELEM;
+					} else {
+						if (period < MIN_PACKET_PERIOD)
+							period = MIN_PACKET_PERIOD;
+						g_telem_send_period_in_seconds = period;
+					}
+				} else {
+					g_telem_send_period_in_seconds = 0; // disable it
+				}
+				save_state();
+				last_command_rc = EXIT_SUCCESS;
+				pb_send_ok(from_callsign);
+				return true;
 
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
