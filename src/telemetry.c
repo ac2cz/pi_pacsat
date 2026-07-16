@@ -43,7 +43,7 @@ int send_telemetry(time_t now) {
     fstelemetry.UplinkTimeout = g_uplink_max_period_for_client_in_seconds;
     fstelemetry.BytesQueued = ftl0_get_space_reserved_by_upload_table();
 
-	debug_print("Sending FS Telem\n");
+	//debug_print("Sending FS Telem\n");
 	int rc = send_raw_packet(g_broadcast_callsign, TELEM_CALLSIGN, PID_NO_PROTOCOL, (unsigned char *)&fstelemetry, sizeof(fstelemetry));
 
 	if (rc != EXIT_SUCCESS) {
