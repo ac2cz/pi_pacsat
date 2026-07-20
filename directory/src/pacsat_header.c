@@ -123,6 +123,7 @@ HEADER *pfh_new_header() {
 		hdr->compressionDesc[0] = '\0';
 		hdr->userFileName[0]    = '\0';
 		hdr->signature[0]    = 0;
+		hdr->signature_type    = 0;
 
 		int i;
 		for (i = 0; i < PFH_NUM_OF_SPARE_FIELDS; i++) {
@@ -307,6 +308,9 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 				int j;
 				for (j=0; j < length; j++)
 					hdr->signature[j] = buffer[i+j];
+				break;
+			case SIGNATURE_TYPE:
+				hdr->signature_type = buffer[i];
 				break;
 			}
 
@@ -750,9 +754,6 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 	 * This runs on the as-stored body bytes, BEFORE unzip and BEFORE any
 	 * line-ending conversion -- that is what was signed. */
 	if (folder_requires_signature(dest_folder)) {
-		if (g_image_signing_public_key == NULL) {
-		        debug_print("key null\n");
-		    }
 		    if (body == NULL) {
 		    	debug_print("body null\n");
 		    }
@@ -1223,7 +1224,11 @@ unsigned char * add_optional_header(unsigned char *p, HEADER *pfh) {
 	if (pfh->compressionDesc[0] != 0)
 		p = pfh_store_str_field(p, COMPRESSION_DESCRIPTION, strlen(pfh->compressionDesc), pfh->compressionDesc);
 	if (pfh->userFileName[0] != 0)
-			p = pfh_store_str_field(p, USER_FILE_NAME, strlen(pfh->userFileName), pfh->userFileName);
+		p = pfh_store_str_field(p, USER_FILE_NAME, strlen(pfh->userFileName), pfh->userFileName);
+	if (pfh->signature_type != 0) {
+		p = pfh_store_char_field(p, SIGNATURE_TYPE, pfh->signature_type);
+		p = pfh_store_str_field(p, FILE_SIGNATURE, IMAGE_SIGNATURE_BYTES, pfh->signature);
+	}
 	int i;
 	for (i=0; i < PFH_NUM_OF_SPARE_FIELDS; i++) {
 		if (pfh->other_data[i][0] != 0)
