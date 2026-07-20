@@ -48,11 +48,19 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #include "config.h"
 #include "pacsat_header.h"
 #include "pacsat_dir.h"
 #include "str_util.h"
+#ifdef IORS_CONTROL_BUILD
+#include "authenticate_image.h"
+#endif
+/* Very large hard cap on an extracted body. SSTV images are well under this; anything
+ * bigger is a corrupt header or a file we should not be installing anyway. */
+#define MAX_INSTALL_BODY_LEN (8u * 1024u * 1024u)
 
 /* Forward declarations */
 void header_copy_to_str(unsigned char *, int, char *, int);
@@ -114,6 +122,7 @@ HEADER *pfh_new_header() {
 		hdr->file_description[0]     = '\0';
 		hdr->compressionDesc[0] = '\0';
 		hdr->userFileName[0]    = '\0';
+		hdr->signature[0]    = 0;
 
 		int i;
 		for (i = 0; i < PFH_NUM_OF_SPARE_FIELDS; i++) {
@@ -292,15 +301,22 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 			case USER_FILE_NAME:
 				header_copy_to_str(&buffer[i], length, hdr->userFileName, 32);
 				break;
+			case FILE_SIGNATURE: {
+				int j;
+				for (j=0; j < length; j++)
+					hdr->signature[j] = buffer[i];
+				break;
+			}
 
 			default:
+				/* This just consumes and conserves up to 5 additional fields, which are ignored by the sat and passed back to ground if downloaded. */
 				if (other_field >= PFH_NUM_OF_SPARE_FIELDS) {
 					debug_print("** Too many extra fields %X skipped ** ", id);
 					break;
 				}
 				hdr->other_id[other_field] = id;
 				header_copy_to_str(&buffer[i], length, hdr->other_data[other_field], 32);
-
+                other_field++;
 //				debug_print("** Unknown header id %X ** ", id);
 //				for (int n=0; n<length; n++) {
 //					if (isprint(buffer[i+n]))
@@ -516,17 +532,300 @@ int pfh_update_pacsat_header(HEADER *pfh, char *dir_folder) {
 }
 
 
-/**
- * pfh_extract_file()
- * Open a PSF, extract the header and use the information to extract the file
- * contents.  Save the extracted file in dest_filename.
- *
- * If dest_filename is a dir then use the user_filename.
- *
- * Returns EXIT_SUCCESS if the extracted file could be saved or EXIT_FAILURE if
- * it could not.
- *
+
+
+/*
+ * pfh_filename_is_safe()
+ * Allowlist check for a user-supplied filename that will become part of a
+ * filesystem path. Permits [A-Za-z0-9_-] plus at most one '.' (extension
+ * separator). Rejects empty names, names starting with '.', '/', '\',
+ * and anything else -- which also kills "../" traversal and every shell
+ * metacharacter in one place.
  */
+static int pfh_filename_is_safe(const char *name) {
+	if (name == NULL || name[0] == 0) return 0;
+	if (name[0] == '.') return 0;                 /* no dotfiles, no ".." */
+	int dots = 0;
+	for (const char *p = name; *p; p++) {
+		if (isalnum((unsigned char)*p)) continue;
+		if (*p == '_' || *p == '-') continue;
+		if (*p == '.') {
+			if (++dots > 1) return 0;             /* one extension dot only */
+			continue;
+		}
+		return 0;                                 /* everything else: reject */
+	}
+	return 1;
+}
+
+/*
+ * pfh_read_body()
+ * Read the file body (from body_offset to EOF) into a freshly malloc'd
+ * buffer. Caller frees. Returns EXIT_SUCCESS/EXIT_FAILURE. Fails loud if the
+ * body is empty, unreadable, or exceeds max_len. Centralizing the read here
+ * also fixes the original fseek error path, which leaked both FILE handles
+ * and left the tmp file behind.
+ */
+static int pfh_read_body(const char *src_filename, long body_offset,
+                         uint8_t **out, size_t *out_len, size_t max_len) {
+	*out = NULL;
+	*out_len = 0;
+
+	FILE *infile = fopen(src_filename, "rb");
+	if (infile == NULL) {
+		error_print("Could not open %s - %s\n", src_filename, strerror(errno));
+		return EXIT_FAILURE;
+	}
+	if (fseek(infile, 0, SEEK_END) != 0) {
+		error_print("Could not seek end of %s - %s\n", src_filename, strerror(errno));
+		fclose(infile);
+		return EXIT_FAILURE;
+	}
+	long end = ftell(infile);
+	if (end < 0 || body_offset < 0 || body_offset >= end) {
+		error_print("Bad body offset %ld (file size %ld) for %s\n",
+		            body_offset, end, src_filename);
+		fclose(infile);
+		return EXIT_FAILURE;
+	}
+	size_t len = (size_t)(end - body_offset);
+	if (len > max_len) {
+		error_print("Body of %s is %zu bytes, exceeds cap of %zu - not installing\n",
+		            src_filename, len, max_len);
+		fclose(infile);
+		return EXIT_FAILURE;
+	}
+	if (fseek(infile, body_offset, SEEK_SET) != 0) {
+		error_print("Could not seek body offset for %s - %s\n",
+		            src_filename, strerror(errno));
+		fclose(infile);
+		return EXIT_FAILURE;
+	}
+
+	uint8_t *buf = malloc(len);
+	if (buf == NULL) {
+		error_print("Out of memory reading body of %s (%zu bytes)\n",
+		            src_filename, len);
+		fclose(infile);
+		return EXIT_FAILURE;
+	}
+	if (fread(buf, 1, len, infile) != len) {
+		error_print("Short read on body of %s\n", src_filename);
+		free(buf);
+		fclose(infile);
+		return EXIT_FAILURE;
+	}
+	fclose(infile);
+
+	*out = buf;
+	*out_len = len;
+	return EXIT_SUCCESS;
+}
+
+/*
+ * pfh_write_file()
+ * Write buf to path in one shot, fail loud. Returns EXIT_SUCCESS/EXIT_FAILURE.
+ */
+static int pfh_write_file(const char *path, const uint8_t *buf, size_t len) {
+	FILE *outfile = fopen(path, "wb");
+	if (outfile == NULL) {
+		error_print("Could not open %s for write - %s\n", path, strerror(errno));
+		return EXIT_FAILURE;
+	}
+	if (len != 0 && fwrite(buf, 1, len, outfile) != len) {
+		error_print("Short write on %s - %s\n", path, strerror(errno));
+		fclose(outfile);
+		remove(path);
+		return EXIT_FAILURE;
+	}
+	if (fclose(outfile) != 0) {
+		error_print("Close failed on %s - %s\n", path, strerror(errno));
+		remove(path);
+		return EXIT_FAILURE;
+	}
+	return EXIT_SUCCESS;
+}
+
+/*
+ * pfh_run_cmd()
+ * Run a command via fork/execvp with an argv -- no shell, so no metacharacter
+ * interpretation. Returns the child's exit status, or -1 on fork/exec failure.
+ */
+static int pfh_run_cmd(char *const argv[]) {
+	pid_t pid = fork();
+	if (pid < 0) {
+		error_print("fork failed - %s\n", strerror(errno));
+		return -1;
+	}
+	if (pid == 0) {
+		execvp(argv[0], argv);
+		/* Only reached if exec failed */
+		fprintf(stderr, "execvp %s failed - %s\n", argv[0], strerror(errno));
+		_exit(127);
+	}
+	int status = 0;
+	if (waitpid(pid, &status, 0) < 0) {
+		error_print("waitpid failed - %s\n", strerror(errno));
+		return -1;
+	}
+	if (WIFEXITED(status)) return WEXITSTATUS(status);
+	return -1;
+}
+
+/*
+ * pfh_convert_crlf()
+ * In-place CRLF -> LF conversion on the in-memory body (replaces the
+ * dos2unix shell-out). Shrinks *len; never grows the buffer.
+ */
+static void pfh_convert_crlf(uint8_t *buf, size_t *len) {
+	size_t r = 0, w = 0, n = *len;
+	while (r < n) {
+		if (buf[r] == 0x0D && r + 1 < n && buf[r + 1] == 0x0A) {
+			r++; /* drop the CR, keep the LF */
+			continue;
+		}
+		buf[w++] = buf[r++];
+	}
+	*len = w;
+}
+
+/**
+ * pfh_extract_file_and_update_keywords()
+ * Open a PSF, extract the header and use the information to extract the file
+ * contents. Save the extracted file in dest_folder.
+ *
+ * If the header has no user filename then the file-id is used as the name.
+ *
+ * Installs into a folder that requires a signature are verified with
+ * AuthenticateImage() against the extracted body bytes before anything is
+ * written. Fail closed.
+ *
+ * Returns EXIT_SUCCESS if the extracted file could be saved or EXIT_FAILURE
+ * if it could not.
+ */
+int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
+                                         int update_keywords_and_expiry) {
+
+	char src_filename[MAX_FILE_PATH_LEN];
+	char dest_filepath[MAX_FILE_PATH_LEN];
+	if (pfh == NULL) return EXIT_FAILURE;
+	dir_get_file_path_from_file_id(pfh->fileId, get_dir_folder(), src_filename, MAX_FILE_PATH_LEN);
+
+	/* Build the destination path. The user filename is unauthenticated header
+	 * data that ends up in a filesystem path, so it must pass the allowlist.
+	 * Fail loud rather than guessing at a "fixed" name. */
+	if (strlen(pfh->userFileName) == 0) {
+		char file_name[10];
+		snprintf(file_name, 10, "%04x", pfh->fileId);
+		strlcpy(dest_filepath, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, dest_folder, MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, file_name, MAX_FILE_PATH_LEN);
+	} else {
+		if (!pfh_filename_is_safe(pfh->userFileName)) {
+			error_print("Unsafe user filename in header of file %04x - not installing\n",
+			            pfh->fileId);
+			return EXIT_FAILURE;
+		}
+		strlcpy(dest_filepath, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, dest_folder, MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, pfh->userFileName, MAX_FILE_PATH_LEN);
+	}
+
+	/* Read the body into memory (fixes the old fseek leak path). */
+	uint8_t *body = NULL;
+	size_t body_len = 0;
+	if (pfh_read_body(src_filename, pfh->bodyOffset, &body, &body_len,
+	                  MAX_INSTALL_BODY_LEN) != EXIT_SUCCESS) {
+		return EXIT_FAILURE;
+	}
+
+#ifdef IORS_CONTROL_BUILD
+	/* Signature gate: mandatory for folders that require it, fail closed.
+	 * This runs on the as-stored body bytes, BEFORE unzip and BEFORE any
+	 * line-ending conversion -- that is what was signed. */
+	if (folder_requires_signature(dest_folder)) {
+		if (AuthenticateImage(body, body_len, (uint8_t *)pfh->signature,
+		                      g_image_signing_public_key) != EXIT_SUCCESS) {
+			error_print("Signature INVALID for file %04x - not installing to %s\n",
+			            pfh->fileId, dest_folder);
+			free(body);
+			return EXIT_FAILURE;
+		}
+		debug_print("Signature OK for file %04x\n", pfh->fileId);
+	}
+#endif
+
+	/* Ascii files need to be made linux compatible. Done in memory, after
+	 * verification, instead of shelling out to dos2unix afterwards. */
+	if (pfh->fileType == PFH_TYPE_ASCII) {
+		pfh_convert_crlf(body, &body_len);
+	}
+
+	/* Write the body to the tmp file. */
+	char tmp_filename[MAX_FILE_PATH_LEN];
+	strlcpy(tmp_filename, dest_filepath, sizeof(tmp_filename));
+	strlcat(tmp_filename, ".tmp", sizeof(tmp_filename));
+
+	if (pfh_write_file(tmp_filename, body, body_len) != EXIT_SUCCESS) {
+		free(body);
+		return EXIT_FAILURE;
+	}
+	free(body);
+	body = NULL;
+
+	if (update_keywords_and_expiry) {
+		/* If successful we change the header to include a keyword for the
+		 * installed dir and set the upload and expiry dates */
+		pfh_add_keyword(pfh, dest_folder);
+		pfh->uploadTime = 0; /* Requires dir reload to set this correctly */
+		pfh->expireTime = 2145848400; // 2038-01-01
+		if (pfh_update_pacsat_header(pfh, get_dir_folder()) != EXIT_SUCCESS) {
+			debug_print("** Failed to re-write header in file.\n");
+			remove(tmp_filename);
+			return EXIT_FAILURE;
+		}
+	}
+
+	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
+		/* Uncompress and form the final file. No shell: argv straight into
+		 * execvp. Filename is already allowlisted, but exec with argv means
+		 * even a hostile name could not be interpreted. */
+		char output_folder[MAX_FILE_PATH_LEN];
+		strlcpy(output_folder, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(output_folder, "/", MAX_FILE_PATH_LEN);
+		strlcat(output_folder, dest_folder, MAX_FILE_PATH_LEN);
+
+		char *unzip_argv[] = { "unzip", "-o", "-d", output_folder,
+		                       tmp_filename, NULL };
+		debug_print("Uncompressing file: unzip -o -d %s %s\n",
+		            output_folder, tmp_filename);
+		int shell_rc = pfh_run_cmd(unzip_argv);
+		remove(tmp_filename);
+		if (shell_rc != 0) {
+			/* A failed unzip after a passed signature check is a loud
+			 * failure, not a silent no-op install. */
+			error_print("unzip returned %d for file %04x - install failed\n",
+			            shell_rc, pfh->fileId);
+			return EXIT_FAILURE;
+		}
+	} else {
+		/* Commit the file without uncompressing */
+		if (rename(tmp_filename, dest_filepath) != 0) {
+			error_print("Could not rename %s to %s - %s\n",
+			            tmp_filename, dest_filepath, strerror(errno));
+			remove(tmp_filename);
+			return EXIT_FAILURE;
+		}
+	}
+
+	return EXIT_SUCCESS;
+}
+
+#if 0
 int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int update_keywords_and_expiry) {
 
 	char src_filename[MAX_FILE_PATH_LEN];
@@ -570,6 +869,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int upd
 	int32_t rc = fseek(infile, pfh->bodyOffset, SEEK_SET);
 	if (rc != 0) {
 		debug_print("Could not seek body offset for file: %s - %s\n",src_filename, strerror(errno));
+		fclose(outfile);
 		return EXIT_FAILURE;
 	}
 	int ch=fgetc(infile);
@@ -647,6 +947,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int upd
 
 	return EXIT_SUCCESS;
 }
+#endif
 
 int pfh_extract_file(HEADER *pfh, char *dest_folder) {
 	return pfh_extract_file_and_update_keywords(pfh, dest_folder, false);

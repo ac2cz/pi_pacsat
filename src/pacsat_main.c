@@ -49,6 +49,7 @@
 #include "ftl0.h"
 #ifdef IORS_CONTROL_BUILD
 #include "keyfile.h"
+#include "authenticate_image.h"
 #endif
 #include "telemetry.h"
 
@@ -75,6 +76,9 @@ char g_broadcast_callsign[10] = "NA1SS-11";
 char g_digi_callsign[10] = "NA1SS-1";
 int g_max_frames_in_tx_buffer = 2;
 int g_serial_fd = -1;
+#ifdef IORS_CONTROL_BUILD
+uint8_t g_image_signing_public_key[IMAGE_PUBLICKEY_BYTES];
+#endif
 
 char g_upload_table_path[MAX_FILE_PATH_LEN] = "pacsat_upload_table.dat";
 
@@ -289,6 +293,10 @@ int main(int argc, char *argv[]) {
 	strlcat(last_command_time_path,"/",MAX_FILE_PATH_LEN);
 	strlcat(last_command_time_path,last_command_time_filename,MAX_FILE_PATH_LEN);
     init_commanding(last_command_time_path);
+    if (load_image_signing_key("/opt/iors/keys/image_key_public0.raw", g_image_signing_public_key) != EXIT_SUCCESS) {
+    	error_print("** Could not load image signing key\n")
+    }
+
 #endif
 	ftl0_load_upload_table();
 

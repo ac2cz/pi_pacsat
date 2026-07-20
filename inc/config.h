@@ -23,7 +23,9 @@
 #define CONFIG_H_
 
 #include "common_config.h"
-
+#ifdef IORS_CONTROL_BUILD
+#include "authenticate_image.h"
+#endif
 #define VERSION __DATE__ " ARISS FS - Version 1.0a"
 
 /* These global variables are not in the config file */
@@ -34,6 +36,9 @@ extern char g_log_filename[MAX_FILE_PATH_LEN];
  * the broadcasts. If set too high then stations wait to receive OK confirms or for their own
  * broadcast to start */
 extern int g_serial_fd; // file handle for the serial port for Rig control
+#ifdef IORS_CONTROL_BUILD
+extern uint8_t g_image_signing_public_key[IMAGE_PUBLICKEY_BYTES];
+#endif
 
 /* Define paramaters for config file */
 #define MAX_CONFIG_LINE_LENGTH 128

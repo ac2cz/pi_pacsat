@@ -57,6 +57,7 @@
 #define  FILE_DESCRIPTION 0x24
 #define  COMPRESSION_DESCRIPTION 0x25
 #define  USER_FILE_NAME 0x26
+#define  FILE_SIGNATURE 0x30
 
 // Compression types
 #define  BODY_NOT_COMPRESSED 0x00
@@ -125,6 +126,7 @@ typedef struct {
   char          file_description[PFH_SHORT_CHAR_FIELD_LEN];     /* 0x24 */
   char          compressionDesc[PFH_SHORT_CHAR_FIELD_LEN]; /* 0x25 */
   char          userFileName[PFH_SHORT_CHAR_FIELD_LEN];    /* 0x26 */
+  unsigned char signature[64];    /* 0x30 */
 
   int			other_id[PFH_NUM_OF_SPARE_FIELDS]; /* 0x42 - 0x44 or others*/
   char          other_data[PFH_NUM_OF_SPARE_FIELDS][PFH_SHORT_CHAR_FIELD_LEN];    /* 0x42 - 0x44 or others*/
