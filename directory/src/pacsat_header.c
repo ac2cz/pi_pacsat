@@ -304,7 +304,7 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 			case FILE_SIGNATURE: {
 				int j;
 				for (j=0; j < length; j++)
-					hdr->signature[j] = buffer[i];
+					hdr->signature[j] = buffer[i+j];
 				break;
 			}
 
@@ -748,9 +748,6 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 	 * This runs on the as-stored body bytes, BEFORE unzip and BEFORE any
 	 * line-ending conversion -- that is what was signed. */
 	if (folder_requires_signature(dest_folder)) {
-		if (pfh->signature == NULL) {
-		        debug_print("Signature null\n");
-		    }
 		if (g_image_signing_public_key == NULL) {
 		        debug_print("key null\n");
 		    }
