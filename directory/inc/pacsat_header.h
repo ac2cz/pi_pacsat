@@ -126,7 +126,7 @@ typedef struct {
   char          file_description[PFH_SHORT_CHAR_FIELD_LEN];     /* 0x24 */
   char          compressionDesc[PFH_SHORT_CHAR_FIELD_LEN]; /* 0x25 */
   char          userFileName[PFH_SHORT_CHAR_FIELD_LEN];    /* 0x26 */
-  unsigned char signature[64];    /* 0x30 */
+  unsigned char signature[IMAGE_SIGNATURE_BYTES];    /* 0x30 */
 
   int			other_id[PFH_NUM_OF_SPARE_FIELDS]; /* 0x42 - 0x44 or others*/
   char          other_data[PFH_NUM_OF_SPARE_FIELDS][PFH_SHORT_CHAR_FIELD_LEN];    /* 0x42 - 0x44 or others*/

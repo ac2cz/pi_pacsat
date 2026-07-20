@@ -400,7 +400,7 @@ void dir_delete_node(DIR_NODE *node) {
 		node->prev->next = node->next;
 	}
 	//debug_print("REMOVED: ");
-	pfh_debug_print(node->pfh);
+	//pfh_debug_print(node->pfh);
 	free(node->pfh);
 	free(node);
 }
