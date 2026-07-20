@@ -748,18 +748,6 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 	 * This runs on the as-stored body bytes, BEFORE unzip and BEFORE any
 	 * line-ending conversion -- that is what was signed. */
 	if (folder_requires_signature(dest_folder)) {
-		if (g_image_signing_public_key == NULL) {
-		        debug_print("key null\n");
-		    }
-		    if (body == NULL) {
-		    	debug_print("body null\n");
-		    }
-		debug_print("Signature: ");
-		int s;
-		for (s=0; s<64; s++) {
-			debug_print(" %x",pfh->signature[s]);
-		}
-		debug_print("\n");
 		if (AuthenticateImage(body, body_len, (uint8_t *)pfh->signature,
 		                      g_image_signing_public_key) != EXIT_SUCCESS) {
 			error_print("Signature INVALID for file %04x - not installing to %s\n",

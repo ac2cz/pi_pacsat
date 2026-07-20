@@ -179,7 +179,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
 
-				/* We updated the PACSAT dir. Reload. */
+				/* We updated the PACSAT dir. Reload. TODO - we should lock the list while we do this */
 				dir_load();
 
 				//dir_debug_print(NULL);
