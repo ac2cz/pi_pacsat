@@ -679,20 +679,75 @@ static int pfh_run_cmd(char *const argv[]) {
 }
 
 /*
- * pfh_convert_crlf()
- * In-place CRLF -> LF conversion on the in-memory body (replaces the
- * dos2unix shell-out). Shrinks *len; never grows the buffer.
+ * pfh_convert_crlf_file()
+ * Convert CRLF -> LF in place on an installed file. Streams through a tmp
+ * file and renames over the original, so a failure part way through leaves
+ * the original intact.
+ *
+ * Works like a dos2unix shell-out would, without invoking a shell and dealing
+ * with path security. Works for both the direct-rename and the
+ * unzip install paths, since it operates on the final committed file.
+ *
+ * Returns EXIT_SUCCESS/EXIT_FAILURE.
  */
-static void pfh_convert_crlf(uint8_t *buf, size_t *len) {
-	size_t r = 0, w = 0, n = *len;
-	while (r < n) {
-		if (buf[r] == 0x0D && r + 1 < n && buf[r + 1] == 0x0A) {
-			r++; /* drop the CR, keep the LF */
+static int pfh_convert_crlf_file(const char *path) {
+	char tmp_path[MAX_FILE_PATH_LEN];
+	strlcpy(tmp_path, path, sizeof(tmp_path));
+	strlcat(tmp_path, ".crlf", sizeof(tmp_path));
+
+	FILE *in = fopen(path, "rb");
+	if (in == NULL) {
+		error_print("CRLF convert: cannot open %s - %s\n", path, strerror(errno));
+		return EXIT_FAILURE;
+	}
+	FILE *out = fopen(tmp_path, "wb");
+	if (out == NULL) {
+		error_print("CRLF convert: cannot open %s - %s\n", tmp_path, strerror(errno));
+		fclose(in);
+		return EXIT_FAILURE;
+	}
+
+	int rc = EXIT_SUCCESS;
+	int ch;
+	int pending_cr = 0;
+	while ((ch = fgetc(in)) != EOF) {
+		if (pending_cr) {
+			pending_cr = 0;
+			if (ch == 0x0A) {
+				/* CRLF -> LF: drop the CR, emit the LF */
+				if (fputc(0x0A, out) == EOF) { rc = EXIT_FAILURE; break; }
+				continue;
+			}
+			/* Bare CR: emit it unchanged, then fall through for this char */
+			if (fputc(0x0D, out) == EOF) { rc = EXIT_FAILURE; break; }
+		}
+		if (ch == 0x0D) {
+			pending_cr = 1;   /* hold it until we see what follows */
 			continue;
 		}
-		buf[w++] = buf[r++];
+		if (fputc(ch, out) == EOF) { rc = EXIT_FAILURE; break; }
 	}
-	*len = w;
+	/* Trailing CR at EOF */
+	if (rc == EXIT_SUCCESS && pending_cr) {
+		if (fputc(0x0D, out) == EOF) rc = EXIT_FAILURE;
+	}
+	if (rc == EXIT_SUCCESS && ferror(in)) rc = EXIT_FAILURE;
+
+	fclose(in);
+	if (fclose(out) != 0) rc = EXIT_FAILURE;
+
+	if (rc != EXIT_SUCCESS) {
+		error_print("CRLF convert failed on %s - %s\n", path, strerror(errno));
+		remove(tmp_path);
+		return EXIT_FAILURE;
+	}
+	if (rename(tmp_path, path) != 0) {
+		error_print("CRLF convert: cannot rename %s to %s - %s\n",
+		            tmp_path, path, strerror(errno));
+		remove(tmp_path);
+		return EXIT_FAILURE;
+	}
+	return EXIT_SUCCESS;
 }
 
 /**
@@ -753,38 +808,23 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 	/* Signature gate: mandatory for folders that require it, fail closed.
 	 * This runs on the as-stored body bytes, BEFORE unzip and BEFORE any
 	 * line-ending conversion -- that is what was signed. */
-	if (folder_requires_signature(dest_folder)) {
-		    if (body == NULL) {
-		    	debug_print("body null\n");
-		    }
-		debug_print("Signature: ");
-		int s;
-		for (s=0; s<64; s++) {
-			debug_print(" %x",pfh->signature[s]);
+	/* Uncompressed: the body IS the signed content. Verify before we write
+		 * anything to the destination. */
+		if (pfh->compression != BODY_COMPRESSED_PKZIP) {
+			if (folder_requires_signature(dest_folder)) {
+				if (AuthenticateImage(body, body_len, pfh->signature,
+						g_image_signing_public_key) != EXIT_SUCCESS) {
+					error_print("Signature INVALID for file %04x - not installing to %s\n",
+					            pfh->fileId, dest_folder);
+					free(body);
+					return EXIT_FAILURE;
+				}
+				debug_print("Signature OK for file %04x\n", pfh->fileId);
+			}
 		}
-		debug_print("\n");
-		debug_print("Key: ");
-		for (s=0; s<32; s++) {
-			debug_print(" %x",g_image_signing_public_key[s]);
-		}
-		debug_print("\n");
-
-		if (AuthenticateImage(body, body_len, (uint8_t *)pfh->signature,
-		                      g_image_signing_public_key) != EXIT_SUCCESS) {
-			error_print("Signature INVALID for file %04x - not installing to %s\n",
-			            pfh->fileId, dest_folder);
-			free(body);
-			return EXIT_FAILURE;
-		}
-		debug_print("Signature OK for file %04x\n", pfh->fileId);
-	}
+		/* Compressed: the signature covers the file INSIDE the zip, so the check
+		 * has to wait until after extraction. See below. */
 #endif
-
-	/* Ascii files need to be made linux compatible. Done in memory, after
-	 * verification, instead of shelling out to dos2unix afterwards. */
-	if (pfh->fileType == PFH_TYPE_ASCII) {
-		pfh_convert_crlf(body, &body_len);
-	}
 
 	/* Write the body to the tmp file. */
 	char tmp_filename[MAX_FILE_PATH_LEN];
@@ -812,6 +852,70 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 	}
 
 	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
+		/* Extract to a staging folder, verify the extracted file, and only
+		 * then move it into the destination. PacsatGround zips on the fly
+		 * after signing, so the signature covers the file inside the zip,
+		 * not the zip itself. The filename inside the zip will be exactly
+		 * the userFileName */
+		char staging_folder[MAX_FILE_PATH_LEN];
+		char staged_file[MAX_FILE_PATH_LEN];
+
+		strlcpy(staging_folder, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(staging_folder, "/tmp", MAX_FILE_PATH_LEN);
+		if (mkdir(staging_folder, 0755) != 0 && errno != EEXIST) {
+			error_print("Could not create staging folder %s - %s\n",
+			            staging_folder, strerror(errno));
+			remove(tmp_filename);
+			return EXIT_FAILURE;
+		}
+
+		char *unzip_argv[] = { "unzip", "-o", "-j", "-d", staging_folder,
+		                       tmp_filename, NULL };
+		debug_print("Uncompressing file to staging: %s\n", staging_folder);
+		int unzip_rc = pfh_run_cmd(unzip_argv);
+		remove(tmp_filename);
+		if (unzip_rc != 0) {
+			error_print("unzip returned %d for file %04x - install failed\n",
+			            unzip_rc, pfh->fileId);
+			return EXIT_FAILURE;
+		}
+
+		/* The zip contains exactly one entry, named userFileName. */
+		strlcpy(staged_file, staging_folder, MAX_FILE_PATH_LEN);
+		strlcat(staged_file, "/", MAX_FILE_PATH_LEN);
+		strlcat(staged_file, pfh->userFileName, MAX_FILE_PATH_LEN);
+
+		if (folder_requires_signature(dest_folder)) {
+			uint8_t *extracted = NULL;
+			size_t extracted_len = 0;
+			if (pfh_read_body(staged_file, 0, &extracted, &extracted_len,
+			                  MAX_INSTALL_BODY_LEN) != EXIT_SUCCESS) {
+				error_print("Could not read extracted file %s\n", staged_file);
+				remove(staged_file);
+				return EXIT_FAILURE;
+			}
+			int auth_rc = AuthenticateImage(extracted, extracted_len,
+			                                pfh->signature, g_image_signing_public_key);
+			free(extracted);
+			if (auth_rc != EXIT_SUCCESS) {
+				error_print("Signature INVALID for extracted COMPRESSED file %04x - not installing to %s\n",
+				            pfh->fileId, dest_folder);
+				remove(staged_file);
+				return EXIT_FAILURE;
+			}
+			debug_print("Signature OK for extracted COMPRESSED file %04x\n", pfh->fileId);
+		}
+
+		/* Commit: move the verified file into the destination. */
+		if (rename(staged_file, dest_filepath) != 0) {
+			error_print("Could not rename %s to %s - %s\n",
+			            staged_file, dest_filepath, strerror(errno));
+			remove(staged_file);
+			return EXIT_FAILURE;
+		}
+
+#if 0
+	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
 		/* Uncompress and form the final file. No shell: argv straight into
 		 * execvp. Filename is already allowlisted, but exec with argv means
 		 * even a hostile name could not be interpreted. */
@@ -833,6 +937,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 			            shell_rc, pfh->fileId);
 			return EXIT_FAILURE;
 		}
+#endif
 	} else {
 		/* Commit the file without uncompressing */
 		if (rename(tmp_filename, dest_filepath) != 0) {
@@ -840,6 +945,15 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 			            tmp_filename, dest_filepath, strerror(errno));
 			remove(tmp_filename);
 			return EXIT_FAILURE;
+		}
+	}
+
+
+	/* Ascii files need to be made linux compatible */
+	if (pfh->fileType == PFH_TYPE_ASCII) {
+		if (pfh_convert_crlf_file(dest_filepath) != EXIT_SUCCESS) {
+			error_print("%s: Could not convert line endings to linux\n", dest_filepath);
+			/* This is not fatal but we don't have the right line endings perhaps */
 		}
 	}
 
@@ -1227,7 +1341,7 @@ unsigned char * add_optional_header(unsigned char *p, HEADER *pfh) {
 		p = pfh_store_str_field(p, USER_FILE_NAME, strlen(pfh->userFileName), pfh->userFileName);
 	if (pfh->signature_type != 0) {
 		p = pfh_store_char_field(p, SIGNATURE_TYPE, pfh->signature_type);
-		p = pfh_store_str_field(p, FILE_SIGNATURE, IMAGE_SIGNATURE_BYTES, pfh->signature);
+		p = pfh_store_str_field(p, FILE_SIGNATURE, IMAGE_SIGNATURE_BYTES, (char *)pfh->signature);
 	}
 	int i;
 	for (i=0; i < PFH_NUM_OF_SPARE_FIELDS; i++) {

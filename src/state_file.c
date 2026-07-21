@@ -86,6 +86,8 @@ void load_state(char *filepath) {
 					g_state_pacsat_log_level = atoi(value);
 				} else if (strcmp(key, TELEM_SEND_PERIOD_IN_SECONDS) == 0) {
 					g_telem_send_period_in_seconds = atoi(value);
+				} else if (strcmp(key, STATE_IMAGE_SIGNING_KEY_NUMBER) == 0) {
+					g_state_image_signing_key_number = atoi(value);
 				} else {
 					error_print("Unknown key in state file: %s : %s\n",filename, key);
 				}
@@ -120,6 +122,7 @@ void save_state() {
 		if(save_int_key_value(FTL0_MAX_UPLOAD_AGE_IN_IN_SECONDS, g_ftl0_max_upload_age_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(STATE_PACSAT_LOG_LEVEL, g_state_pacsat_log_level, file) == EXIT_FAILURE) { fclose(file); return;}
 		if(save_int_key_value(TELEM_SEND_PERIOD_IN_SECONDS, g_telem_send_period_in_seconds, file) == EXIT_FAILURE) { fclose(file); return;}
+		if(save_int_key_value(STATE_IMAGE_SIGNING_KEY_NUMBER, g_state_image_signing_key_number, file) == EXIT_FAILURE) { fclose(file); return;}
 	}
 	fclose(file);
 	/* This rename is atomic and overwrites the existing file.  So we either get the whole new file or we stay with the old one.*/

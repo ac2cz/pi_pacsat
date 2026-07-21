@@ -95,6 +95,7 @@ int g_dir_maintenance_period_in_seconds = 5; // check one node after this delay
 int g_ftl0_maintenance_period_in_seconds = 60; // check after this delay
 int g_file_queue_check_period_in_seconds = 5; // check after this delay
 int g_state_pacsat_log_level = INFO_LOG;
+int g_state_image_signing_key_number = 0;
 
 int g_dir_next_file_number = 1; // this is updated from the state file and then when the dir is loaded
 int g_ftl0_max_file_size = 153600; // 150k max file size
@@ -293,8 +294,16 @@ int main(int argc, char *argv[]) {
 	strlcat(last_command_time_path,"/",MAX_FILE_PATH_LEN);
 	strlcat(last_command_time_path,last_command_time_filename,MAX_FILE_PATH_LEN);
     init_commanding(last_command_time_path);
-    if (load_image_signing_key("/opt/iors/keys/image_key_public0.raw", g_image_signing_public_key) != EXIT_SUCCESS) {
-    	error_print("** Could not load image signing key\n")
+    char signing_key_path[MAX_FILE_PATH_LEN];
+    char image_signing_key_filename[MAX_FILE_PATH_LEN];
+    strlcpy(signing_key_path, "/opt/iors/keys/",MAX_FILE_PATH_LEN);
+    snprintf(image_signing_key_filename, sizeof(image_signing_key_filename), "keyfile%d.dat",g_state_image_signing_key_number);
+    strlcat(signing_key_path, image_signing_key_filename,sizeof(signing_key_path));
+
+    if (load_image_signing_key(signing_key_path, g_image_signing_public_key) != EXIT_SUCCESS) {
+    	error_print("** Could not load image signing key %s\n",signing_key_path);
+    } else {
+    	debug_print("Loaded signing key: %s\n",signing_key_path);
     }
 
 #endif
