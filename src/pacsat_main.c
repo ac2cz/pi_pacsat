@@ -297,7 +297,7 @@ int main(int argc, char *argv[]) {
     char signing_key_path[MAX_FILE_PATH_LEN];
     char image_signing_key_filename[MAX_FILE_PATH_LEN];
     strlcpy(signing_key_path, "/opt/iors/keys/",MAX_FILE_PATH_LEN);
-    snprintf(image_signing_key_filename, sizeof(image_signing_key_filename), "keyfile%d.dat",g_state_image_signing_key_number);
+    snprintf(image_signing_key_filename, sizeof(image_signing_key_filename), "image_key_public%d.raw",g_state_image_signing_key_number);
     strlcat(signing_key_path, image_signing_key_filename,sizeof(signing_key_path));
 
     if (load_image_signing_key(signing_key_path, g_image_signing_public_key) != EXIT_SUCCESS) {
