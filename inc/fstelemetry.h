@@ -27,9 +27,11 @@ typedef struct __attribute__((__packed__)) {
     unsigned int FTL0MaxUploadAgeMin : 16;
     unsigned int LogLevel : 8;
     unsigned int SigningKey : 8;
+    unsigned int NumSignedFolders : 8;
+    unsigned int SignedFoldersFromConfig : 1;
     unsigned int PBEnabled : 1;
     unsigned int UplinkEnabled : 2;
-    unsigned int pad1 : 5;
+    unsigned int pad1 : 4;
 
 } fstelemetry_t;
 #endif /* FSTELEMETRY_H_ */
