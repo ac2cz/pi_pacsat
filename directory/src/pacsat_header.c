@@ -762,7 +762,9 @@ static int pfh_convert_crlf_file(const char *path) {
  * written. Fail closed.
  *
  * Returns EXIT_SUCCESS if the extracted file could be saved or EXIT_FAILURE
- * if it could not.
+ * if it could not.  We do not update the keywords unless the file could be
+ * saved.  The caller must reload the directory as the uploadTime of the
+ * changed file has been reset.
  */
 int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
                                          int update_keywords_and_expiry) {
@@ -809,7 +811,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 	 * This runs on the as-stored body bytes, BEFORE unzip and BEFORE any
 	 * line-ending conversion -- that is what was signed. */
 	/* Uncompressed: the body IS the signed content. Verify before we write
-		 * anything to the destination. */
+	 * anything to the destination. */
 		if (pfh->compression != BODY_COMPRESSED_PKZIP) {
 			if (folder_requires_signature(dest_folder)) {
 				if (AuthenticateImage(body, body_len, pfh->signature,
@@ -837,19 +839,6 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 	}
 	free(body);
 	body = NULL;
-
-	if (update_keywords_and_expiry) {
-		/* If successful we change the header to include a keyword for the
-		 * installed dir and set the upload and expiry dates */
-		pfh_add_keyword(pfh, dest_folder);
-		pfh->uploadTime = 0; /* Requires dir reload to set this correctly */
-		pfh->expireTime = 2145848400; // 2038-01-01
-		if (pfh_update_pacsat_header(pfh, get_dir_folder()) != EXIT_SUCCESS) {
-			debug_print("** Failed to re-write header in file.\n");
-			remove(tmp_filename);
-			return EXIT_FAILURE;
-		}
-	}
 
 	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
 		/* Extract to a staging folder, verify the extracted file, and only
@@ -885,6 +874,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 		strlcat(staged_file, "/", MAX_FILE_PATH_LEN);
 		strlcat(staged_file, pfh->userFileName, MAX_FILE_PATH_LEN);
 
+#ifdef IORS_CONTROL_BUILD
 		if (folder_requires_signature(dest_folder)) {
 			uint8_t *extracted = NULL;
 			size_t extracted_len = 0;
@@ -905,6 +895,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 			}
 			debug_print("Signature OK for extracted COMPRESSED file %04x\n", pfh->fileId);
 		}
+#endif
 
 		/* Commit: move the verified file into the destination. */
 		if (rename(staged_file, dest_filepath) != 0) {
@@ -914,30 +905,6 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 			return EXIT_FAILURE;
 		}
 
-#if 0
-	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
-		/* Uncompress and form the final file. No shell: argv straight into
-		 * execvp. Filename is already allowlisted, but exec with argv means
-		 * even a hostile name could not be interpreted. */
-		char output_folder[MAX_FILE_PATH_LEN];
-		strlcpy(output_folder, get_data_folder(), MAX_FILE_PATH_LEN);
-		strlcat(output_folder, "/", MAX_FILE_PATH_LEN);
-		strlcat(output_folder, dest_folder, MAX_FILE_PATH_LEN);
-
-		char *unzip_argv[] = { "unzip", "-o", "-d", output_folder,
-		                       tmp_filename, NULL };
-		debug_print("Uncompressing file: unzip -o -d %s %s\n",
-		            output_folder, tmp_filename);
-		int shell_rc = pfh_run_cmd(unzip_argv);
-		remove(tmp_filename);
-		if (shell_rc != 0) {
-			/* A failed unzip after a passed signature check is a loud
-			 * failure, not a silent no-op install. */
-			error_print("unzip returned %d for file %04x - install failed\n",
-			            shell_rc, pfh->fileId);
-			return EXIT_FAILURE;
-		}
-#endif
 	} else {
 		/* Commit the file without uncompressing */
 		if (rename(tmp_filename, dest_filepath) != 0) {
@@ -948,7 +915,6 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 		}
 	}
 
-
 	/* Ascii files need to be made linux compatible */
 	if (pfh->fileType == PFH_TYPE_ASCII) {
 		if (pfh_convert_crlf_file(dest_filepath) != EXIT_SUCCESS) {
@@ -957,132 +923,20 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 		}
 	}
 
-	return EXIT_SUCCESS;
-}
-
-#if 0
-int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder, int update_keywords_and_expiry) {
-
-	char src_filename[MAX_FILE_PATH_LEN];
-	char dest_filepath[MAX_FILE_PATH_LEN];
-	if (pfh == NULL) return EXIT_FAILURE;
-	dir_get_file_path_from_file_id(pfh->fileId, get_dir_folder(), src_filename, MAX_FILE_PATH_LEN);
-
-	if (strlen(pfh->userFileName) == 0) {
-		/* Build the full path if we use fild-id as the destination file name */
-		char file_name[10];
-		snprintf(file_name, 10, "%04x",pfh->fileId);
-		strlcpy(dest_filepath, get_data_folder(), MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, dest_folder, MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, file_name, MAX_FILE_PATH_LEN);
-	} else {
-		/* Just build the folder path if we are going to use the user-filename*/
-		strlcpy(dest_filepath, get_data_folder(), MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, dest_folder, MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
-		strlcat(dest_filepath, pfh->userFileName, MAX_FILE_PATH_LEN);
-	}
-
-	char tmp_filename[MAX_FILE_PATH_LEN];
-	strlcpy(tmp_filename, dest_filepath, sizeof(tmp_filename));
-	strlcat(tmp_filename, ".tmp", sizeof(tmp_filename));
-
-	FILE * outfile = fopen(tmp_filename, "wb");
-	if (outfile == NULL) {
-		return EXIT_FAILURE;
-	}
-
-	/* Add the file contents */
-	FILE * infile=fopen(src_filename,"rb");
-	if (infile == NULL) {
-		fclose(outfile);
-		return EXIT_FAILURE;
-	}
-	int32_t rc = fseek(infile, pfh->bodyOffset, SEEK_SET);
-	if (rc != 0) {
-		debug_print("Could not seek body offset for file: %s - %s\n",src_filename, strerror(errno));
-		fclose(outfile);
-		return EXIT_FAILURE;
-	}
-	int ch=fgetc(infile);
-	if (ch == EOF) {
-		fclose(infile);
-		fclose(outfile);
-		remove(tmp_filename);
-		return EXIT_FAILURE; // we could not read from to the infile
-	}
-	while (ch!=EOF) {
-		int c = fputc((unsigned int)ch,outfile);
-		if (c == EOF) {
-			fclose(infile);
-			fclose(outfile);
-			remove(tmp_filename);
-			return EXIT_FAILURE; // we could not write to the file
-		}
-		ch=fgetc(infile);
-	}
-
-	fclose(infile);
-	fclose(outfile);
-
 	if (update_keywords_and_expiry) {
-		/* If successful we change the header to include a keyword for the installed dir and set the upload and expiry dates */
 		pfh_add_keyword(pfh, dest_folder);
 		pfh->uploadTime = 0; /* Requires dir reload to set this correctly */
 		pfh->expireTime = 2145848400; // 2038-01-01
 		if (pfh_update_pacsat_header(pfh, get_dir_folder()) != EXIT_SUCCESS) {
-			debug_print("** Failed to re-write header in file.\n");
-			remove(tmp_filename);
+			error_print("** Failed to re-write header for file %04x - backing out install\n",
+					pfh->fileId);
+			remove(dest_filepath);
 			return EXIT_FAILURE;
 		}
 	}
 
-
-	/* Try to uncompress. We do this after the commit as the keywords are now updated. Unzip can change the filename
-	 * TODO - failure scenarios here need more testing */
-	if (pfh->compression == BODY_COMPRESSED_PKZIP) {
-		/* Uncompress and form the final file */
-		char command[MAX_FILE_PATH_LEN];
-		char output_folder[MAX_FILE_PATH_LEN];
-
-		strlcpy(output_folder, get_data_folder(), MAX_FILE_PATH_LEN);
-		strlcat(output_folder, "/", MAX_FILE_PATH_LEN);
-		strlcat(output_folder, dest_folder, MAX_FILE_PATH_LEN);
-
-		strlcpy(command, "unzip -o -d", MAX_FILE_PATH_LEN);
-		strlcat(command, output_folder, MAX_FILE_PATH_LEN);
-		strlcat(command, " ", MAX_FILE_PATH_LEN);
-		strlcat(command, tmp_filename, MAX_FILE_PATH_LEN);
-		debug_print("Uncomnpressing file: %s\n",command);
-		// TODO System needs cancellation headers if this runs in seperate thread
-		int shell_rc = system(command);
-		if (shell_rc == -1) debug_print("Error: Unable to start shell for unzip command\n");
-		if (shell_rc != 0) debug_print("Error: unzip returned %d\n",shell_rc);
-		remove(tmp_filename);
-	} else {
-		/* Commit the file without uncompressing */
-		rename(tmp_filename, dest_filepath);
-		//debug_print("Extracted %s from %s\n",dest_filepath, src_filename);
-
-	}
-
-	/* Ascii files need to be made linux compatible */
-	if (pfh->fileType == PFH_TYPE_ASCII) {
-		char line_endings_cmd[MAX_FILE_PATH_LEN];
-		strlcpy(line_endings_cmd, "dos2unix ",MAX_FILE_PATH_LEN);
-		strlcat(line_endings_cmd, dest_filepath, sizeof(dest_filepath));
-		if (system(line_endings_cmd) != EXIT_SUCCESS) {
-			error_print("%s: Could not convert line endings to linux\n",dest_filepath);
-		};
-
-	}
-
 	return EXIT_SUCCESS;
 }
-#endif
 
 int pfh_extract_file(HEADER *pfh, char *dest_folder) {
 	return pfh_extract_file_and_update_keywords(pfh, dest_folder, false);
