@@ -69,6 +69,7 @@ void signal_load_config (int sig);
 int g_verbose = false;
 char g_log_filename[MAX_FILE_PATH_LEN];
 char last_command_time_filename[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";
+char image_signing_folders_filename[MAX_FILE_PATH_LEN] = "folders_signing.dat";
 
 /* These global variables are in the config file */
 int g_bit_rate = 1200;
@@ -295,6 +296,18 @@ int main(int argc, char *argv[]) {
 	strlcat(last_command_time_path,"/",MAX_FILE_PATH_LEN);
 	strlcat(last_command_time_path,last_command_time_filename,MAX_FILE_PATH_LEN);
     init_commanding(last_command_time_path);
+
+    char image_signing_folders_list[MAX_FILE_PATH_LEN];
+	strlcpy(image_signing_folders_list, data_folder_path,MAX_FILE_PATH_LEN);
+	strlcat(image_signing_folders_list,"/",MAX_FILE_PATH_LEN);
+	strlcat(image_signing_folders_list,get_folder_str(FolderSigning),MAX_FILE_PATH_LEN);
+	strlcat(image_signing_folders_list,"/",MAX_FILE_PATH_LEN);
+	strlcat(image_signing_folders_list,image_signing_folders_filename,MAX_FILE_PATH_LEN);
+    if (init_signed_folders(image_signing_folders_list) == EXIT_SUCCESS) {
+    	debug_print("Loaded file of folders that require signing for installation\n");
+    } else {
+    	error_print("** No file %s for folder signing, using defaults\n",image_signing_folders_list);
+    }
 
     load_signing_key(g_state_image_signing_key_number);
 
