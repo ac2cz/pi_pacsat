@@ -373,7 +373,7 @@ int pfh_remove_keyword(HEADER *pfh, char *keyword) {
 	char *key = strtok(pfh->keyWords, " ");
 	strlcpy(new_keywords,"", PFH_SHORT_CHAR_FIELD_LEN);
 	while (key != NULL) {
-		if (strncmp(key, keyword, PFH_SHORT_CHAR_FIELD_LEN) != 0) {
+		if (strcmp(key, keyword) != 0) {
 			strlcat(new_keywords,key, PFH_SHORT_CHAR_FIELD_LEN);
 			strlcat(new_keywords," ", PFH_SHORT_CHAR_FIELD_LEN);
 		}
@@ -388,12 +388,14 @@ int pfh_remove_keyword(HEADER *pfh, char *keyword) {
 }
 
 int pfh_contains_keyword(HEADER *pfh, char *keyword) {
-	char *key = strtok(pfh->keyWords, " ");
+	char tmp[PFH_SHORT_CHAR_FIELD_LEN];
+	char *saveptr;
+	strlcpy(tmp, pfh->keyWords, PFH_SHORT_CHAR_FIELD_LEN);
+	char *key = strtok_r(tmp, " ", &saveptr);
 	while (key != NULL) {
-		if (strncmp(key, keyword, PFH_SHORT_CHAR_FIELD_LEN) == 0) {
+		if (strcmp(key, keyword) == 0)
 			return true;
-		}
-		key = strtok(NULL, " ");
+		key = strtok_r(NULL, " ", &saveptr);
 	}
 	return false;
 }
