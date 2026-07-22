@@ -47,6 +47,7 @@ int send_telemetry(time_t now) {
     fstelemetry.FTL0MaxFileSizeKb = g_ftl0_max_file_size / 1024;
     fstelemetry.FTL0MaxUploadAgeMin = g_ftl0_max_upload_age_in_seconds / 60;
     fstelemetry.LogLevel = g_state_pacsat_log_level;
+    fstelemetry.SigningKey = g_state_image_signing_key_number;
 
 	//debug_print("Sending FS Telem\n");
 	int rc = send_raw_packet(g_broadcast_callsign, TELEM_CALLSIGN, PID_NO_PROTOCOL, (unsigned char *)&fstelemetry, sizeof(fstelemetry));
