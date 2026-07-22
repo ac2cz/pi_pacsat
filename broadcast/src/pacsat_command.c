@@ -410,6 +410,25 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				last_command_rc = EXIT_SUCCESS;
 				pb_send_ok(from_callsign);
 				return true;
+#ifdef IORS_CONTROL_BUILD
+			case SWCmdPacsatChangeSigningKey: {
+				uint16_t key_no = sw_command->comArg.arguments[0];
+				if (key_no >= NO_OF_SIGNING_KEYS) {
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+				}
+				if (load_signing_key(key_no) != EXIT_SUCCESS) {
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+				}
+				g_state_image_signing_key_number = key_no;
+				save_state();
+
+				last_command_rc = EXIT_SUCCESS;
+				pb_send_ok(from_callsign);
+				break;
+			}
+#endif
 
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
@@ -465,6 +484,23 @@ int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, 
 
 }
 */
+
+
+int load_signing_key(int key_number) {
+    char signing_key_path[MAX_FILE_PATH_LEN];
+    char image_signing_key_filename[MAX_FILE_PATH_LEN];
+    strlcpy(signing_key_path, "/opt/iors/keys/",MAX_FILE_PATH_LEN);
+    snprintf(image_signing_key_filename, sizeof(image_signing_key_filename), "image_key_public%d.raw",key_number);
+    strlcat(signing_key_path, image_signing_key_filename,sizeof(signing_key_path));
+
+    if (load_image_signing_key(signing_key_path, g_image_signing_public_key) != EXIT_SUCCESS) {
+    	error_print("** Could not load image signing key %s\n",signing_key_path);
+    	return EXIT_FAILURE;
+    } else {
+    	debug_print("Loaded signing key: %s\n",signing_key_path);
+    }
+    return EXIT_SUCCESS;
+}
 
 int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder) {
 //	debug_print("Deleting %d from %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);

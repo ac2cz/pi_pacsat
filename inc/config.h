@@ -37,6 +37,7 @@ extern char g_log_filename[MAX_FILE_PATH_LEN];
  * broadcast to start */
 extern int g_serial_fd; // file handle for the serial port for Rig control
 #ifdef IORS_CONTROL_BUILD
+#define NO_OF_SIGNING_KEYS 2
 extern uint8_t g_image_signing_public_key[IMAGE_PUBLICKEY_BYTES];
 #endif
 

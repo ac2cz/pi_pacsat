@@ -46,6 +46,7 @@
 #include "pacsat_header.h"
 #include "pacsat_dir.h"
 #include "pacsat_broadcast.h"
+#include "pacsat_command.h"
 #include "ftl0.h"
 #ifdef IORS_CONTROL_BUILD
 #include "keyfile.h"
@@ -294,17 +295,8 @@ int main(int argc, char *argv[]) {
 	strlcat(last_command_time_path,"/",MAX_FILE_PATH_LEN);
 	strlcat(last_command_time_path,last_command_time_filename,MAX_FILE_PATH_LEN);
     init_commanding(last_command_time_path);
-    char signing_key_path[MAX_FILE_PATH_LEN];
-    char image_signing_key_filename[MAX_FILE_PATH_LEN];
-    strlcpy(signing_key_path, "/opt/iors/keys/",MAX_FILE_PATH_LEN);
-    snprintf(image_signing_key_filename, sizeof(image_signing_key_filename), "image_key_public%d.raw",g_state_image_signing_key_number);
-    strlcat(signing_key_path, image_signing_key_filename,sizeof(signing_key_path));
 
-    if (load_image_signing_key(signing_key_path, g_image_signing_public_key) != EXIT_SUCCESS) {
-    	error_print("** Could not load image signing key %s\n",signing_key_path);
-    } else {
-    	debug_print("Loaded signing key: %s\n",signing_key_path);
-    }
+    load_signing_key(g_state_image_signing_key_number);
 
 #endif
 	ftl0_load_upload_table();
