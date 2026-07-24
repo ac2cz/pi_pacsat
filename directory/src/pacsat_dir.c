@@ -769,8 +769,30 @@ void dir_maintenance(time_t now) {
 
 	char file_name_with_path[MAX_FILE_PATH_LEN];
 	dir_get_file_path_from_file_id(dir_maint_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
-	//    	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
-	//    			file_name_with_path, dir_maint_node->pfh->uploadTime, now-dir_maint_node->pfh->uploadTime);
+	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
+			file_name_with_path, dir_maint_node->pfh->uploadTime, (int)(now-dir_maint_node->pfh->uploadTime));
+
+	/* Check if file has a folder tag that points to a missing file */
+	char dest_filepath[MAX_FILE_PATH_LEN];
+	char tmp[PFH_SHORT_CHAR_FIELD_LEN];
+	struct stat file_stat;
+	char *saveptr;
+	strlcpy(tmp, dir_maint_node->pfh->keyWords, PFH_SHORT_CHAR_FIELD_LEN);
+	char *key = strtok_r(tmp, " ", &saveptr);
+	while (key != NULL) {
+		strlcpy(dest_filepath, get_data_folder(), MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, key, MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, "/", MAX_FILE_PATH_LEN);
+		strlcat(dest_filepath, dir_maint_node->pfh->userFileName, MAX_FILE_PATH_LEN);
+		if (stat(dest_filepath, &file_stat) != 0) {
+			debug_print("File id: %d has missing file: %s in folder %s\n",dir_maint_node->pfh->fileId, dir_maint_node->pfh->userFileName, key);
+			pfh_remove_keyword(dir_maint_node->pfh, key);
+		}
+		key = strtok_r(NULL, " ", &saveptr);
+	}
+
+    /* Check if the file has expired */
 	long age = 0;
 	if (dir_maint_node->pfh->expireTime == 0) {
 		/* Then expiry is based on a fixed time after upload */
@@ -797,7 +819,6 @@ void dir_maintenance(time_t now) {
 			dir_delete_node(node);
 		}
 	} else {
-		// TODO - Check if there is an expiry date in the header
 		dir_maint_node = dir_maint_node->next;
 	}
 
