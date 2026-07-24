@@ -1010,11 +1010,6 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 	char new_filename[MAX_FILE_PATH_LEN];
 	dir_get_file_path_from_file_id(uplink_list[selected_station].file_id, get_dir_folder(), new_filename, MAX_FILE_PATH_LEN);
 	if (rename(tmp_filename, new_filename) == EXIT_SUCCESS) {
-//		char file_id_str[5];
-//		snprintf(file_id_str, 4, "%d",uplink_list[selected_station].file_id);
-//		strlcpy(pfh->fileName, file_id_str, sizeof(pfh->fileName));
-//		strlcpy(pfh->fileExt, PSF_FILE_EXT, sizeof(pfh->fileExt));
-
 		DIR_NODE *p = dir_add_pfh(pfh, new_filename);
 		if (p == NULL) {
 			error_print("** Could not add %s to dir\n",new_filename);
@@ -1024,6 +1019,19 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 			}
 			return ER_NO_ROOM; /* This is a bit of a guess at the error, but it is unclear why else this would fail. */
 		}
+#ifdef IORS_CONTROL_BUILD
+		if (g_state_uplink_open == FTL0_STATE_COMMAND) {
+			/* Otherwise the file is installed.  If it has valid folders then we could try to install it */
+			char tmp[PFH_LONG_CHAR_FIELD_LEN];
+			char *saveptr;
+			strlcpy(tmp, pfh->keyWords, PFH_LONG_CHAR_FIELD_LEN);
+			char *key = strtok_r(tmp, " ", &saveptr);
+			while (key != NULL) {
+				debug_print("IGNORED Request to auto install into folder: %s\n",key);
+				key = strtok_r(NULL, " ", &saveptr);
+			}
+		}
+#endif
 	} else {
 		/* This looks like an io error and we can't rename the file.  Send error to the ground */
 		free(pfh);

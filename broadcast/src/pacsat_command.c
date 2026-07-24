@@ -270,9 +270,9 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 						}
 					} else {
 						/* Delete any installed copies first - the keywords record where they are */
-						char tmp[PFH_SHORT_CHAR_FIELD_LEN];
+						char tmp[PFH_LONG_CHAR_FIELD_LEN];
 						char *saveptr;
-						strlcpy(tmp, node->pfh->keyWords, PFH_SHORT_CHAR_FIELD_LEN);
+						strlcpy(tmp, node->pfh->keyWords, PFH_LONG_CHAR_FIELD_LEN);
 						char *key = strtok_r(tmp, " ", &saveptr);
 						while (key != NULL) {
 							if (pc_delete_file_from_folder(node, key, false) != EXIT_SUCCESS)

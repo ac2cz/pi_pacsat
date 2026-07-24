@@ -844,7 +844,7 @@ void dir_maintenance(time_t now) {
 	/* Check if file has a folder tag that points to a missing file */
 	int keywords_changed = false;
 	char dest_filepath[MAX_FILE_PATH_LEN];
-	char tmp[PFH_SHORT_CHAR_FIELD_LEN];
+	char tmp[PFH_LONG_CHAR_FIELD_LEN];
 	struct stat file_stat;
 	char *saveptr;
 	strlcpy(tmp, dir_maint_node->pfh->keyWords, PFH_LONG_CHAR_FIELD_LEN);
