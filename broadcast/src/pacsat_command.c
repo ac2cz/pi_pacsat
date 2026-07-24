@@ -197,8 +197,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					if (search_node->pfh->fileId != node->pfh->fileId
 							&& pfh_contains_keyword(search_node->pfh, folder)) {
 						if (pb_is_file_in_use(search_node->pfh->fileId)) {
-							// TODO - this will stay wrong unless this command is run again.  Need to add this check to maintenence
-							error_print("Install: File id %d in use, stale tag for folder %s not removed\n",
+							// Maintenance will later clean this up
+							debug_print("Install: File id %d in use, stale tag for folder %s not removed.  Maintenance will clean it later.\n",
 									search_node->pfh->fileId, folder);
 						} else {
 							debug_print("Install: Removing stale folder tag: File id %d folder %s\n",

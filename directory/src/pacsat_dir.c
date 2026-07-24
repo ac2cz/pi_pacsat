@@ -859,6 +859,21 @@ void dir_maintenance(time_t now) {
 			debug_print("File id: %d has missing file: %s in folder %s\n",dir_maint_node->pfh->fileId, dir_maint_node->pfh->userFileName, key);
 			pfh_remove_keyword(dir_maint_node->pfh, key);
 			keywords_changed = true;
+		} else if (strlen(dir_maint_node->pfh->userFileName) > 0) {
+			/* File exists - but does a newer file own this tag?  Search forward:
+			   the list is in uploadTime order so anything found supersedes us. */
+			DIR_NODE *newer = dir_get_pfh_by_userfilename(dir_maint_node->pfh->userFileName, dir_maint_node->next);
+			while (newer != NULL) {
+				if (pfh_contains_keyword(newer->pfh, key)) {
+					debug_print("File id: %d stale tag %s superseded by file id %d\n",
+							dir_maint_node->pfh->fileId, key, newer->pfh->fileId);
+					pfh_remove_keyword(dir_maint_node->pfh, key);
+					keywords_changed = true;
+					break;
+				}
+				newer = (newer->next == NULL) ? NULL
+						: dir_get_pfh_by_userfilename(dir_maint_node->pfh->userFileName, newer->next);
+			}
 		}
 		key = strtok_r(NULL, " ", &saveptr);
 	}
