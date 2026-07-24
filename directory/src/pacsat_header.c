@@ -765,8 +765,8 @@ static int pfh_convert_crlf_file(const char *path) {
  *
  * Returns EXIT_SUCCESS if the extracted file could be saved or EXIT_FAILURE
  * if it could not.  We do not update the keywords unless the file could be
- * saved.  The caller must reload the directory as the uploadTime of the
- * changed file has been reset.
+ * saved.  The caller must update the directory node, which will resave the
+ * file and pfh to disk
  */
 int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
                                          int update_keywords_and_expiry) {
@@ -927,14 +927,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 
 	if (update_keywords_and_expiry) {
 		pfh_add_keyword(pfh, dest_folder);
-		pfh->uploadTime = 0; /* Requires dir reload to set this correctly */
 		pfh->expireTime = 2145848400; // 2038-01-01
-		if (pfh_update_pacsat_header(pfh, get_dir_folder()) != EXIT_SUCCESS) {
-			error_print("** Failed to re-write header for file %04x - backing out install\n",
-					pfh->fileId);
-			remove(dest_filepath);
-			return EXIT_FAILURE;
-		}
 	}
 
 	return EXIT_SUCCESS;

@@ -57,6 +57,7 @@ uint32_t dir_get_file_id_from_filename(char *file_name);
 int dir_load();
 int dir_validate_file(HEADER *pfh, char *filename);
 void dir_free();
+void dir_delete_node(DIR_NODE *node);
 int dir_update_node(DIR_NODE *node);
 DIR_NODE * dir_add_pfh(HEADER * new_pfh, char *filename);
 DIR_NODE * dir_get_pfh_by_date(DIR_DATE_PAIR pair, DIR_NODE *p);

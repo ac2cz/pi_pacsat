@@ -75,7 +75,6 @@
 
 /* Forward declarations */
 static void dir_unlink_node(DIR_NODE *node);
-static void dir_delete_node(DIR_NODE *node);
 void dir_debug_print(DIR_NODE *p);
 static int dir_load_pacsat_file(char *psf_name);
 static int dir_fs_update_header_id_and_uptime(char *file_name_with_path, HEADER *pfh);
@@ -372,40 +371,6 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 }
 
 /**
- * dir_delete_node()
- *
- * Remove an entry from the dir linked list and free the memory held by the node
- * and the pacsat file header.
- *
- * The files on disk are not removed.
- *
- */
-//void dir_delete_node(DIR_NODE *node) {
-//	if (node == NULL) return;
-//	if (node->prev == NULL && node->next == NULL) {
-//		// special case of only one item
-//		dir_head = NULL;
-//		dir_tail = NULL;
-//	} else if (node->prev == NULL) {
-//		// special case removing the head of the list
-//		dir_head = node->next;
-//		node->next->prev = NULL;
-//	} else if (node->next == NULL) {
-//		// special case removing the tail of the list
-//		dir_tail = node->prev;
-//		node->prev->next = NULL;
-//
-//	} else {
-//		node->next->prev = node->prev;
-//		node->prev->next = node->next;
-//	}
-//	//debug_print("REMOVED: ");
-//	//pfh_debug_print(node->pfh);
-//	free(node->pfh);
-//	free(node);
-//}
-
-/**
  * dir_free()
  *
  * Remove all entries from the dir linked list and free all the
@@ -456,12 +421,13 @@ static void dir_unlink_node(DIR_NODE *node) {
  *
  */
 void dir_delete_node(DIR_NODE *node) {
-    if (node == NULL) return;
-    dir_unlink_node(node);
-    free(node->pfh);
-    free(node);
+	if (node == NULL) return;
+	if (dir_maint_node == node)
+		dir_maint_node = node->next;  /* must read next before unlink clears it */
+	dir_unlink_node(node);
+	free(node->pfh);
+	free(node);
 }
-
 /**
  * dir_update_node()
  * The header for this node has been modified.  Move the node to the end of

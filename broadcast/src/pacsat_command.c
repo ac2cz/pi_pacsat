@@ -32,9 +32,9 @@
 #include "ax25_tools.h"
 
 /* Static vars*/
-static int last_command_rc = EXIT_SUCCESS;;
+static int last_command_rc = EXIT_SUCCESS;
 
-/* int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, uint16_t exec_arg2); */
+int pc_purge_files(char *folder);
 int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder);
 
 /**
@@ -132,6 +132,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				if (pb_is_file_in_use(file_id)) {
 					// This file is currently being broadcast then we can't update it
+					last_command_rc = PB_ERR_TEMPORARY;
 					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
 					break;
 				}
@@ -180,31 +181,38 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 
-				/* If the same tag exists on another file with the same user_filename then remove it, as it can not be valid */
-				DIR_NODE *search_node;
-				DIR_NODE *next_node = NULL;
+				if (dir_update_node(node) != EXIT_SUCCESS) {
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not update the dir node \n");
+					}
+					break;
+				}
 
-				while(search_node != NULL) {
-					search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, next_node );
-					if (search_node != NULL) {
-						//debug_print("Install: File id: %d has the same userFilename as: %s\n",search_node->pfh->fileId, node->pfh->userFileName);
-						if (search_node->pfh->fileId != node->pfh->fileId) {
-							if (pfh_contains_keyword(search_node->pfh, folder)) {
-								/* We have a differnt header with the same userfilename in the same folder */
-								debug_print("Install: Removing stale folder tag: File id %d folder %s\n", node->pfh->fileId, folder);
-								pfh_remove_keyword(search_node->pfh, folder);
-								search_node->pfh->uploadTime = 0; /* These will all be allocated upload times when we reload below */
-								if (pfh_update_pacsat_header(search_node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
-									debug_print("** Install: Failed to re-write header for file id: %d\n",node->pfh->fileId);
-								}
-							}
-						}
-						if (search_node->next == NULL) {
-							break; // we are at end of dir
+				/* If the same tag exists on another file with the same user_filename then remove it, as it can not be valid */
+				DIR_NODE *search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, NULL);
+				while (search_node != NULL) {
+					DIR_NODE *next = search_node->next;  /* capture before the node can move to the tail */
+					if (search_node->pfh->fileId != node->pfh->fileId
+							&& pfh_contains_keyword(search_node->pfh, folder)) {
+						if (pb_is_file_in_use(search_node->pfh->fileId)) {
+							// TODO - this will stay wrong unless this command is run again.  Need to add this check to maintenence
+							error_print("Install: File id %d in use, stale tag for folder %s not removed\n",
+									search_node->pfh->fileId, folder);
 						} else {
-							next_node = search_node->next;
+							debug_print("Install: Removing stale folder tag: File id %d folder %s\n",
+									search_node->pfh->fileId, folder);
+							pfh_remove_keyword(search_node->pfh, folder);
+							if (dir_update_node(search_node) != EXIT_SUCCESS)
+								error_print("Install: Could not resave pfh after stale keyword removed, for file id %d\n",
+										search_node->pfh->fileId);
 						}
 					}
+					if (next == NULL)
+						search_node = NULL;
+					else
+						search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, next);
 				}
 
 				last_command_rc = EXIT_SUCCESS;
@@ -212,9 +220,6 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
-
-				/* We updated the PACSAT dir. Reload. */
-				dir_load();
 
 				//dir_debug_print(NULL);
 
@@ -227,6 +232,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				if (pb_is_file_in_use(file_id)) {
 					// This file is currently being broadcast then we can't update it
+					last_command_rc = PB_ERR_TEMPORARY;
 					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
 					break;
 				}
@@ -251,21 +257,25 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					}
 					break;
 				}
-
 				int rc = pc_delete_file_from_folder(node, folder, is_directory_folder);
 				if (rc == EXIT_SUCCESS) {
+					if (!is_directory_folder) {
+						if (dir_update_node(node) != EXIT_SUCCESS) {
+							last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+							int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+							if (r != EXIT_SUCCESS) {
+								debug_print("\n Error : Could not update the dir node \n");
+							}
+							break;
+						}
+					} else {
+						dir_delete_node(node);
+					}
 					last_command_rc = EXIT_SUCCESS;
-					int rc = pb_send_ok(from_callsign);
+					rc = pb_send_ok(from_callsign);
 					if (rc != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send OK Response to TNC \n");
 					}
-					node->pfh->uploadTime = 0; /* This will be allocated the current time when we reload the dir below */
-					if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
-						debug_print("** Failed to re-write header in file.\n");
-					}
-
-					/* We updated the PACSAT dir. Reload. */
-					dir_load();
 				} else {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
 					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
@@ -282,8 +292,18 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) {
-					last_command_rc = PB_ERR_TEMPORARY;
-					int r = pb_send_err(from_callsign, PB_ERR_TEMPORARY);
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					break;
+				}
+
+				if (folder_id == FolderDir) {
+					debug_print("Error - cant delete the Directory while pacsat is running!\n");
+					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -296,70 +316,39 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
-
-				int is_directory_folder = false;
-				if (folder_id == FolderDir)
-					is_directory_folder = true;
-
-				DIR_NODE *node;
-				DIR_NODE *next_node = NULL;
-
-				while(node != NULL) {
-					node = dir_get_pfh_by_folder_id(folder, next_node );
-					if (node != NULL) {
-						/* We have a header installed in this folder */
-						//debug_print("Removing: File id %d from folder %s\n", node->pfh->fileId, folder);
-						if (pb_is_file_in_use(node->pfh->fileId)) {
-							// This file is currently being broadcast then we can't update it.
-							continue;
-						}
-
-						pc_delete_file_from_folder(node, folder, is_directory_folder);
-						node->pfh->uploadTime = 0; /* These will all be allocated upload times when we reload below */
-						if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
-							debug_print("** Failed to re-write header in file.\n");
-						}
-						if (node->next == NULL) {
-							break; // we are at end of dir
-						} else {
-							next_node = node->next;
+				DIR_NODE *node = dir_get_pfh_by_folder_id(folder, NULL);
+				while (node != NULL) {
+					DIR_NODE *next = node->next;  /* capture before the node can move to the tail */
+					if (pb_is_file_in_use(node->pfh->fileId)) {
+						debug_print("Delete folder: File id %d in use, skipped\n", node->pfh->fileId);
+					} else {
+						pc_delete_file_from_folder(node, folder, false);
+						if (dir_update_node(node) != EXIT_SUCCESS) {
+							error_print("Delete folder: Could not resave pfh for file id %d\n", node->pfh->fileId);
 						}
 					}
+					node = (next == NULL) ? NULL : dir_get_pfh_by_folder_id(folder, next);
 				}
 
 				// Purge all other files
 				if (purge_orphan_files) {
-					char dir_folder[MAX_FILE_PATH_LEN];
-					strlcpy(dir_folder, get_data_folder(), MAX_FILE_PATH_LEN);
-					strlcat(dir_folder, "/", MAX_FILE_PATH_LEN);
-					strlcat(dir_folder, folder, MAX_FILE_PATH_LEN);
-					//debug_print("Purging remaining files from: %s\n",dir_folder);
-					DIR * d = opendir(dir_folder);
-					if (d == NULL) {
-						error_print("** Could not open dir: %s\n",dir_folder);
-					} else {
-						struct dirent *de;
-						for (de = readdir(d); de != NULL; de = readdir(d)) {
-							char orphan_file_name[MAX_FILE_PATH_LEN];
-							strlcpy(orphan_file_name, dir_folder, sizeof(orphan_file_name));
-							strlcat(orphan_file_name, "/", sizeof(orphan_file_name));
-							strlcat(orphan_file_name, de->d_name, sizeof(orphan_file_name));
-							if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0)) {
-								//debug_print("Purging: %s\n",orphan_file_name);
-								remove(orphan_file_name);
-							}
-						}
-						closedir(d);
+					if (pc_purge_files(folder) != EXIT_SUCCESS) {
+						error_print("Purge orphan files: Could not open folder %s\n", folder);
 					}
 				}
-
-				/* We update the PACSAT dir. Reload. */
-				dir_load();
 				break;
 			}
 
 			case SWCmdPacsatDefaultFileExpiryPeriod: {
-				uint16_t age = sw_command->comArg.arguments[0] ;
+				uint16_t age = sw_command->comArg.arguments[0];
+				if (age > 3650) { // set limit at 10 years to avoid overflow in int below
+					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
+					if (r != EXIT_SUCCESS) {
+						debug_print("Error : Invalid age for file %d\n",age);
+					}
+					break;
+				}
 				g_dir_max_file_age_in_seconds = age * 24 * 60 * 60;
 				save_state();
 
@@ -372,10 +361,11 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 			}
 			case SWCmdPacsatFileExpiryPeriod: {
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16);
-				uint32_t file_age = sw_command->comArg.arguments[2] + (sw_command->comArg.arguments[3] << 16);
+				uint32_t expire_time = sw_command->comArg.arguments[2] + (sw_command->comArg.arguments[3] << 16);
 
 				if (pb_is_file_in_use(file_id)) {
 					// This file is currently being broadcast then we can't update it
+					last_command_rc = PB_ERR_TEMPORARY;
 					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
 					break;
 				}
@@ -392,10 +382,22 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 				/* Set the expire date on that file. */
-				node->pfh->expireTime = file_age;
-				if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
-					debug_print("** Failed to re-write header in file.\n");
+				node->pfh->expireTime = expire_time;
+				if (dir_update_node(node) != EXIT_SUCCESS) {
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not update the dir node \n");
+					}
+					break;
 				}
+
+				last_command_rc = EXIT_SUCCESS;
+				int rc = pb_send_ok(from_callsign);
+				if (rc != EXIT_SUCCESS) {
+					debug_print("\n Error : Could not send OK Response to TNC \n");
+				}
+
 				break;
 			}
 			case SWCmdPacsatDirMaintPeriod: {
@@ -443,7 +445,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				pb_send_ok(from_callsign);
 				break;
 			}
-			case SWCmdPacsatEnableFSTelemetry:
+			case SWCmdPacsatEnableFSTelemetry: {
 				uint16_t enable = sw_command->comArg.arguments[0];
 				uint16_t period = sw_command->comArg.arguments[1];
 
@@ -461,17 +463,20 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				save_state();
 				last_command_rc = EXIT_SUCCESS;
 				pb_send_ok(from_callsign);
-				return true;
+				break;
+			}
 #ifdef IORS_CONTROL_BUILD
 			case SWCmdPacsatChangeSigningKey: {
 				uint16_t key_no = sw_command->comArg.arguments[0];
 				if (key_no >= NO_OF_SIGNING_KEYS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
 					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					break;
 				}
 				if (load_signing_key(key_no) != EXIT_SUCCESS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
 					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					break;
 				}
 				g_state_image_signing_key_number = key_no;
 				save_state();
@@ -496,47 +501,6 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 		return EXIT_SUCCESS;
 }
 
-/*
-int pc_execute_file_in_folder(DIR_NODE *node, char *folder, uint16_t exec_arg1, uint16_t exec_arg2) {
-	char dest_file[MAX_FILE_PATH_LEN];
-		//char file_name[10];
-		//snprintf(file_name, 10, "%04x",node->pfh->fileId);
-		strlcpy(dest_file, get_data_folder(), MAX_FILE_PATH_LEN);
-		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-		strlcat(dest_file, folder, MAX_FILE_PATH_LEN);
-		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
-		strlcat(dest_file, node->pfh->userFileName, MAX_FILE_PATH_LEN);
-
-		struct stat st = {0};
-		if (stat(dest_file, &st) == -1) {
-			// No file exists, cant execute
-			return EXIT_FAILURE;
-		}
-//		debug_print("%s : RWX:%d %d %d\n",dest_file,st.st_mode & S_IRUSR,st.st_mode & S_IWUSR,st.st_mode & S_IXUSR);
-		if ((st.st_mode & S_IXUSR) != S_IXUSR) {
-			// make executable
-//			debug_print("Setting Execute Bit\n");
-			if (chmod(dest_file, st.st_mode | S_IXUSR) != EXIT_SUCCESS) {
-				return EXIT_FAILURE;
-			}
-		}
-
-		char args[25];
-		snprintf(args, 25, " %d %d",exec_arg1, exec_arg2);
-		strlcat(dest_file, args, MAX_FILE_PATH_LEN);
-
-		debug_print("Execute File by userfilename: %04x in dir: %s\n",node->pfh->fileId, dest_file);
-		int cmd_rc = system(dest_file);
-
-		if (cmd_rc == EXIT_SUCCESS) {
-			return EXIT_SUCCESS;
-		} else {
-			return EXIT_FAILURE;
-		}
-
-}
-*/
-
 
 int load_signing_key(int key_number) {
     char signing_key_path[MAX_FILE_PATH_LEN];
@@ -554,6 +518,35 @@ int load_signing_key(int key_number) {
     return EXIT_SUCCESS;
 }
 
+/**
+ * Delete all the files in a folder
+ */
+int pc_purge_files(char *folder) {
+	char dir_folder[MAX_FILE_PATH_LEN];
+	strlcpy(dir_folder, get_data_folder(), MAX_FILE_PATH_LEN);
+	strlcat(dir_folder, "/", MAX_FILE_PATH_LEN);
+	strlcat(dir_folder, folder, MAX_FILE_PATH_LEN);
+	//debug_print("Purging remaining files from: %s\n",dir_folder);
+	DIR * d = opendir(dir_folder);
+	if (d == NULL) {
+		error_print("** Could not open dir: %s\n",dir_folder);
+		return EXIT_FAILURE;
+	} else {
+		struct dirent *de;
+		for (de = readdir(d); de != NULL; de = readdir(d)) {
+			char orphan_file_name[MAX_FILE_PATH_LEN];
+			strlcpy(orphan_file_name, dir_folder, sizeof(orphan_file_name));
+			strlcat(orphan_file_name, "/", sizeof(orphan_file_name));
+			strlcat(orphan_file_name, de->d_name, sizeof(orphan_file_name));
+			if ((strcmp(de->d_name, ".") != 0) && (strcmp(de->d_name, "..") != 0)) {
+				//debug_print("Purging: %s\n",orphan_file_name);
+				remove(orphan_file_name);
+			}
+		}
+		closedir(d);
+	}
+	return EXIT_SUCCESS;
+}
 int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder) {
 //	debug_print("Deleting %d from %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
 	char dest_file[MAX_FILE_PATH_LEN];
@@ -566,7 +559,6 @@ int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_fo
 		strlcat(dest_file, "/", MAX_FILE_PATH_LEN);
 		strlcat(dest_file, file_name, MAX_FILE_PATH_LEN);
 		if (is_directory_folder) {
-			strlcat(dest_file, ".", MAX_FILE_PATH_LEN);
 			strlcat(dest_file, PSF_FILE_EXT, MAX_FILE_PATH_LEN);
 		}
 	} else {
