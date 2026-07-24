@@ -60,6 +60,7 @@ void dir_free();
 DIR_NODE * dir_add_pfh(HEADER * new_pfh, char *filename);
 DIR_NODE * dir_get_pfh_by_date(DIR_DATE_PAIR pair, DIR_NODE *p);
 DIR_NODE * dir_get_pfh_by_folder_id(char *folder, DIR_NODE *p);
+DIR_NODE * dir_get_pfh_by_userfilename(char *filename, DIR_NODE *p );
 DIR_NODE * dir_get_node_by_id(int file_id);
 void dir_maintenance();
 void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * destination);

@@ -173,13 +173,40 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					}
 					break;
 				}
+
+				/* If the same tag exists on another file with the same user_filename then remove it, as it can not be valid */
+				DIR_NODE *search_node;
+				DIR_NODE *next_node = NULL;
+
+				while(search_node != NULL) {
+					search_node = dir_get_pfh_by_userfilename(folder, next_node );
+					if (search_node != NULL) {
+						if (search_node->pfh->fileId != node->pfh->fileId) {
+							if (pfh_contains_keyword(search_node->pfh, folder)) {
+								/* We have a differnt header with the same userfilename in the same folder */
+								debug_print("Removing stale folder tag: File id %d folder %s\n", node->pfh->fileId, folder);
+								pfh_remove_keyword(search_node->pfh, folder);
+								search_node->pfh->uploadTime = 0; /* These will all be allocated upload times when we reload below */
+								if (pfh_update_pacsat_header(search_node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
+									debug_print("** Failed to re-write header for file id: %d\n",node->pfh->fileId);
+								}
+							}
+						}
+						if (search_node->next == NULL) {
+							break; // we are at end of dir
+						} else {
+							next_node = search_node->next;
+						}
+					}
+				}
+
 				last_command_rc = EXIT_SUCCESS;
 				int rc = pb_send_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
 
-				/* We updated the PACSAT dir. Reload. TODO - we should lock the list while we do this */
+				/* We updated the PACSAT dir. Reload. */
 				dir_load();
 
 				//dir_debug_print(NULL);

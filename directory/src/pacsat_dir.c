@@ -634,7 +634,7 @@ DIR_NODE * dir_get_pfh_by_date(DIR_DATE_PAIR pair, DIR_NODE *p ) {
 DIR_NODE * dir_get_pfh_by_folder_id(char *folder, DIR_NODE *p ) {
 
 	if (p == NULL) {
-		/* Then we are starting the search from the head.  TODO - could later optimize if search from head or tail */
+		/* Then we are starting the search from the head.*/
 		p = dir_head;
 	}
 	while (p != NULL) {
@@ -647,6 +647,25 @@ DIR_NODE * dir_get_pfh_by_folder_id(char *folder, DIR_NODE *p ) {
 	return NULL;
 }
 
+/**
+ * Given a userFilename return the first pfh after this node
+ *
+ */
+DIR_NODE * dir_get_pfh_by_userfilename(char *filename, DIR_NODE *p ) {
+
+	if (p == NULL) {
+		/* Then we are starting the search from the head.*/
+		p = dir_head;
+	}
+	while (p != NULL) {
+		DIR_NODE *node = p;
+		p = p->next;
+		if (strcmp(node->pfh->userFileName, filename) == 0)
+			return node;
+	}
+
+	return NULL;
+}
 
 /**
  * dir_get_node_by_id()
