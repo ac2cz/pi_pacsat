@@ -1322,14 +1322,14 @@ int ftl0_remove_file_upload_record(uint32_t id) {
  * they can be uploaded them we need to keep this amount of space free.
  *
  */
-int ftl0_get_space_reserved_by_upload_table() {
+uint32_t ftl0_get_space_reserved_by_upload_table() {
     int i;
     uint32_t space_reserved = 0;
     InProcessFileUpload_t rec;
 
     for (i=0; i < MAX_IN_PROCESS_FILE_UPLOADS; i++) {
         if (ftl0_raw_get_file_upload_record(i, &rec) != EXIT_SUCCESS) {
-            return EXIT_FAILURE;
+            return 0;
         }
         if (rec.file_id != 0) {
             space_reserved += (rec.length - rec.offset); /* We exclude the offset because that will be included in the space consumed on the disk */
@@ -1374,31 +1374,36 @@ int ftl0_load_upload_table() {
 
 		/* Token will point to the part before the , */
 		token = strtok(line, search);
+		if (token == NULL) continue;
 		//debug_print("%s",token);
-		int id = atoi(token);
+		uint32_t id = strtoul(token, NULL, 0);
 		upload_table[i].file_id = id;
 
 		token = strtok(NULL, search);
+		if (token == NULL) continue;
 		//debug_print(" , %s",token);
-		int len = atoi(token);
+		uint32_t len = strtoul(token, NULL, 0);
 		upload_table[i].length = len;
 
 		token = strtok(NULL, search);
+		if (token == NULL) continue;
 		//debug_print(" , %s",token);
-		time_t t = atol(token);
+		uint32_t t = strtoul(token, NULL, 0);
 		upload_table[i].request_time = t;
 
 		token = strtok(NULL, search);
+		if (token == NULL) continue;
 		//debug_print(" , %s",token);
 		strlcpy(upload_table[i].callsign, token,sizeof(upload_table[i].callsign));
 
 		token = strtok(NULL, search);
+		if (token == NULL) continue;
 		token[strcspn(token,"\n")] = 0; // Remove the nul termination to get rid of the new line
 		//debug_print(" , %s\n",token);
-		int off = atoi(token);
+		uint32_t off = strtoul(token, NULL, 0);
 		upload_table[i].offset = off;
 		i++;
-		if (i > MAX_IN_PROCESS_FILE_UPLOADS) {
+		if (i >= MAX_IN_PROCESS_FILE_UPLOADS) {
 			ftl0_clear_upload_table();
 			return EXIT_FAILURE; // probablly the wrong file with too many lines
 		}
@@ -1422,11 +1427,9 @@ int ftl0_save_upload_table() {
 	}
 
 	for (i=0; i < MAX_IN_PROCESS_FILE_UPLOADS; i++) {
-		if (upload_table[i].callsign[0] == 0)
-			strlcpy(upload_table[i].callsign, "NONE",sizeof(upload_table[i].callsign));
-
-		snprintf(buf, sizeof(buf), "%d,%d,%d,%s,%d\n",upload_table[i].file_id,upload_table[i].length,upload_table[i].request_time
-				,upload_table[i].callsign,upload_table[i].offset);
+		const char *cs = upload_table[i].callsign[0] ? upload_table[i].callsign : "NONE";
+		snprintf(buf, sizeof(buf), "%u,%u,%u,%s,%u\n",upload_table[i].file_id,upload_table[i].length,upload_table[i].request_time
+				,cs,upload_table[i].offset);
 		rc = fputs(buf, file);
 		if (rc == EOF) {
 			debug_print("ERROR: Writing upload table. Error: %d\n",rc);
@@ -1435,7 +1438,9 @@ int ftl0_save_upload_table() {
 		}
 	}
 	fclose(file);
-	rename(tmp_filename, g_upload_table_path);
+	if (rename(tmp_filename, g_upload_table_path) != 0) {
+		error_print("Could not rename the upload table file\n");
+	}
 
 	return EXIT_SUCCESS;
 }
@@ -1444,11 +1449,7 @@ int ftl0_remove_upload_file(uint32_t file_id) {
 	// Remove the tmp file
 	char file_name_with_path[MAX_FILE_PATH_LEN];
 	dir_get_upload_file_path_from_file_id(file_id, file_name_with_path, MAX_FILE_PATH_LEN);
-	int32_t fp = remove(file_name_with_path);
-	if (fp == -1) {
-		debug_print("Unable to remove tmp file: %s : %s\n", file_name_with_path, strerror(errno));
-		return EXIT_FAILURE;
-	}
+	remove(file_name_with_path);
 	return EXIT_SUCCESS;
 }
 
