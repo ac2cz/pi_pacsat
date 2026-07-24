@@ -74,11 +74,11 @@
 
 
 /* Forward declarations */
-void dir_free();
-void dir_delete_node(DIR_NODE *node);
+static void dir_unlink_node(DIR_NODE *node);
+static void dir_delete_node(DIR_NODE *node);
 void dir_debug_print(DIR_NODE *p);
-int dir_load_pacsat_file(char *psf_name);
-int dir_fs_update_header(char *file_name_with_path, HEADER *pfh);
+static int dir_load_pacsat_file(char *psf_name);
+static int dir_fs_update_header_id_and_uptime(char *file_name_with_path, HEADER *pfh);
 
 /* Dir variables */
 static DIR_NODE *dir_head = NULL;  // the head of the directory linked list
@@ -302,9 +302,9 @@ void insert_after(DIR_NODE *p, DIR_NODE *new_node) {
 DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 	int resave = false;
 	DIR_NODE *new_node = (DIR_NODE *)malloc(sizeof(DIR_NODE));
+	if (new_node == NULL) return NULL; // ERROR
 	new_node->pfh = new_pfh;
 	time_t now = time(0); // Get the system time in seconds since the epoch
-	if (new_node == NULL) return NULL; // ERROR
 	if (dir_head == NULL) { // This is a new list
 		dir_head = new_node;
 		dir_tail = new_node;
@@ -356,7 +356,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
     	char file_name_with_path[MAX_FILE_PATH_LEN];
     	dir_get_file_path_from_file_id(new_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
 
-		int rc = dir_fs_update_header(file_name_with_path, new_node->pfh);
+		int rc = dir_fs_update_header_id_and_uptime(file_name_with_path, new_node->pfh);
 
 		if (rc != EXIT_SUCCESS) {
 			// we could not save this
@@ -380,30 +380,30 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
  * The files on disk are not removed.
  *
  */
-void dir_delete_node(DIR_NODE *node) {
-	if (node == NULL) return;
-	if (node->prev == NULL && node->next == NULL) {
-		// special case of only one item
-		dir_head = NULL;
-		dir_tail = NULL;
-	} else if (node->prev == NULL) {
-		// special case removing the head of the list
-		dir_head = node->next;
-		node->next->prev = NULL;
-	} else if (node->next == NULL) {
-		// special case removing the tail of the list
-		dir_tail = node->prev;
-		node->prev->next = NULL;
-
-	} else {
-		node->next->prev = node->prev;
-		node->prev->next = node->next;
-	}
-	//debug_print("REMOVED: ");
-	//pfh_debug_print(node->pfh);
-	free(node->pfh);
-	free(node);
-}
+//void dir_delete_node(DIR_NODE *node) {
+//	if (node == NULL) return;
+//	if (node->prev == NULL && node->next == NULL) {
+//		// special case of only one item
+//		dir_head = NULL;
+//		dir_tail = NULL;
+//	} else if (node->prev == NULL) {
+//		// special case removing the head of the list
+//		dir_head = node->next;
+//		node->next->prev = NULL;
+//	} else if (node->next == NULL) {
+//		// special case removing the tail of the list
+//		dir_tail = node->prev;
+//		node->prev->next = NULL;
+//
+//	} else {
+//		node->next->prev = node->prev;
+//		node->prev->next = node->next;
+//	}
+//	//debug_print("REMOVED: ");
+//	//pfh_debug_print(node->pfh);
+//	free(node->pfh);
+//	free(node);
+//}
 
 /**
  * dir_free()
@@ -423,6 +423,82 @@ void dir_free() {
 	//debug_print("Dir List Cleared\n");
 }
 
+/**
+ * dir_unlink_node()
+ * Remove a node from the linked list but do not free it.
+ * The node's next/prev are left dangling; caller must re-insert or free.
+ */
+static void dir_unlink_node(DIR_NODE *node) {
+    if (node->prev == NULL && node->next == NULL) {
+        dir_head = NULL;
+        dir_tail = NULL;
+    } else if (node->prev == NULL) {
+        dir_head = node->next;
+        node->next->prev = NULL;
+    } else if (node->next == NULL) {
+        dir_tail = node->prev;
+        node->prev->next = NULL;
+    } else {
+        node->next->prev = node->prev;
+        node->prev->next = node->next;
+    }
+    node->next = NULL;
+    node->prev = NULL;
+}
+
+/**
+ * dir_delete_node()
+ *
+ * Remove an entry from the dir linked list and free the memory held by the node
+ * and the pacsat file header.
+ *
+ * The files on disk are not removed.
+ *
+ */
+void dir_delete_node(DIR_NODE *node) {
+    if (node == NULL) return;
+    dir_unlink_node(node);
+    free(node->pfh);
+    free(node);
+}
+
+/**
+ * dir_update_node()
+ * The header for this node has been modified.  Move the node to the end of
+ * the list as the newest item, assign a fresh unique uploadTime and resave
+ * the header to disk.  The node and its HEADER are moved, not reallocated,
+ * so any pointers held elsewhere (e.g. by the broadcast task) remain valid.
+ */
+int dir_update_node(DIR_NODE *node) {
+    if (node == NULL || node->pfh == NULL) return EXIT_FAILURE;
+    dir_unlink_node(node);
+
+    time_t now = time(0);
+    if (dir_head == NULL) {
+        dir_head = node;
+        dir_tail = node;
+        node->pfh->uploadTime = now;
+    } else {
+        if (dir_tail->pfh->uploadTime >= now)
+            node->pfh->uploadTime = dir_tail->pfh->uploadTime + 1;
+        else
+            node->pfh->uploadTime = now;
+        insert_after(dir_tail, node);
+    }
+
+    int rc = pfh_update_pacsat_header(node->pfh, get_dir_folder());
+    if (rc != EXIT_SUCCESS) {
+        /* Header on disk and in memory now disagree on uploadTime.  The list
+           is still consistent, so note failure but do not delete the node. */
+#ifdef IORS_CONTROL_BUILD
+		log_err(g_log_filename, IORS_ERR_FS_DIR_SAVE_ERROR);
+#endif
+    	error_print("** Could not update the header for file %04x\n", node->pfh->fileId);
+    	return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
 /**
  * dir_debug_print()
  *
@@ -772,7 +848,35 @@ void dir_maintenance(time_t now) {
 	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
 			file_name_with_path, dir_maint_node->pfh->uploadTime, (int)(now-dir_maint_node->pfh->uploadTime));
 
+    /* Check if the file has expired */
+	long age = 0;
+	if (dir_maint_node->pfh->expireTime == 0) {
+		/* Then expiry is based on a fixed time after upload */
+		age = now - dir_maint_node->pfh->uploadTime;
+	} else {
+		/* Then expiry is a fixed time stored in the file */
+		age = now - dir_maint_node->pfh->expireTime + g_dir_max_file_age_in_seconds;
+	}
+	//debug_print("%s Age: %ld \n",file_name_with_path, age);
+	// Age < 0 just means we have not reached the expire time.
+	if (age > g_dir_max_file_age_in_seconds) {
+		// Remove this file it is over the max age
+		debug_print("Purging: %s\n",file_name_with_path);
+		if (remove(file_name_with_path) != 0) {
+			error_print("Could not remove the directory file: %s\n", file_name_with_path);
+			// This was probablly open because it is being update or broadcast.  So it is OK to skip until next time
+			dir_maint_node = dir_maint_node->next;
+		} else {
+			// Remove from the dir
+			DIR_NODE *node = dir_maint_node;
+			dir_maint_node = dir_maint_node->next;
+			dir_delete_node(node);
+		}
+		return;
+	}
+
 	/* Check if file has a folder tag that points to a missing file */
+	int keywords_changed = false;
 	char dest_filepath[MAX_FILE_PATH_LEN];
 	char tmp[PFH_SHORT_CHAR_FIELD_LEN];
 	struct stat file_stat;
@@ -788,39 +892,15 @@ void dir_maintenance(time_t now) {
 		if (stat(dest_filepath, &file_stat) != 0) {
 			debug_print("File id: %d has missing file: %s in folder %s\n",dir_maint_node->pfh->fileId, dir_maint_node->pfh->userFileName, key);
 			pfh_remove_keyword(dir_maint_node->pfh, key);
+			keywords_changed = true;
 		}
 		key = strtok_r(NULL, " ", &saveptr);
 	}
 
-    /* Check if the file has expired */
-	long age = 0;
-	if (dir_maint_node->pfh->expireTime == 0) {
-		/* Then expiry is based on a fixed time after upload */
-		age = now - dir_maint_node->pfh->uploadTime;
-	} else {
-		/* Then expiry is a fixed time stored in the file */
-		age = now - dir_maint_node->pfh->expireTime + g_dir_max_file_age_in_seconds;
-	}
-	//debug_print("%s Age: %ld \n",file_name_with_path, age);
-	if (age < 0) {
-		// We have not reached the expire time or this looks wrong, something is corrupt.  Skip it
-		dir_maint_node = dir_maint_node->next;
-	} else if (age > g_dir_max_file_age_in_seconds) {
-		// Remove this file it is over the max age
-		debug_print("Purging: %s\n",file_name_with_path);
-		if (remove(file_name_with_path) != 0) {
-			error_print("Could not remove the temp file: %s\n", file_name_with_path);
-			// This was probablly open because it is being update or broadcast.  So it is OK to skip until next time
-			dir_maint_node = dir_maint_node->next;
-		} else {
-			// Remove from the dir
-			DIR_NODE *node = dir_maint_node;
-			dir_maint_node = dir_maint_node->next;
-			dir_delete_node(node);
-		}
-	} else {
-		dir_maint_node = dir_maint_node->next;
-	}
+	DIR_NODE *next = dir_maint_node->next;  /* capture before the node moves to the tail */
+	if (keywords_changed)
+		dir_update_node(dir_maint_node);
+	dir_maint_node = next;
 
 }
 
@@ -954,7 +1034,7 @@ int dir_fs_save_short(FILE *fp, uint16_t value, uint32_t offset) {
  *
  * Returns EXIT_SUCCESS or EXIT_FAILURE if there is an error
  */
-int dir_fs_update_header(char *file_name_with_path, HEADER *pfh) {
+static int dir_fs_update_header_id_and_uptime(char *file_name_with_path, HEADER *pfh) {
     int32_t rc;
 
 	FILE *fp = fopen(file_name_with_path, "r+"); // open for reading and writing

@@ -130,6 +130,12 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t folder_id = sw_command->comArg.arguments[2];
 				//dir_debug_print(NULL);
 
+				if (pb_is_file_in_use(file_id)) {
+					// This file is currently being broadcast then we can't update it
+					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
+					break;
+				}
+
 				if (folder_id == FolderDir) {
 					debug_print("Error - cant install into Directory\n");
 					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
@@ -181,7 +187,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				while(search_node != NULL) {
 					search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, next_node );
 					if (search_node != NULL) {
-						debug_print("Install: File id: %d has the same userFilename as: %s\n",search_node->pfh->fileId, node->pfh->userFileName);
+						//debug_print("Install: File id: %d has the same userFilename as: %s\n",search_node->pfh->fileId, node->pfh->userFileName);
 						if (search_node->pfh->fileId != node->pfh->fileId) {
 							if (pfh_contains_keyword(search_node->pfh, folder)) {
 								/* We have a differnt header with the same userfilename in the same folder */
@@ -218,6 +224,12 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 //				debug_print("Arg: %02x %02x\n",sw_command->comArg.arguments[0],sw_command->comArg.arguments[1]);
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
 				uint16_t folder_id = sw_command->comArg.arguments[2];
+
+				if (pb_is_file_in_use(file_id)) {
+					// This file is currently being broadcast then we can't update it
+					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
+					break;
+				}
 
 				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) {
@@ -297,6 +309,11 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					if (node != NULL) {
 						/* We have a header installed in this folder */
 						//debug_print("Removing: File id %d from folder %s\n", node->pfh->fileId, folder);
+						if (pb_is_file_in_use(node->pfh->fileId)) {
+							// This file is currently being broadcast then we can't update it.
+							continue;
+						}
+
 						pc_delete_file_from_folder(node, folder, is_directory_folder);
 						node->pfh->uploadTime = 0; /* These will all be allocated upload times when we reload below */
 						if (pfh_update_pacsat_header(node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
@@ -356,6 +373,13 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 			case SWCmdPacsatFileExpiryPeriod: {
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16);
 				uint32_t file_age = sw_command->comArg.arguments[2] + (sw_command->comArg.arguments[3] << 16);
+
+				if (pb_is_file_in_use(file_id)) {
+					// This file is currently being broadcast then we can't update it
+					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
+					break;
+				}
+
 				//This needs to set the expiry time on a specific file
 				DIR_NODE *node = dir_get_node_by_id(file_id);
 				if (node == NULL) {
