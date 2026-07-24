@@ -179,16 +179,17 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				DIR_NODE *next_node = NULL;
 
 				while(search_node != NULL) {
-					search_node = dir_get_pfh_by_userfilename(folder, next_node );
+					search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, next_node );
 					if (search_node != NULL) {
+						debug_print("Install: File id: %d has the same userFilename as: %s\n",search_node->pfh->fileId, node->pfh->userFileName);
 						if (search_node->pfh->fileId != node->pfh->fileId) {
 							if (pfh_contains_keyword(search_node->pfh, folder)) {
 								/* We have a differnt header with the same userfilename in the same folder */
-								debug_print("Removing stale folder tag: File id %d folder %s\n", node->pfh->fileId, folder);
+								debug_print("Install: Removing stale folder tag: File id %d folder %s\n", node->pfh->fileId, folder);
 								pfh_remove_keyword(search_node->pfh, folder);
 								search_node->pfh->uploadTime = 0; /* These will all be allocated upload times when we reload below */
 								if (pfh_update_pacsat_header(search_node->pfh, get_dir_folder()) != EXIT_SUCCESS) {
-									debug_print("** Failed to re-write header for file id: %d\n",node->pfh->fileId);
+									debug_print("** Install: Failed to re-write header for file id: %d\n",node->pfh->fileId);
 								}
 							}
 						}
