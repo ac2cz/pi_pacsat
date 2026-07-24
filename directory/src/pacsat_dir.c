@@ -847,7 +847,7 @@ void dir_maintenance(time_t now) {
 	char tmp[PFH_SHORT_CHAR_FIELD_LEN];
 	struct stat file_stat;
 	char *saveptr;
-	strlcpy(tmp, dir_maint_node->pfh->keyWords, PFH_SHORT_CHAR_FIELD_LEN);
+	strlcpy(tmp, dir_maint_node->pfh->keyWords, PFH_LONG_CHAR_FIELD_LEN);
 	char *key = strtok_r(tmp, " ", &saveptr);
 	while (key != NULL) {
 		strlcpy(dest_filepath, get_data_folder(), MAX_FILE_PATH_LEN);

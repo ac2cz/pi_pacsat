@@ -123,7 +123,7 @@ typedef struct {
   char          BBSMessageType;      /* 0x20 */
   char          BID[PFH_SHORT_CHAR_FIELD_LEN];             /* 0x21 */
   char          title[PFH_LONG_CHAR_FIELD_LEN];           /* 0x22 */
-  char          keyWords[PFH_SHORT_CHAR_FIELD_LEN];        /* 0x23 */
+  char          keyWords[PFH_LONG_CHAR_FIELD_LEN];        /* 0x23 */
   char          file_description[PFH_SHORT_CHAR_FIELD_LEN];     /* 0x24 */
   char          compressionDesc[PFH_SHORT_CHAR_FIELD_LEN]; /* 0x25 */
   char          userFileName[PFH_SHORT_CHAR_FIELD_LEN];    /* 0x26 */

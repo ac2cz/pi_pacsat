@@ -288,10 +288,10 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 				header_copy_to_str(&buffer[i], length, hdr->BID, 32);
 				break;
 			case TITLE:
-				header_copy_to_str(&buffer[i], length, hdr->title, 64);
+				header_copy_to_str(&buffer[i], length, hdr->title, PFH_LONG_CHAR_FIELD_LEN-1);
 				break;
 			case KEYWORDS:
-				header_copy_to_str(&buffer[i], length, hdr->keyWords, 32);
+				header_copy_to_str(&buffer[i], length, hdr->keyWords, PFH_LONG_CHAR_FIELD_LEN-1);
 				break;
 			case FILE_DESCRIPTION:
 				header_copy_to_str(&buffer[i], length, hdr->file_description, 32);
@@ -362,35 +362,35 @@ int pfh_add_keyword(HEADER *pfh, char *keyword) {
 	if (pfh_contains_keyword(pfh, keyword))
 		return EXIT_SUCCESS;
 	if (strlen(pfh->keyWords) > 0)
-		strlcat(pfh->keyWords, " ", PFH_SHORT_CHAR_FIELD_LEN);
-	strlcat(pfh->keyWords, keyword, PFH_SHORT_CHAR_FIELD_LEN);
+		strlcat(pfh->keyWords, " ", PFH_LONG_CHAR_FIELD_LEN);
+	strlcat(pfh->keyWords, keyword, PFH_LONG_CHAR_FIELD_LEN);
 
 	return EXIT_SUCCESS;
 }
 
 int pfh_remove_keyword(HEADER *pfh, char *keyword) {
-	char new_keywords[PFH_SHORT_CHAR_FIELD_LEN];
+	char new_keywords[PFH_LONG_CHAR_FIELD_LEN];
 	char *key = strtok(pfh->keyWords, " ");
-	strlcpy(new_keywords,"", PFH_SHORT_CHAR_FIELD_LEN);
+	strlcpy(new_keywords,"", PFH_LONG_CHAR_FIELD_LEN);
 	while (key != NULL) {
 		if (strcmp(key, keyword) != 0) {
-			strlcat(new_keywords,key, PFH_SHORT_CHAR_FIELD_LEN);
-			strlcat(new_keywords," ", PFH_SHORT_CHAR_FIELD_LEN);
+			strlcat(new_keywords,key, PFH_LONG_CHAR_FIELD_LEN);
+			strlcat(new_keywords," ", PFH_LONG_CHAR_FIELD_LEN);
 		}
 		key = strtok(NULL, " ");
 	}
 	if (strlen(new_keywords) > 0) {
 		new_keywords[strlen(new_keywords)-1] = 0; // we always have an extra space, so remove it
 	}
-	strlcpy(pfh->keyWords,new_keywords, PFH_SHORT_CHAR_FIELD_LEN);
+	strlcpy(pfh->keyWords,new_keywords, PFH_LONG_CHAR_FIELD_LEN);
 
 	return EXIT_SUCCESS;
 }
 
 int pfh_contains_keyword(HEADER *pfh, char *keyword) {
-	char tmp[PFH_SHORT_CHAR_FIELD_LEN];
+	char tmp[PFH_LONG_CHAR_FIELD_LEN];
 	char *saveptr;
-	strlcpy(tmp, pfh->keyWords, PFH_SHORT_CHAR_FIELD_LEN);
+	strlcpy(tmp, pfh->keyWords, PFH_LONG_CHAR_FIELD_LEN);
 	char *key = strtok_r(tmp, " ", &saveptr);
 	while (key != NULL) {
 		if (strcmp(key, keyword) == 0)
