@@ -811,8 +811,8 @@ void dir_maintenance(time_t now) {
 
 	char file_name_with_path[MAX_FILE_PATH_LEN];
 	dir_get_file_path_from_file_id(dir_maint_node->pfh->fileId, get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
-	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
-			file_name_with_path, dir_maint_node->pfh->uploadTime, (int)(now-dir_maint_node->pfh->uploadTime));
+//	debug_print("CHECKING: File id: %04x name: %s up:%d age:%d sec\n",dir_maint_node->pfh->fileId,
+//			file_name_with_path, dir_maint_node->pfh->uploadTime, (int)(now-dir_maint_node->pfh->uploadTime));
 
     /* Check if the file has expired */
 	long age = 0;

@@ -269,6 +269,17 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 							break;
 						}
 					} else {
+						/* Delete any installed copies first - the keywords record where they are */
+						char tmp[PFH_SHORT_CHAR_FIELD_LEN];
+						char *saveptr;
+						strlcpy(tmp, node->pfh->keyWords, PFH_SHORT_CHAR_FIELD_LEN);
+						char *key = strtok_r(tmp, " ", &saveptr);
+						while (key != NULL) {
+							if (pc_delete_file_from_folder(node, key, false) != EXIT_SUCCESS)
+								error_print("Delete: Could not remove installed copy of %d from %s\n",
+										node->pfh->fileId, key);
+							key = strtok_r(NULL, " ", &saveptr);
+						}
 						dir_delete_node(node);
 					}
 					last_command_rc = EXIT_SUCCESS;
