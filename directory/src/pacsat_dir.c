@@ -94,6 +94,14 @@ static char txt_folder[MAX_FILE_PATH_LEN]; // Directory path of the txt folder
 unsigned char pfh_byte_buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
 
 
+DIR_NODE * dir_get_head() {
+	return dir_head;
+}
+
+DIR_NODE * dir_get_tail() {
+	return dir_tail;
+}
+
 int dir_make_dir(char * folder) {
 	struct stat st = {0};
 	if (stat(folder, &st) == -1) {
@@ -694,11 +702,6 @@ DIR_NODE * dir_get_pfh_by_folder_id(char *folder, DIR_NODE *p ) {
  *
  */
 DIR_NODE * dir_get_pfh_by_userfilename(char *filename, DIR_NODE *p ) {
-
-	if (p == NULL) {
-		/* Then we are starting the search from the head.*/
-		p = dir_head;
-	}
 	while (p != NULL) {
 		DIR_NODE *node = p;
 		p = p->next;
@@ -864,15 +867,16 @@ void dir_maintenance(time_t now) {
 			   the list is in uploadTime order so anything found supersedes us. */
 			DIR_NODE *newer = dir_get_pfh_by_userfilename(dir_maint_node->pfh->userFileName, dir_maint_node->next);
 			while (newer != NULL) {
-				if (pfh_contains_keyword(newer->pfh, key)) {
+				/* Never let a node supersede itself. Same fileId => same file. */
+				if (newer->pfh->fileId != dir_maint_node->pfh->fileId
+						&& pfh_contains_keyword(newer->pfh, key)) {
 					debug_print("File id: %d stale tag %s superseded by file id %d\n",
 							dir_maint_node->pfh->fileId, key, newer->pfh->fileId);
 					pfh_remove_keyword(dir_maint_node->pfh, key);
 					keywords_changed = true;
 					break;
 				}
-				newer = (newer->next == NULL) ? NULL
-						: dir_get_pfh_by_userfilename(dir_maint_node->pfh->userFileName, newer->next);
+				newer = dir_get_pfh_by_userfilename(dir_maint_node->pfh->userFileName, newer->next);
 			}
 		}
 		key = strtok_r(NULL, " ", &saveptr);

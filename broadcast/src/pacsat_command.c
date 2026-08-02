@@ -191,7 +191,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				}
 
 				/* If the same tag exists on another file with the same user_filename then remove it, as it can not be valid */
-				DIR_NODE *search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, NULL);
+				DIR_NODE *search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, dir_get_head());
 				while (search_node != NULL) {
 					DIR_NODE *next = search_node->next;  /* capture before the node can move to the tail */
 					if (search_node->pfh->fileId != node->pfh->fileId

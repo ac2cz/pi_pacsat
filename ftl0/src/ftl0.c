@@ -557,7 +557,7 @@ int ftl0_process_data(char *from_callsign, char *to_callsign, int channel, unsig
 			if (err != ER_NONE) {
 				rc = ftl0_send_nak(from_callsign, channel, err);
 			} else {
-				debug_print(" *** SENDING ACK *** \n");
+				//debug_print(" *** SENDING ACK *** \n");
 				rc = ftl0_send_ack(from_callsign, channel);
 			}
 			uplink_list[selected_station].state = UL_CMD_OK;
