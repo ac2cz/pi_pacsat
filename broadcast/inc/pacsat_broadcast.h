@@ -50,6 +50,8 @@
 #define PB_FILE_DEFAULT_BLOCK_SIZE 191 /* 191 seems to be the MAX for FX25. This must be assuming 32 header bytes and 32 check bytes. AX25 Header is 17.  File Broadcast header is 9.*/
 //#define PB_FILE_DEFAULT_BLOCK_SIZE 0xF4
 
+
+#define SYSTEM "SYSTEM" // The callsign for system files
 #define PBLIST "PBLIST" // destination for PB Status when open
 #define PBFULL "PBFULL" // destination for PB status when list is full
 #define PBSHUT "PBSHUT" // destination for PB status when it is closed

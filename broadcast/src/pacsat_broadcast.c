@@ -564,6 +564,15 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 		return EXIT_FAILURE;
 	}
 	else {
+		if (strcmp(SYSTEM,node->pfh->destination) == 0) {
+			/* This is a system file and can not be downloaded */
+			error_print("System File, can not download. Id: %d\n",node->pfh->fileId);
+			rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+			if (rc != EXIT_SUCCESS) {
+				error_print("\n Error : Could not send ERR Response to TNC \n");
+			}
+			return EXIT_FAILURE;
+		}
 	    // confirm it is really on Disk and we can read the size
 		char file_name_with_path[MAX_FILE_PATH_LEN];
 		dir_get_file_path_from_file_id(file_header->file_id,get_dir_folder(), file_name_with_path, MAX_FILE_PATH_LEN);
