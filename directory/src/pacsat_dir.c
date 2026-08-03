@@ -864,7 +864,10 @@ void dir_maintenance(time_t now) {
 			keywords_changed = true;
 		} else if (strlen(dir_maint_node->pfh->userFileName) > 0) {
 			/* File exists - but does a newer file own this tag?  Search forward:
-			   the list is in uploadTime order so anything found supersedes us. */
+			   the list is broadly in uploadTime order so if we find another tag it is probably the real owner of the file.
+			   If we remove it and that is wrong, then it is obvious on the ground and they can reinstall the file to fix
+			   the tag.  This is safer than leaving two tags.
+			   NOTE: An alternative is to check the body CRC but this adds complexity for a rare case */
 			DIR_NODE *newer = dir_get_pfh_by_userfilename(dir_maint_node->pfh->userFileName, dir_maint_node->next);
 			while (newer != NULL) {
 				/* Never let a node supersede itself. Same fileId => same file. */
