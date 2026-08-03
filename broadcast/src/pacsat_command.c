@@ -521,7 +521,7 @@ int load_signing_key(int key_number) {
     strlcat(signing_key_path, image_signing_key_filename,sizeof(signing_key_path));
 
     if (load_image_signing_key(signing_key_path, g_image_signing_public_key) != EXIT_SUCCESS) {
-    	error_print("** Could not load image signing key %s\n",signing_key_path);
+    	debug_print("Did not load image signing key %s.  All folders need signatures.\n",signing_key_path);
     	return EXIT_FAILURE;
     } else {
     	debug_print("Loaded signing key: %s\n",signing_key_path);
