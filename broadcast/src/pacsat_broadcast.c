@@ -216,17 +216,22 @@ int pb_send_ok(char *from_callsign) {
  */
 int pb_send_err(char *from_callsign, int err) {
 	int rc = EXIT_SUCCESS;
-	char err_str[3];
-	snprintf(err_str, 3, "%d",err);
-	char buffer[6 + strlen(err_str)+ strlen(from_callsign)]; // NO -XX + 10 char for callsign with SSID
-	char CR = 0x0d;
-	strlcpy(buffer,"NO -", sizeof(buffer));
-	strlcat(buffer, err_str, sizeof(buffer));
-	strlcat(buffer," ", sizeof(buffer));
-	strlcat(buffer, from_callsign, sizeof(buffer));
-	strncat(buffer,&CR,2); // very specifically add just one char to the end of the string for the CR
+	char buffer[8 + strlen(from_callsign)];  // "NO -X " + callsign + CR + NUL
+	int len = snprintf(buffer, sizeof(buffer), "NO -%d %s\r", err, from_callsign);
 	if (!g_run_self_test)
-		rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
+	rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, len);
+
+//	char err_str[3];
+//	snprintf(err_str, 3, "%d",err);
+//	char buffer[6 + strlen(err_str)+ strlen(from_callsign)]; // NO -XX + 10 char for callsign with SSID
+//	char CR = 0x0d;
+//	strlcpy(buffer,"NO -", sizeof(buffer));
+//	strlcat(buffer, err_str, sizeof(buffer));
+//	strlcat(buffer," ", sizeof(buffer));
+//	strlcat(buffer, from_callsign, sizeof(buffer));
+//	strncat(buffer,&CR,2); // very specifically add just one char to the end of the string for the CR
+//	if (!g_run_self_test)
+//		rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
 
 	return rc;
 }
@@ -567,7 +572,7 @@ int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 		if (strcmp(SYSTEM,node->pfh->destination) == 0) {
 			/* This is a system file and can not be downloaded */
 			error_print("System File, can not download. Id: %d\n",node->pfh->fileId);
-			rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+			rc = pb_send_err(from_callsign, PB_ERR_FILE_NOT_DOWNLOADABLE);
 			if (rc != EXIT_SUCCESS) {
 				error_print("\n Error : Could not send ERR Response to TNC \n");
 			}
