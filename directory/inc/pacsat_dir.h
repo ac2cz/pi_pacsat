@@ -40,6 +40,7 @@ struct dir_node {
 };
 typedef struct dir_node DIR_NODE;
 
+uint32_t dir_get_num_of_files();
 DIR_NODE * dir_get_head();
 DIR_NODE * dir_get_tail();
 int dir_init(char *folder);

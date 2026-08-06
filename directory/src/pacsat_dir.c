@@ -91,8 +91,12 @@ static char log_folder[MAX_FILE_PATH_LEN]; // Directory path of the log folder
 static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
 static char txt_folder[MAX_FILE_PATH_LEN]; // Directory path of the txt folder
 //static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
-unsigned char pfh_byte_buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
+static unsigned char pfh_byte_buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
+static int number_of_files = 0;
 
+uint32_t dir_get_num_of_files() {
+	return number_of_files;
+}
 
 DIR_NODE * dir_get_head() {
 	return dir_head;
@@ -375,6 +379,7 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 			//pfh_debug_print(new_node->pfh);
 		}
 	}
+	number_of_files++;
 	return new_node;
 }
 
@@ -393,6 +398,7 @@ void dir_free() {
 	}
 	dir_head = NULL;
 	dir_maint_node = NULL;
+	number_of_files = 0;
 	//debug_print("Dir List Cleared\n");
 }
 
@@ -415,6 +421,7 @@ static void dir_unlink_node(DIR_NODE *node) {
         node->next->prev = node->prev;
         node->prev->next = node->next;
     }
+	number_of_files--;
     node->next = NULL;
     node->prev = NULL;
 }
@@ -435,6 +442,8 @@ void dir_delete_node(DIR_NODE *node) {
 	dir_unlink_node(node);
 	free(node->pfh);
 	free(node);
+	number_of_files--;
+
 }
 /**
  * dir_update_node()

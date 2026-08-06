@@ -28,7 +28,8 @@ int send_telemetry(time_t now) {
 		/* The clock is not set or is corrupt */
 		return EXIT_FAILURE;
 	}
-	fstelemetry.NumOfFiles = g_dir_next_file_number;
+	fstelemetry.NumOfFiles = dir_get_num_of_files();
+	fstelemetry.NextFileNumber = g_dir_next_file_number;
 	fstelemetry.TelemPeriod = g_telem_send_period_in_seconds;
 
 	fstelemetry.DirMaintPeriod = g_dir_maintenance_period_in_seconds;

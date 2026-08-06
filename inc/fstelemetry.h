@@ -13,6 +13,7 @@
 typedef struct __attribute__((__packed__)) {
     unsigned int timestamp : 32;
     unsigned int NumOfFiles : 32;
+    unsigned int NextFileNumber : 32;
     unsigned int TelemPeriod : 16;
     unsigned int BytesQueued : 16;
     unsigned int DirMaintPeriod : 16;
