@@ -40,6 +40,7 @@
 #include "pacsat_dir.h"
 #include "ftl0.h"
 #include "pacsat_dir.h"
+#include "pacsat_command.h"
 #ifdef IORS_CONTROL_BUILD
 #include <sodium.h>
 #include "iors_command.h"
@@ -1021,13 +1022,14 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 		}
 #ifdef IORS_CONTROL_BUILD
 		if (g_state_uplink_open == FTL0_STATE_COMMAND) {
-			/* Otherwise the file is installed.  If it has valid folders then we could try to install it */
+			/* Otherwise the file is installed.  If it has valid folders then we try to install it */
 			char tmp[PFH_LONG_CHAR_FIELD_LEN];
 			char *saveptr;
 			strlcpy(tmp, pfh->keyWords, PFH_LONG_CHAR_FIELD_LEN);
 			char *key = strtok_r(tmp, " ", &saveptr);
 			while (key != NULL) {
-				debug_print("IGNORED Request to auto install into folder: %s\n",key);
+				debug_print("Request to auto install into folder: %s\n",key);
+				pc_install_file(p, key);
 				key = strtok_r(NULL, " ", &saveptr);
 			}
 		}

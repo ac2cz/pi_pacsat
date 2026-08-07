@@ -34,8 +34,8 @@
 /* Static vars*/
 static int last_command_rc = EXIT_SUCCESS;
 
-int pc_purge_files(char *folder);
-int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder);
+static int pc_purge_files(char *folder);
+static int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder);
 
 /**
  * pb_handle_command()
@@ -170,49 +170,14 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 
-				//debug_print("Install File: %04x : %s into dir: %d - %s | File Name:%d\n",*arg0, source_file, *arg1, dest_file, *arg2);
-				if (pfh_extract_file_and_update_keywords(node->pfh, folder, true) != EXIT_SUCCESS) {
-					debug_print("Error extracting file into %s\n",folder);
-					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+				int install_rc = pc_install_file(node, folder);
+				if (install_rc != EXIT_SUCCESS) {
+					last_command_rc = install_rc;
+					int r = pb_send_err(from_callsign, install_rc);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
 					break;
-				}
-
-				if (dir_update_node(node) != EXIT_SUCCESS) {
-					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
-					if (r != EXIT_SUCCESS) {
-						debug_print("\n Error : Could not update the dir node \n");
-					}
-					break;
-				}
-
-				/* If the same tag exists on another file with the same user_filename then remove it, as it can not be valid */
-				DIR_NODE *search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, dir_get_head());
-				while (search_node != NULL) {
-					DIR_NODE *next = search_node->next;  /* capture before the node can move to the tail */
-					if (search_node->pfh->fileId != node->pfh->fileId
-							&& pfh_contains_keyword(search_node->pfh, folder)) {
-						if (pb_is_file_in_use(search_node->pfh->fileId)) {
-							// Maintenance will later clean this up
-							debug_print("Install: File id %d in use, stale tag for folder %s not removed.  Maintenance will clean it later.\n",
-									search_node->pfh->fileId, folder);
-						} else {
-							debug_print("Install: Removing stale folder tag: File id %d folder %s\n",
-									search_node->pfh->fileId, folder);
-							pfh_remove_keyword(search_node->pfh, folder);
-							if (dir_update_node(search_node) != EXIT_SUCCESS)
-								error_print("Install: Could not resave pfh after stale keyword removed, for file id %d\n",
-										search_node->pfh->fileId);
-						}
-					}
-					if (next == NULL)
-						search_node = NULL;
-					else
-						search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, next);
 				}
 
 				last_command_rc = EXIT_SUCCESS;
@@ -484,7 +449,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					break;
 				}
-				if (load_signing_key(key_no) != EXIT_SUCCESS) {
+				if (pc_load_signing_key(key_no) != EXIT_SUCCESS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
 					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					break;
@@ -512,8 +477,45 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 		return EXIT_SUCCESS;
 }
 
+int pc_install_file(DIR_NODE *node, char *folder) {
+	debug_print("Install File: %d into dir: %s\n",node->pfh->fileId, folder);
+	if (pfh_extract_file_and_update_keywords(node->pfh, folder, true) != EXIT_SUCCESS) {
+		debug_print("Error extracting file into %s\n",folder);
+		return PB_ERR_FILE_NOT_AVAILABLE;
+	}
 
-int load_signing_key(int key_number) {
+	if (dir_update_node(node) != EXIT_SUCCESS) {
+		return PB_ERR_FILE_NOT_AVAILABLE;
+	}
+
+	/* If the same tag exists on another file with the same user_filename then remove it, as it can not be valid */
+	DIR_NODE *search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, dir_get_head());
+	while (search_node != NULL) {
+		DIR_NODE *next = search_node->next;  /* capture before the node can move to the tail */
+		if (search_node->pfh->fileId != node->pfh->fileId
+				&& pfh_contains_keyword(search_node->pfh, folder)) {
+			if (pb_is_file_in_use(search_node->pfh->fileId)) {
+				// Maintenance will later clean this up
+				debug_print("Install: File id %d in use, stale tag for folder %s not removed.  Maintenance will clean it later.\n",
+						search_node->pfh->fileId, folder);
+			} else {
+				debug_print("Install: Removing stale folder tag: File id %d folder %s\n",
+						search_node->pfh->fileId, folder);
+				pfh_remove_keyword(search_node->pfh, folder);
+				if (dir_update_node(search_node) != EXIT_SUCCESS)
+					error_print("Install: Could not resave pfh after stale keyword removed, for file id %d\n",
+							search_node->pfh->fileId);
+			}
+		}
+		if (next == NULL)
+			search_node = NULL;
+		else
+			search_node = dir_get_pfh_by_userfilename(node->pfh->userFileName, next);
+	}
+	return EXIT_SUCCESS;
+}
+
+int pc_load_signing_key(int key_number) {
     char signing_key_path[MAX_FILE_PATH_LEN];
     char image_signing_key_filename[MAX_FILE_PATH_LEN];
     strlcpy(signing_key_path, "/opt/iors/keys/",MAX_FILE_PATH_LEN);
@@ -532,7 +534,7 @@ int load_signing_key(int key_number) {
 /**
  * Delete all the files in a folder
  */
-int pc_purge_files(char *folder) {
+static int pc_purge_files(char *folder) {
 	char dir_folder[MAX_FILE_PATH_LEN];
 	strlcpy(dir_folder, get_data_folder(), MAX_FILE_PATH_LEN);
 	strlcat(dir_folder, "/", MAX_FILE_PATH_LEN);
@@ -558,7 +560,8 @@ int pc_purge_files(char *folder) {
 	}
 	return EXIT_SUCCESS;
 }
-int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder) {
+
+static int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder) {
 //	debug_print("Deleting %d from %s with keywords %s\n",node->pfh->fileId, node->pfh->userFileName, node->pfh->keyWords);
 	char dest_file[MAX_FILE_PATH_LEN];
 	char file_name[10];

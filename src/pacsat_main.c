@@ -309,7 +309,7 @@ int main(int argc, char *argv[]) {
     	error_print("** No file %s for folder signing, using defaults\n",image_signing_folders_list);
     }
 
-    load_signing_key(g_state_image_signing_key_number);
+    pc_load_signing_key(g_state_image_signing_key_number);
 
 #endif
 	ftl0_load_upload_table();
