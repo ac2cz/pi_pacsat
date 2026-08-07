@@ -1025,15 +1025,19 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 			/* Otherwise the file is installed.  If it has valid folders then we try to install it */
 			char tmp[PFH_LONG_CHAR_FIELD_LEN];
 			char *saveptr;
+			bool keywords_changed = false;
 			strlcpy(tmp, pfh->keyWords, PFH_LONG_CHAR_FIELD_LEN);
 			char *key = strtok_r(tmp, " ", &saveptr);
 			while (key != NULL) {
 				debug_print("Request to auto install into folder: %s\n",key);
 				if (pc_install_file(p, key) != EXIT_SUCCESS) {
 					pfh_remove_keyword(p->pfh, key);
+					keywords_changed = true;
 				}
 				key = strtok_r(NULL, " ", &saveptr);
 			}
+			if (keywords_changed)
+				dir_update_node(p);
 		}
 #endif
 	} else {
