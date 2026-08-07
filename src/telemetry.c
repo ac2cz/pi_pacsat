@@ -16,6 +16,7 @@
 #include "pacsat_broadcast.h"
 #include "fstelemetry.h"
 #include "ftl0.h"
+#include "pacsat_dir.h"
 
 
 /* Variables */
