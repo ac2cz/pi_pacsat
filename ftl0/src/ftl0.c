@@ -1029,7 +1029,9 @@ int ftl0_process_data_end_cmd(int selected_station, char *from_callsign, int cha
 			char *key = strtok_r(tmp, " ", &saveptr);
 			while (key != NULL) {
 				debug_print("Request to auto install into folder: %s\n",key);
-				pc_install_file(p, key);
+				if (pc_install_file(p, key) != EXIT_SUCCESS) {
+					pfh_remove_keyword(p->pfh, key);
+				}
 				key = strtok_r(NULL, " ", &saveptr);
 			}
 		}
