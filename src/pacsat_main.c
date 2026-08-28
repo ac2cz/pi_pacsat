@@ -306,7 +306,7 @@ int main(int argc, char *argv[]) {
     if (init_signed_folders(image_signing_folders_list) == EXIT_SUCCESS) {
     	debug_print("Loaded file of folders that require signing for installation\n");
     } else {
-    	error_print("** No file %s for folder signing, using defaults\n",image_signing_folders_list);
+    	debug_print("** No file %s for folder signing.  All installed files must be signed\n",image_signing_folders_list);
     }
 
     pc_load_signing_key(g_state_image_signing_key_number);
