@@ -134,6 +134,7 @@ void help(void) {
 }
 
 void signal_exit (int sig) {
+	(void)sig; // Explicitly silence the unused parameter warning
 	debug_print (" Signal received, exiting ...\n");
 	// TODO - unregister the callsign and close connection to AGW
 	log_alog1(INFO_LOG, g_log_filename, ALOG_FS_SHUTDOWN, 0);
@@ -141,6 +142,7 @@ void signal_exit (int sig) {
 }
 
 void signal_load_config (int sig) {
+	(void)sig; // Explicitly silence the unused parameter warning
 	load_config(config_file_name);
 	load_state(state_file_path);
 }
