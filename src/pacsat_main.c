@@ -86,7 +86,7 @@ char g_upload_table_path[MAX_FILE_PATH_LEN] = "pacsat_upload_table.dat";
 
 /* These global variables are in the state file and are resaved when changed.  These default values are
  * overwritten when the state file is loaded */
-int g_state_pb_open = false;
+int g_state_pb_open = PB_STATE_COMMAND;
 int g_state_uplink_open = FTL0_STATE_SHUT;
 int g_pb_status_period_in_seconds = 30;
 int g_pb_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds

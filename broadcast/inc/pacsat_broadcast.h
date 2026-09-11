@@ -25,6 +25,10 @@
 
 #include <stdint.h>
 
+#define PB_STATE_SHUT 0
+#define PB_STATE_OPEN 1
+#define PB_STATE_COMMAND 2
+
 #define PID_FILE		0xBB
 #define PID_DIRECTORY	0xBD
 #define PID_COMMAND 	0xBC
@@ -60,6 +64,7 @@
 #define L_BIT 0
 #define E_BIT 5
 #define N_BIT 6
+#define AUTH_BIT 7   /* set by command station: an AUTH_REQ_TRAILER is appended */
 
 #define PB_START_SENDING_FILE 0b00
 #define PB_STOP_SENDING_FILE 0b01
@@ -92,7 +97,7 @@ typedef struct t_dir_header PB_DIR_HEADER;
  */
 
 struct t_file_req_header {
-	char flags;
+	unsigned char flags;
 	uint32_t file_id;
 	uint16_t block_size;
 } __attribute__ ((__packed__));
@@ -109,6 +114,12 @@ struct t_dir_req_header { // sent by client
 	uint16_t block_size;
 } __attribute__ ((__packed__));
 typedef struct t_dir_req_header DIR_REQ_HEADER;
+
+struct t_auth_req_trailer { // sent by command station
+	uint32_t dateTime;
+	uint8_t AuthenticationVector[32];
+} __attribute__ ((__packed__));
+typedef struct t_auth_req_trailer AUTH_REQ_TRAILER;
 
 struct t_dir_pair {
 	uint32_t start;

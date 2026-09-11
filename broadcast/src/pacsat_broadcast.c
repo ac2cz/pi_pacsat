@@ -108,24 +108,25 @@ struct pb_entry {
 typedef struct pb_entry PB_ENTRY;
 
 /* Forward declarations */
-int pb_send_status();
-int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes);
-int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len);
-int pb_handle_file_request(char *from_callsign, unsigned char *data, int len);
-void pb_make_list_str(char *buffer, int len);
-int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int *offset);
-DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data);
-int get_num_of_dir_holes(int request_len);
-int pb_broadcast_next_file_chunk(HEADER *psf, char * psf_filename, int offset, int length, int file_size);
-int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
+static int pb_send_status();
+static int pb_check_auth(char *from_callsign, unsigned char *data, int *len, int min_body_len);
+static int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes);
+static int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len);
+static int pb_handle_file_request(char *from_callsign, unsigned char *data, int len);
+static void pb_make_list_str(char *buffer, int len);
+static int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int *offset);
+static DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data);
+static int get_num_of_dir_holes(int request_len);
+static int pb_broadcast_next_file_chunk(HEADER *psf, char * psf_filename, int offset, int length, int file_size);
+static int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
 		unsigned char *buffer, int number_of_bytes_read, int offset, int chunk_includes_last_byte);
-FILE_DATE_PAIR * get_file_holes_list(unsigned char *data);
-int get_num_of_file_holes(int request_len);
+static FILE_DATE_PAIR * get_file_holes_list(unsigned char *data);
+static int get_num_of_file_holes(int request_len);
 
-void pb_debug_print_dir_req(unsigned char *data, int len);
-void pb_debug_print_dir_holes(DIR_DATE_PAIR *holes, int num_of_holes);
-void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes);
-void pb_debug_print_list_item(int i);
+//static void pb_debug_print_dir_req(unsigned char *data, int len);
+static void pb_debug_print_dir_holes(DIR_DATE_PAIR *holes, int num_of_holes);
+static void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes);
+static void pb_debug_print_list_item(int i);
 
 /* Local Variables */
 
@@ -146,7 +147,7 @@ static PB_ENTRY pb_list[MAX_PB_LENGTH];
  */
 //static DATE_PAIR hole_lists[MAX_PB_LENGTH][AX25_MAX_DATA_LEN/8]; /* The holes lists */
 
-static char pb_status_buffer[135]; // 10 callsigns * 13 bytes + 4 + nul
+static char pb_status_buffer[255]; // 10 callsigns * 13 bytes + 5 + nul
 unsigned char broadcast_buffer[PB_FILE_DEFAULT_BLOCK_SIZE]; // This is the chunk we will send
 unsigned char packet_buffer[AX25_MAX_DATA_LEN];
 unsigned char packet_data_bytes[AX25_MAX_DATA_LEN];
@@ -164,7 +165,7 @@ int sent_pb_status = false;
  * Returns EXIT_SUCCESS unless it was unable to send the request to the TNC
  *
  */
-int pb_send_status() {
+static int pb_send_status() {
 	if (!g_state_pb_open) {
 		unsigned char shut[] = "PB Closed.";
 		int rc = EXIT_SUCCESS;
@@ -220,19 +221,6 @@ int pb_send_err(char *from_callsign, int err) {
 	int len = snprintf(buffer, sizeof(buffer), "NO -%d %s\r", err, from_callsign);
 	if (!g_run_self_test)
 	rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, len);
-
-//	char err_str[3];
-//	snprintf(err_str, 3, "%d",err);
-//	char buffer[6 + strlen(err_str)+ strlen(from_callsign)]; // NO -XX + 10 char for callsign with SSID
-//	char CR = 0x0d;
-//	strlcpy(buffer,"NO -", sizeof(buffer));
-//	strlcat(buffer, err_str, sizeof(buffer));
-//	strlcat(buffer," ", sizeof(buffer));
-//	strlcat(buffer, from_callsign, sizeof(buffer));
-//	strncat(buffer,&CR,2); // very specifically add just one char to the end of the string for the CR
-//	if (!g_run_self_test)
-//		rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_FILE, (unsigned char *)buffer, sizeof(buffer));
-
 	return rc;
 }
 
@@ -250,7 +238,7 @@ int pb_send_err(char *from_callsign, int err) {
  * returns EXIT_SUCCESS it it succeeds or EXIT_FAILURE if the PB is shut or full
  *
  */
-int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes) {
+static int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes) {
 	if (!g_state_pb_open) return EXIT_FAILURE;
 	if (number_on_pb == MAX_PB_LENGTH) {
 		return EXIT_FAILURE; // PB full
@@ -308,7 +296,7 @@ int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, 
  * no such item
  *
  */
-int pb_remove_request(int pos) {
+static int pb_remove_request(int pos) {
 	if (number_on_pb == 0) return EXIT_FAILURE;
 	if (pos >= number_on_pb) return EXIT_FAILURE;
 	if (pos != number_on_pb-1) {
@@ -354,11 +342,16 @@ int pb_remove_request(int pos) {
  * Build the status string that is periodically transmitted.
  * The *buffer to receive the string and its length len should be passed in.
  */
-void pb_make_list_str(char *buffer, int len) {
-	if (number_on_pb == 0)
-		strlcpy(buffer, "PB Empty.", len);
+static void pb_make_list_str(char *buffer, int len) {
+	if (g_state_pb_open == PB_STATE_COMMAND)
+		strlcpy(buffer, "PBC ", len);
 	else
 		strlcpy(buffer, "PB ", len);
+
+	if (number_on_pb == 0)
+		strlcat(buffer, " Empty.", len);
+	else
+		strlcat(buffer, " ", len);
 	for (int i=0; i < number_on_pb; i++) {
 			strlcat(buffer, pb_list[i].callsign, len);
 		if (pb_list[i].pb_type == PB_DIR_REQUEST_TYPE)
@@ -368,7 +361,7 @@ void pb_make_list_str(char *buffer, int len) {
 	}
 }
 
-void pb_debug_print_list() {
+static void pb_debug_print_list() {
 	char buffer[256];
 	pb_make_list_str(buffer, sizeof(buffer));
 	debug_print("%s\n",buffer);
@@ -377,7 +370,7 @@ void pb_debug_print_list() {
 	}
 }
 
-void pb_debug_print_list_item(int i) {
+static void pb_debug_print_list_item(int i) {
 	debug_print("--%s Ty:%d ",pb_list[i].callsign,pb_list[i].pb_type);
 	if (pb_list[i].node != NULL)
 		debug_print("File:%d ",pb_list[i].node->pfh->fileId);
@@ -403,24 +396,59 @@ void pb_debug_print_list_item(int i) {
  *
  */
 void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len) {
-	struct t_ax25_header *broadcast_request_header;
-	broadcast_request_header = (struct t_ax25_header *)data;
+    struct t_ax25_header *broadcast_request_header = (struct t_ax25_header *)data;
+    int pid = broadcast_request_header->pid & 0xff;
 
-	//debug_print("Broadcast Request: pid: %02x \n", broadcast_request_header->pid & 0xff);
-	if ((broadcast_request_header->pid & 0xff) == PID_DIRECTORY) {
-		pb_handle_dir_request(from_callsign, data, len);
-	}
-	if ((broadcast_request_header->pid & 0xff) == PID_FILE) {
-		// File Request
-		pb_handle_file_request(from_callsign, data, len);
-	}
-	if ((broadcast_request_header->pid & 0xff) == PID_COMMAND) {
-		// Command Request
-		pc_handle_command(from_callsign, data, len);
-	}
+    /* DIR and FILE requests are gated when the PB is command-only. On success,
+     * len is reduced to drop the auth trailer before the handlers parse holes. */
+    if (pid == PID_DIRECTORY) {
+        /* a dir fill needs at least one hole, so body >= DIR_REQ_HEADER + one pair */
+        if (pb_check_auth(from_callsign, data, &len,
+                sizeof(AX25_HEADER) + sizeof(DIR_REQ_HEADER) + sizeof(DIR_DATE_PAIR)) != EXIT_SUCCESS)
+            return;
+        pb_handle_dir_request(from_callsign, data, len);
+    }
+    if (pid == PID_FILE) {
+        /* a start-file request carries no holes, so body >= FILE_REQ_HEADER */
+        if (pb_check_auth(from_callsign, data, &len,
+                sizeof(AX25_HEADER) + sizeof(FILE_REQ_HEADER)) != EXIT_SUCCESS)
+            return;
+        pb_handle_file_request(from_callsign, data, len);
+    }
+    if (pid == PID_COMMAND)
+        pc_handle_command(from_callsign, data, len);
 }
 
+static int pb_check_auth(char *from_callsign, unsigned char *data, int *len, int min_body_len) {
+    if (g_state_pb_open != PB_STATE_COMMAND)
+        return EXIT_SUCCESS;
 
+    /* room for a minimal valid request body AND the trailer */
+    if (*len < min_body_len + (int)sizeof(AUTH_REQ_TRAILER)) {
+        error_print("PB: command-only, request from %s too short (%d)\n", from_callsign, *len);
+        return EXIT_FAILURE;
+    }
+
+    /* flags is the first byte of both DIR_REQ_HEADER and FILE_REQ_HEADER. Read the
+     * raw byte, not the struct field */
+    uint8_t flags = data[sizeof(AX25_HEADER)];
+    if (!(flags & (1 << AUTH_BIT))) {
+    	error_print("PB: command-only, request from %s not marked authed\n", from_callsign);
+    	return EXIT_FAILURE;
+    }
+
+    AUTH_REQ_TRAILER *trailer = (AUTH_REQ_TRAILER *)(data + *len - sizeof(AUTH_REQ_TRAILER));
+    uint8_t *msg = data + sizeof(AX25_HEADER);
+    int msg_len  = *len - sizeof(AX25_HEADER) - sizeof(trailer->AuthenticationVector);
+
+    if (AuthenticatePacket(trailer->dateTime, msg, msg_len, trailer->AuthenticationVector) != EXIT_SUCCESS) {
+        error_print("PB: auth failed for %s\n", from_callsign);
+        return EXIT_FAILURE;
+    }
+
+    *len -= sizeof(AUTH_REQ_TRAILER);   /* strip; handler then parses holes on the clean length */
+    return EXIT_SUCCESS;
+}
 /**
  * pb_handle_dir_request()
  *
@@ -430,7 +458,7 @@ void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *dat
  * station was not added to the PB.  Only returns EXIT_FAILURE if there is
  * an unexpected error, such as the TNC is unavailable.
  */
-int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len) {
+static int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len) {
 	// Dir Request
 	int rc=EXIT_SUCCESS;
 	DIR_REQ_HEADER *dir_header;
@@ -482,28 +510,28 @@ int pb_handle_dir_request(char *from_callsign, unsigned char *data, int len) {
 	return rc;
 }
 
-int get_num_of_dir_holes(int request_len) {
+static int get_num_of_dir_holes(int request_len) {
 	int num_of_holes = (request_len - sizeof(AX25_HEADER) - sizeof(DIR_REQ_HEADER)) / sizeof(DIR_DATE_PAIR);
 	return num_of_holes;
 }
 
-DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data) {
+static DIR_DATE_PAIR * get_dir_holes_list(unsigned char *data) {
 	DIR_DATE_PAIR *holes = (DIR_DATE_PAIR *)(data + sizeof(AX25_HEADER) + sizeof(DIR_REQ_HEADER) );
 	return holes;
 }
 
 
-int get_num_of_file_holes(int request_len) {
+static int get_num_of_file_holes(int request_len) {
 	int num_of_holes = (request_len - sizeof(AX25_HEADER) - sizeof(FILE_REQ_HEADER)) / sizeof(FILE_DATE_PAIR);
 	return num_of_holes;
 }
 
-FILE_DATE_PAIR * get_file_holes_list(unsigned char *data) {
+static FILE_DATE_PAIR * get_file_holes_list(unsigned char *data) {
 	FILE_DATE_PAIR *holes = (FILE_DATE_PAIR *)(data + sizeof(AX25_HEADER) + sizeof(FILE_REQ_HEADER) );
 	return holes;
 }
 
-void pb_debug_print_dir_holes(DIR_DATE_PAIR *holes, int num_of_holes) {
+static void pb_debug_print_dir_holes(DIR_DATE_PAIR *holes, int num_of_holes) {
 	debug_print(" - %d holes: ",num_of_holes);
 	for (int i=0; i< num_of_holes; i++) {
 		char buf[30];
@@ -517,7 +545,7 @@ void pb_debug_print_dir_holes(DIR_DATE_PAIR *holes, int num_of_holes) {
 	debug_print("\n");
 }
 
-void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes) {
+static void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes) {
 	debug_print(" - %d holes: ",num_of_holes);
 	for (int i=0; i< num_of_holes; i++) {
 		debug_print("%d,%d ", holes[i].offset, holes[i].length);
@@ -525,7 +553,8 @@ void pb_debug_print_file_holes(FILE_DATE_PAIR *holes, int num_of_holes) {
 	debug_print("\n");
 }
 
-void pb_debug_print_dir_req(unsigned char *data, int len) {
+#if 0
+static void pb_debug_print_dir_req(unsigned char *data, int len) {
 	DIR_REQ_HEADER *dir_header;
 	dir_header = (DIR_REQ_HEADER *)(data + sizeof(AX25_HEADER));
 	//debug_print("DIR REQ: flags: %02x BLK_SIZE: %04x ", dir_header->flags & 0xff, dir_header->block_size &0xffff);
@@ -540,6 +569,7 @@ void pb_debug_print_dir_req(unsigned char *data, int len) {
 		}
 	}
 }
+#endif
 
 /**
  * pb_handle_file_request()
@@ -549,7 +579,7 @@ void pb_debug_print_dir_req(unsigned char *data, int len) {
  * Returns EXIT_SUCCESS if the station was added to the PB, otherwise it
  * returns EXIT_FAILURE
  */
-int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
+static int pb_handle_file_request(char *from_callsign, unsigned char *data, int len) {
 	// File Request
 	int rc=EXIT_SUCCESS;
 	int num_of_holes = 0;
@@ -920,7 +950,7 @@ int pb_next_action() {
  * Returns EXIT SUCCESS or the offset to be stored for the next transmission.
  * // TODO - we cant return EXIT_FAILURE here, but could return -ve number..
  */
-int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, int length, int file_size) {
+static int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, int length, int file_size) {
 	int rc = EXIT_SUCCESS;
 
 	if (length > PB_FILE_DEFAULT_BLOCK_SIZE)
@@ -1027,7 +1057,7 @@ int pb_broadcast_next_file_chunk(HEADER *pfh, char * psf_filename, int offset, i
       RETURNS the length of the data packet created
 
  */
-int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int *offset) {
+static int pb_make_dir_broadcast_packet(DIR_NODE *node, unsigned char *data_bytes, int *offset) {
 	int length = 0;
 
 	PB_DIR_HEADER dir_broadcast;
@@ -1141,7 +1171,7 @@ E              1    Last byte of frame is the last byte of the file.
 
 *                   Reserved, must be 0.
  */
-int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
+static int pb_make_file_broadcast_packet(HEADER *pfh, unsigned char *data_bytes,
 		unsigned char *buffer, int number_of_bytes_read, int offset, int chunk_includes_last_byte) {
 	int length = 0;
 	PB_FILE_HEADER file_broadcast_header;
