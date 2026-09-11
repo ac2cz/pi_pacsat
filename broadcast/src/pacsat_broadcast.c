@@ -177,6 +177,9 @@ static int pb_send_status() {
 		if (number_on_pb == MAX_PB_LENGTH) {
 			CALL = PBFULL;
 		}
+		if (g_state_pb_open == PB_STATE_COMMAND) {
+			CALL = PBCOM;
+		}
 		pb_make_list_str(pb_status_buffer, sizeof(pb_status_buffer));
 		unsigned char command[strlen(pb_status_buffer)]; // now put the list in a buffer of the right size
 		strlcpy((char *)command, (char *)pb_status_buffer,sizeof(command));

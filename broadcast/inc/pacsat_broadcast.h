@@ -59,6 +59,7 @@
 #define PBLIST "PBLIST" // destination for PB Status when open
 #define PBFULL "PBFULL" // destination for PB status when list is full
 #define PBSHUT "PBSHUT" // destination for PB status when it is closed
+#define PBCOM "PBCOM" // destination for PB status when it command stations only
 #define QST "QST-1" // destination for broadcast dir and file frames
 
 #define L_BIT 0
