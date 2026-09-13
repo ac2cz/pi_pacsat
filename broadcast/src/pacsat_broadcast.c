@@ -407,15 +407,19 @@ void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *dat
     if (pid == PID_DIRECTORY) {
         /* a dir fill needs at least one hole, so body >= DIR_REQ_HEADER + one pair */
         if (pb_check_auth(from_callsign, data, &len,
-                sizeof(AX25_HEADER) + sizeof(DIR_REQ_HEADER) + sizeof(DIR_DATE_PAIR)) != EXIT_SUCCESS)
+                sizeof(AX25_HEADER) + sizeof(DIR_REQ_HEADER) + sizeof(DIR_DATE_PAIR)) != EXIT_SUCCESS) {
+        	pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
             return;
+        }
         pb_handle_dir_request(from_callsign, data, len);
     }
     if (pid == PID_FILE) {
         /* a start-file request carries no holes, so body >= FILE_REQ_HEADER */
         if (pb_check_auth(from_callsign, data, &len,
-                sizeof(AX25_HEADER) + sizeof(FILE_REQ_HEADER)) != EXIT_SUCCESS)
+                sizeof(AX25_HEADER) + sizeof(FILE_REQ_HEADER)) != EXIT_SUCCESS) {
+        	pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
             return;
+        }
         pb_handle_file_request(from_callsign, data, len);
     }
     if (pid == PID_COMMAND)
