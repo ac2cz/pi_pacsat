@@ -446,6 +446,7 @@ int main(int argc, char *argv[]) {
 				dir_file_queue_check(now, get_senwod_folder(), PFH_TYPE_SEN_WOD, "SENWOD");
 				dir_file_queue_check(now, get_log_folder(), PFH_TYPE_AL, "LOG");
 				dir_file_queue_check(now, get_txt_folder(), PFH_TYPE_ASCII, "TXT");
+				dir_file_queue_check(now, get_img_folder(), PFH_TYPE_JPG, "IMAGE");
 			}
 		}
 	}
