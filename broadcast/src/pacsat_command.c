@@ -182,6 +182,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 
+			/*
 			case SwCmdPacsatExecuteFile: {
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;
 				uint16_t exec_arg1 = sw_command->comArg.arguments[2];
@@ -222,7 +223,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				break;
 			}
-
+*/
 			case SWCmdPacsatDeleteFile: {
 //				debug_print("Arg: %02x %02x\n",sw_command->comArg.arguments[0],sw_command->comArg.arguments[1]);
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16) ;

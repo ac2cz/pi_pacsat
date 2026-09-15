@@ -68,10 +68,11 @@
 
 #define PFH_TYPE_ASCII 0
 //#define PFH_TYPE_WOD 3
+#define PFH_TYPE_JPG 16
 #define PFH_TYPE_AL 223
 #define PFH_TYPE_BL 202
 #define PFH_TYPE_WL 203 // WOD Log
-#define PFH_TYPE_IMAGES 211
+#define PFH_TYPE_IMAGE_FILES 211
 #define PFH_TYPE_SEN_WOD 240 // SENSOR WOD Log
 
 // These offsets are to the start of the field, i.e. they point to the ID number not the data.
