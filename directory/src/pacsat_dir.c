@@ -90,6 +90,7 @@ static char senwod_folder[MAX_FILE_PATH_LEN]; // Directory path of the wod telem
 static char log_folder[MAX_FILE_PATH_LEN]; // Directory path of the log folder
 static char upload_folder[MAX_FILE_PATH_LEN]; // Directory path of the upload folder
 static char txt_folder[MAX_FILE_PATH_LEN]; // Directory path of the txt folder
+static char img_folder[MAX_FILE_PATH_LEN]; // Directory path of the image folder
 //static uint32_t next_file_id = 0; // This is incremented when we add files for upload.  Initialized when dir loaded.
 static unsigned char pfh_byte_buffer[MAX_PFH_LENGTH]; // needs to be bigger than largest header but does not need to be the whole file
 static int number_of_files = 0;
@@ -159,6 +160,12 @@ int dir_init(char *folder) {
 	strlcat(txt_folder, "/", sizeof(txt_folder));
 	strlcat(txt_folder, get_folder_str(FolderTxt), sizeof(txt_folder));
 	if (dir_make_dir(txt_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
+	strlcpy(img_folder, data_folder, sizeof(txt_folder));
+	strlcat(img_folder, "/", sizeof(img_folder));
+	strlcat(img_folder, get_folder_str(FolderImg), sizeof(img_folder));
+	if (dir_make_dir(img_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
+
 
 	debug_print("Pacsat Initialized in: %s\n", data_folder);
 	return EXIT_SUCCESS;
@@ -264,6 +271,10 @@ char *get_log_folder() {
 
 char *get_txt_folder() {
 	return txt_folder; // We can return this because it is static
+}
+
+char *get_img_folder() {
+	return img_folder; // We can return this because it is static
 }
 
 /**
