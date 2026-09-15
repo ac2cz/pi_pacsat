@@ -122,7 +122,9 @@ HEADER *pfh_new_header() {
 		hdr->file_description[0]     = '\0';
 		hdr->compressionDesc[0] = '\0';
 		hdr->userFileName[0]    = '\0';
+#ifdef IORS_CONTROL_BUILD
 		hdr->signature[0]    = 0;
+#endif
 		hdr->signature_type    = 0;
 
 		int i;
@@ -302,6 +304,7 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 			case USER_FILE_NAME:
 				header_copy_to_str(&buffer[i], length, hdr->userFileName, 32);
 				break;
+#ifdef IORS_CONTROL_BUILD
 			case FILE_SIGNATURE: {
 				if (length != IMAGE_SIGNATURE_BYTES)
 					break;
@@ -313,7 +316,7 @@ HEADER * pfh_extract_header(unsigned char *buffer, int nBytes, int *size, int *c
 				hdr->signature_type = buffer[i];
 				break;
 			}
-
+#endif
 			default:
 				/* This just consumes and conserves up to 5 additional fields, which are ignored by the sat and passed back to ground if downloaded. */
 				if (other_field >= PFH_NUM_OF_SPARE_FIELDS) {
@@ -1188,10 +1191,12 @@ unsigned char * add_optional_header(unsigned char *p, HEADER *pfh) {
 		p = pfh_store_str_field(p, COMPRESSION_DESCRIPTION, strlen(pfh->compressionDesc), pfh->compressionDesc);
 	if (pfh->userFileName[0] != 0)
 		p = pfh_store_str_field(p, USER_FILE_NAME, strlen(pfh->userFileName), pfh->userFileName);
+#ifdef IORS_CONTROL_BUILD
 	if (pfh->signature_type != 0) {
 		p = pfh_store_char_field(p, SIGNATURE_TYPE, pfh->signature_type);
 		p = pfh_store_str_field(p, FILE_SIGNATURE, IMAGE_SIGNATURE_BYTES, (char *)pfh->signature);
 	}
+#endif
 	int i;
 	for (i=0; i < PFH_NUM_OF_SPARE_FIELDS; i++) {
 		if (pfh->other_data[i][0] != 0)

@@ -11,7 +11,9 @@
 #include "config.h"
 #include "state_file.h"
 #include "common_config.h"
+#ifdef IORS_CONTROL_BUILD
 #include "authenticate_image.h"
+#endif
 #include "agw_tnc.h"
 #include "pacsat_broadcast.h"
 #include "fstelemetry.h"
@@ -50,10 +52,11 @@ int send_telemetry(time_t now) {
     fstelemetry.FTL0MaxFileSizeKb = g_ftl0_max_file_size / 1024;
     fstelemetry.FTL0MaxUploadAgeMin = g_ftl0_max_upload_age_in_seconds / 60;
     fstelemetry.LogLevel = g_state_pacsat_log_level;
+#ifdef IORS_CONTROL_BUILD
     fstelemetry.SigningKey = g_state_image_signing_key_number;
     fstelemetry.NumSignedFolders = get_num_of_signed_folders();
     fstelemetry.SignedFoldersFromConfig = are_signed_folders_from_config();
-
+#endif
 	//debug_print("Sending FS Telem\n");
 	int rc = send_raw_packet(g_broadcast_callsign, TELEM_CALLSIGN, PID_NO_PROTOCOL, (unsigned char *)&fstelemetry, sizeof(fstelemetry));
 
