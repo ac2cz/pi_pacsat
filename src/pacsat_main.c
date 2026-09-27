@@ -69,7 +69,6 @@ void signal_load_config (int sig);
 int g_verbose = false;
 char g_log_filename[MAX_FILE_PATH_LEN];
 char last_command_time_filename[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";
-char image_signing_folders_filename[MAX_FILE_PATH_LEN] = "folders_signing.dat";
 
 /* These global variables are in the config file */
 int g_bit_rate = 1200;
@@ -158,6 +157,7 @@ int main(int argc, char *argv[]) {
 			{"help", no_argument, NULL, 'h'},
 			{"dir", required_argument, NULL, 'd'},
 			{"key-no", required_argument, NULL, 'k'},
+			{"signing-folder", required_argument, NULL, 's'},
 			{"config", required_argument, NULL, 'c'},
 			{"test", no_argument, NULL, 't'},
 			{"verbose", no_argument, NULL, 'v'},
@@ -166,11 +166,12 @@ int main(int argc, char *argv[]) {
 
 	int more_help = false;
 	char command_key_file[MAX_FILE_PATH_LEN];
+	char signing_folders_file[MAX_FILE_PATH_LEN];
 	strlcpy(config_file_name, "pacsat.config", sizeof(config_file_name));
 
 	while (1) {
 		int c;
-		if ((c = getopt_long(argc, argv, "htvc:d:k:", long_option, NULL)) < 0)
+		if ((c = getopt_long(argc, argv, "htvc:d:k:s:", long_option, NULL)) < 0)
 			break;
 		switch (c) {
 		case 'h': // help
@@ -190,6 +191,9 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'k': // key file
 			strlcpy(command_key_file, optarg, sizeof(command_key_file));
+			break;
+		case 's': // signing folder
+			strlcpy(signing_folders_file, optarg, sizeof(signing_folders_file));
 			break;
 		}
 	}
@@ -299,16 +303,16 @@ int main(int argc, char *argv[]) {
 	strlcat(last_command_time_path,last_command_time_filename,MAX_FILE_PATH_LEN);
     init_commanding(last_command_time_path);
 
-    char image_signing_folders_list[MAX_FILE_PATH_LEN];
-	strlcpy(image_signing_folders_list, data_folder_path,MAX_FILE_PATH_LEN);
-	strlcat(image_signing_folders_list,"/",MAX_FILE_PATH_LEN);
-	strlcat(image_signing_folders_list,get_folder_str(FolderSigning),MAX_FILE_PATH_LEN);
-	strlcat(image_signing_folders_list,"/",MAX_FILE_PATH_LEN);
-	strlcat(image_signing_folders_list,image_signing_folders_filename,MAX_FILE_PATH_LEN);
-    if (init_signed_folders(image_signing_folders_list) == EXIT_SUCCESS) {
+//    char image_signing_folders_list[MAX_FILE_PATH_LEN];
+//	strlcpy(image_signing_folders_list, data_folder_path,MAX_FILE_PATH_LEN);
+//	strlcat(image_signing_folders_list,"/",MAX_FILE_PATH_LEN);
+//	strlcat(image_signing_folders_list,get_folder_str(FolderSigning),MAX_FILE_PATH_LEN);
+//	strlcat(image_signing_folders_list,"/",MAX_FILE_PATH_LEN);
+//	strlcat(image_signing_folders_list,image_signing_folders_filename,MAX_FILE_PATH_LEN);
+    if (init_signed_folders(signing_folders_file) == EXIT_SUCCESS) {
     	debug_print("Loaded file of folders that require signing for installation\n");
     } else {
-    	debug_print("** No file %s for folder signing.  All installed files must be signed\n",image_signing_folders_list);
+    	debug_print("** No file %s for folder signing.  All installed files must be signed\n",signing_folders_file);
     }
 
     pc_load_signing_key(g_state_image_signing_key_number);
