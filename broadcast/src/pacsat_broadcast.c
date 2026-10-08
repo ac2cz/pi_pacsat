@@ -108,6 +108,8 @@ struct pb_entry {
 typedef struct pb_entry PB_ENTRY;
 
 /* Forward declarations */
+static int pb_send_ok(char *from_callsign);
+static int pb_send_err(char *from_callsign, int err);
 static int pb_send_status();
 static int pb_check_auth(char *from_callsign, unsigned char *data, int *len, int min_body_len);
 static int pb_add_request(char *from_callsign, int type, DIR_NODE * node, int file_id, int offset, void *holes, int num_of_holes);
@@ -196,7 +198,7 @@ static int pb_send_status() {
  * Send a UI frame from the broadcast callsign to the station with PID BB and the
  * text OK <callsign>0x0Drequest_list
  */
-int pb_send_ok(char *from_callsign) {
+static int pb_send_ok(char *from_callsign) {
 	int rc = EXIT_SUCCESS;
 	char buffer[4 + strlen(from_callsign)]; // OK + 10 char for callsign with SSID
 	strlcpy(buffer,"OK ", sizeof(buffer));
@@ -218,7 +220,7 @@ int pb_send_ok(char *from_callsign) {
  * returns EXIT_SUCCESS unless it is unable to send the data to the TNC
  *
  */
-int pb_send_err(char *from_callsign, int err) {
+static int pb_send_err(char *from_callsign, int err) {
 	int rc = EXIT_SUCCESS;
 	char buffer[8 + strlen(from_callsign)];  // "NO -X " + callsign + CR + NUL
 	int len = snprintf(buffer, sizeof(buffer), "NO -%d %s\r", err, from_callsign);

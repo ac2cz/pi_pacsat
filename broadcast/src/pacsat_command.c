@@ -18,6 +18,7 @@
 #ifdef IORS_CONTROL_BUILD
 #include "iors_command.h"
 #include "iors_log.h"
+#include "agw_tnc.h"
 #else
 #include "uplink_command.h"
 #include "pacsat_log.h"
@@ -34,6 +35,8 @@
 /* Static vars*/
 static int last_command_rc = EXIT_SUCCESS;
 
+static int pb_send_cmd_ok(char *from_callsign);
+static int pb_send_cmd_err(char *from_callsign, int err);
 static int pc_purge_files(char *folder);
 static int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_directory_folder);
 
@@ -65,7 +68,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 		/* Pass the data to the command processor */
 		int cmd_rc = AuthenticateSoftwareCommand(sw_command);
 		if (cmd_rc == EXIT_FAILURE){
-			int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
+			int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 			if (r != EXIT_SUCCESS) {
 				debug_print("\n Error : Could not send ERR Response to TNC \n");
 			}
@@ -75,9 +78,9 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 		int rc;
 		if (cmd_rc == EXIT_DUPLICATE) {
 			if (last_command_rc == EXIT_SUCCESS)
-			    rc = pb_send_ok(from_callsign);
+			    rc = pb_send_cmd_ok(from_callsign);
 			else
-				rc = pb_send_err(from_callsign, last_command_rc);
+				rc = pb_send_cmd_err(from_callsign, last_command_rc);
 			if (rc != EXIT_SUCCESS) {
 				debug_print("\n Error : Could not send OK Response to TNC \n");
 			}
@@ -100,7 +103,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					g_pb_max_period_for_client_in_seconds = sw_command->comArg.arguments[2];
 				}
 				last_command_rc = EXIT_SUCCESS;
-				int rc = pb_send_ok(from_callsign);
+				int rc = pb_send_cmd_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
@@ -117,7 +120,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					g_uplink_max_period_for_client_in_seconds = sw_command->comArg.arguments[2];
 				}
 				last_command_rc = EXIT_SUCCESS;
-				int rc = pb_send_ok(from_callsign);
+				int rc = pb_send_cmd_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
@@ -133,14 +136,14 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (pb_is_file_in_use(file_id)) {
 					// This file is currently being broadcast then we can't update it
 					last_command_rc = PB_ERR_TEMPORARY;
-					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
+					pb_send_cmd_err(from_callsign, PB_ERR_TEMPORARY);
 					break;
 				}
 
 				if (folder_id == FolderDir) {
 					debug_print("Error - cant install into Directory\n");
 					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -151,7 +154,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (node == NULL) {
 					error_print("File %d not available\n",file_id);
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -163,7 +166,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (folder == NULL) {
 					//debug_print("Error - invalid folder\n");
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -173,7 +176,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				int install_rc = pc_install_file(node, folder);
 				if (install_rc != EXIT_SUCCESS) {
 					last_command_rc = install_rc;
-					int r = pb_send_err(from_callsign, install_rc);
+					int r = pb_send_cmd_err(from_callsign, install_rc);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -181,7 +184,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				}
 
 				last_command_rc = EXIT_SUCCESS;
-				int rc = pb_send_ok(from_callsign);
+				int rc = pb_send_cmd_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
@@ -199,14 +202,14 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (pb_is_file_in_use(file_id)) {
 					// This file is currently being broadcast then we can't update it
 					last_command_rc = PB_ERR_TEMPORARY;
-					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
+					pb_send_cmd_err(from_callsign, PB_ERR_TEMPORARY);
 					break;
 				}
 
 				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					break;
 				}
 				int is_directory_folder = false;
@@ -217,7 +220,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (node == NULL) {
 					error_print("File %d not available\n",file_id);
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -228,7 +231,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					if (!is_directory_folder) {
 						if (dir_update_node(node) != EXIT_SUCCESS) {
 							last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-							int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+							int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 							if (r != EXIT_SUCCESS) {
 								debug_print("\n Error : Could not update the dir node \n");
 							}
@@ -249,13 +252,13 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 						dir_delete_node(node);
 					}
 					last_command_rc = EXIT_SUCCESS;
-					rc = pb_send_ok(from_callsign);
+					rc = pb_send_cmd_ok(from_callsign);
 					if (rc != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send OK Response to TNC \n");
 					}
 				} else {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -270,7 +273,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -280,7 +283,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (folder_id == FolderDir) {
 					debug_print("Error - cant delete the Directory while pacsat is running!\n");
 					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -289,7 +292,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 
 				/* Send Ok here as command is valid and any other errors below are ignored. */
 				last_command_rc = EXIT_SUCCESS;
-				int rc = pb_send_ok(from_callsign);
+				int rc = pb_send_cmd_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
@@ -320,7 +323,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t age = sw_command->comArg.arguments[0];
 				if (age > 3650) { // set limit at 10 years to avoid overflow in int below
 					last_command_rc = PB_ERR_FILE_INVALID_PACKET;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_INVALID_PACKET);
 					if (r != EXIT_SUCCESS) {
 						debug_print("Error : Invalid age for file %d\n",age);
 					}
@@ -330,7 +333,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				save_state();
 
 				last_command_rc = EXIT_SUCCESS;
-				int rc = pb_send_ok(from_callsign);
+				int rc = pb_send_cmd_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
@@ -343,7 +346,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (pb_is_file_in_use(file_id)) {
 					// This file is currently being broadcast then we can't update it
 					last_command_rc = PB_ERR_TEMPORARY;
-					pb_send_err(from_callsign, PB_ERR_TEMPORARY);
+					pb_send_cmd_err(from_callsign, PB_ERR_TEMPORARY);
 					break;
 				}
 
@@ -352,7 +355,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				if (node == NULL) {
 					error_print("File %d not available\n",file_id);
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -362,7 +365,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				node->pfh->expireTime = expire_time;
 				if (dir_update_node(node) != EXIT_SUCCESS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not update the dir node \n");
 					}
@@ -370,7 +373,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				}
 
 				last_command_rc = EXIT_SUCCESS;
-				int rc = pb_send_ok(from_callsign);
+				int rc = pb_send_cmd_ok(from_callsign);
 				if (rc != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send OK Response to TNC \n");
 				}
@@ -383,7 +386,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				save_state();
 
 				last_command_rc = EXIT_SUCCESS;
-				pb_send_ok(from_callsign);
+				pb_send_cmd_ok(from_callsign);
 				break;
 			}
 			case SWCmdPacsatFtl0MaintPeriod: {
@@ -392,7 +395,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				save_state();
 
 				last_command_rc = EXIT_SUCCESS;
-				pb_send_ok(from_callsign);
+				pb_send_cmd_ok(from_callsign);
 				break;
 			}
 			case SWCmdPacsatFileQueueCheckPeriod: {
@@ -401,7 +404,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				save_state();
 
 				last_command_rc = EXIT_SUCCESS;
-				pb_send_ok(from_callsign);
+				pb_send_cmd_ok(from_callsign);
 				break;
 			}
 			case SWCmdPacsatMaxFileSize: {
@@ -410,7 +413,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				save_state();
 
 				last_command_rc = EXIT_SUCCESS;
-				pb_send_ok(from_callsign);
+				pb_send_cmd_ok(from_callsign);
 				break;
 			}
 			case SWCmdPacsatMaxUploadAge: {
@@ -419,7 +422,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				save_state();
 
 				last_command_rc = EXIT_SUCCESS;
-				pb_send_ok(from_callsign);
+				pb_send_cmd_ok(from_callsign);
 				break;
 			}
 			case SWCmdPacsatEnableFSTelemetry: {
@@ -439,7 +442,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				}
 				save_state();
 				last_command_rc = EXIT_SUCCESS;
-				pb_send_ok(from_callsign);
+				pb_send_cmd_ok(from_callsign);
 				break;
 			}
 #ifdef IORS_CONTROL_BUILD
@@ -447,19 +450,19 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				uint16_t key_no = sw_command->comArg.arguments[0];
 				if (key_no >= NO_OF_SIGNING_KEYS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					break;
 				}
 				if (pc_load_signing_key(key_no) != EXIT_SUCCESS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					pb_send_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					break;
 				}
 				g_state_image_signing_key_number = key_no;
 				save_state();
 
 				last_command_rc = EXIT_SUCCESS;
-				pb_send_ok(from_callsign);
+				pb_send_cmd_ok(from_callsign);
 				break;
 			}
 #endif
@@ -467,7 +470,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
 				last_command_rc = PB_ERR_COMMAND_NOT_AVAILABLE;
-				int r = pb_send_err(from_callsign, PB_ERR_COMMAND_NOT_AVAILABLE);
+				int r = pb_send_cmd_err(from_callsign, PB_ERR_COMMAND_NOT_AVAILABLE);
 				if (r != EXIT_SUCCESS) {
 					debug_print("\n Error : Could not send ERR Response to TNC \n");
 				}
@@ -601,4 +604,41 @@ static int pc_delete_file_from_folder(DIR_NODE *node, char *folder, int is_direc
 		return EXIT_FAILURE;
 	}
 
+}
+
+/**
+ * pb_send_cmd_ok()
+ *
+ * Send a UI frame from the broadcast callsign to the station with PID BB and the
+ * text OK <callsign>0x0Drequest_list
+ */
+int pb_send_cmd_ok(char *from_callsign) {
+	int rc = EXIT_SUCCESS;
+	char buffer[4 + strlen(from_callsign)]; // OK + 10 char for callsign with SSID
+	strlcpy(buffer,"OK ", sizeof(buffer));
+	strlcat(buffer, from_callsign, sizeof(buffer));
+    int len = 3 + strlen(from_callsign);
+    buffer[len] = 0x0D; // this replaces the string termination
+	if (!g_run_self_test)
+		rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_COMMAND, (unsigned char *)buffer, sizeof(buffer));
+
+	return rc;
+}
+
+/**
+ * pb_send_err()
+ *
+ * Send a UI frame to the station containing an error response.  The error values are defined in
+ * the header file
+ *
+ * returns EXIT_SUCCESS unless it is unable to send the data to the TNC
+ *
+ */
+int pb_send_cmd_err(char *from_callsign, int err) {
+	int rc = EXIT_SUCCESS;
+	char buffer[8 + strlen(from_callsign)];  // "NO -X " + callsign + CR + NUL
+	int len = snprintf(buffer, sizeof(buffer), "NO -%d %s\r", err, from_callsign);
+	if (!g_run_self_test)
+	rc = send_raw_packet(g_broadcast_callsign, from_callsign, PID_COMMAND, (unsigned char *)buffer, len);
+	return rc;
 }

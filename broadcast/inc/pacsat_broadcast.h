@@ -128,8 +128,6 @@ struct t_dir_pair {
 } __attribute__ ((__packed__));
 typedef struct t_dir_pair DIR_DATE_PAIR;
 
-int pb_send_ok(char *from_callsign);
-int pb_send_err(char *from_callsign, int err);
 int pb_next_action();
 void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *data, int len);
 int pb_is_file_in_use(uint32_t file_id);
