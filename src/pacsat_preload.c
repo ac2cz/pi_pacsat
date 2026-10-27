@@ -204,7 +204,7 @@ int main(int argc, char *argv[]) {
 			create_time, 0, compression_type);
 
 	if (install_folder[0] != '\0') {
-		debug_print("Adding folder: %s\n",install_folder);
+		//debug_print("Adding folder: %s\n",install_folder);
 		pfh_add_keyword(pfh, install_folder);
 		pfh->expireTime = 2145848400; // 2038-01-01
 	}
@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	dir_get_file_path_from_file_id(pfh->fileId, get_dir_folder(), psf_name, MAX_FILE_PATH_LEN);
-	debug_print("Adding file: %s\n",file_name);	pfh_debug_print(pfh);
+	if (g_verbose) { debug_print("Adding file: %s\n",file_name);	pfh_debug_print(pfh); }
 	dir_get_file_path_from_file_id(id, get_dir_folder(), psf_name, sizeof(psf_name));
 
 	int rc;

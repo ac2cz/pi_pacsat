@@ -34,10 +34,10 @@
 # Binary
 Debug/pi_pacsat
 Release/pi_pacsat
+Preload/pacsat_preload
 pacsat.config
 /dir/
 /dir_test/
 
 # IDE files
-/Debug/
 /preload/

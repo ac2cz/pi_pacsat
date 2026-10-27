@@ -114,7 +114,7 @@ int dir_make_dir(char * folder) {
 			printf("** Could not make pacsat folder %s\n",folder);
 			return EXIT_FAILURE;
 		}
-		debug_print("Created: %s\n", folder);
+		if (g_verbose) debug_print("Created: %s\n", folder);
 	}
 	return EXIT_SUCCESS;
 }

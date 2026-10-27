@@ -58,7 +58,7 @@ void load_config(char *filename) {
 	char *key;
 	char *value;
 	char *search = "=";
-	debug_print("Loading config from: %s:\n", filename);
+	if (g_verbose) debug_print("Loading config from: %s:\n", filename);
 	FILE *file = fopen ( filename, "r" );
 	if ( file != NULL ) {
 		char line [ MAX_CONFIG_LINE_LENGTH ]; /* or other suitable maximum line size */
@@ -73,9 +73,9 @@ void load_config(char *filename) {
 			value = strtok(NULL, search);
 			if (value != NULL) { /* Ignore line with no key value pair */;
 
-				debug_print(" %s",key);
+			    if (g_verbose) debug_print(" %s",key);
 				value[strcspn(value,"\n")] = 0; // Move the nul termination to get rid of the new line
-				debug_print(" = %s\n",value);
+				if (g_verbose) debug_print(" = %s\n",value);
 				if (strcmp(key, BIT_RATE) == 0) {
 					int rate = atoi(value);
 					g_bit_rate = rate;
