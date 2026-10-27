@@ -373,6 +373,8 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 			p = p->prev;
 		}
 	}
+	number_of_files++;
+
 	// Now re-save the file with the new time if it changed, this recalculates the checksums
 	if (resave) {
     	char file_name_with_path[MAX_FILE_PATH_LEN];
@@ -383,14 +385,14 @@ DIR_NODE * dir_add_pfh(HEADER *new_pfh, char *filename) {
 		if (rc != EXIT_SUCCESS) {
 			// we could not save this
 			error_print("** Could not update the header for %s to dir\n",filename);
-			dir_delete_node(new_node);
+			dir_unlink_node(new_node);
+			free(new_node);
 			return NULL;
 		} else {
 			//debug_print("Saved:");
 			//pfh_debug_print(new_node->pfh);
 		}
 	}
-	number_of_files++;
 	return new_node;
 }
 
@@ -453,7 +455,6 @@ void dir_delete_node(DIR_NODE *node) {
 	dir_unlink_node(node);
 	free(node->pfh);
 	free(node);
-	number_of_files--;
 
 }
 /**
