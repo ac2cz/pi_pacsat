@@ -152,7 +152,7 @@ int main(int argc, char *argv[]) {
 		have_signature = true;
 	}
 
-	printf("Preload Pacsat File\n");
+	printf("Preload Pacsat Filei %s\n",file_name);
 	load_config(config_file_name);
 
 	/* Initialize the directory */
