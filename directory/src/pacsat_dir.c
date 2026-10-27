@@ -167,7 +167,7 @@ int dir_init(char *folder) {
 	if (dir_make_dir(img_folder) != EXIT_SUCCESS) return EXIT_FAILURE;
 
 
-	debug_print("Pacsat Initialized in: %s\n", data_folder);
+	if (g_verbose) debug_print("Pacsat Initialized in: %s\n", data_folder);
 	return EXIT_SUCCESS;
 }
 
