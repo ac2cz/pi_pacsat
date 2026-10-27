@@ -66,6 +66,8 @@
 #define  BODY_COMPRESSED_PKZIP 0x02
 #define  BODY_COMPRESSED_GZIP 0x03
 
+#define PFH_SIG_TYPE_ED25519 1
+
 #define UNCOMPRESSED_FILE_SIZE_LIMIT 200 /* Compress files over this size before header added */
 
 #define PFH_TYPE_ASCII 0

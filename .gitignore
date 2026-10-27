@@ -40,3 +40,4 @@ pacsat.config
 
 # IDE files
 /Debug/
+/preload/

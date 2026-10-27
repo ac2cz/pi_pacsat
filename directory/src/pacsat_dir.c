@@ -913,9 +913,9 @@ void dir_maintenance(time_t now) {
 }
 
 /**
- * Check a file queue and add all files to the directory
- * The type is based on the queue name
- * the To callsign is based on the file name.
+ * Check a file queue (folder) and add all files to the pacsat directory
+ * The file_type and destination are passed in and were determined from the queue name
+ * the Title is based on the file name.
  */
 void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * destination) {
 	//debug_print("Checking for files in queue: %s\n",folder);
@@ -954,7 +954,7 @@ void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * d
 					strlcpy(compressed_file_name, file_name, sizeof(compressed_file_name));
 					strlcat(compressed_file_name,".zip", sizeof(compressed_file_name));
 
-					strlcpy(zip_command, "zip -j -q ",sizeof(zip_command)); // -j to "junk" or not store the paths.  -q quiet
+					strlcpy(zip_command, "/usr/bin/zip -j -q ",sizeof(zip_command)); // -j to "junk" or not store the paths.  -q quiet
 					strlcat(zip_command, compressed_file_name,sizeof(zip_command));
 					strlcat(zip_command, " ",sizeof(zip_command));
 					strlcat(zip_command, file_name,sizeof(zip_command));

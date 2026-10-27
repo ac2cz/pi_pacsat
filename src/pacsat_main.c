@@ -60,52 +60,11 @@ void help(void);
 void signal_exit (int sig);
 void signal_load_config (int sig);
 
-/*
- *  GLOBAL VARIABLES defined here.  They are declared in config.h
- *  These are the default values.  Many can be updated with a value
- *  in pacsat.config or can be overridden on the command line.
- *
- */
-int g_verbose = false;
-char g_log_filename[MAX_FILE_PATH_LEN];
-char last_command_time_filename[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";
 
-/* These global variables are in the config file */
-int g_bit_rate = 1200;
-char g_bbs_callsign[10] = "NA1SS-12";
-char g_broadcast_callsign[10] = "NA1SS-11";
-char g_digi_callsign[10] = "NA1SS-1";
-int g_max_frames_in_tx_buffer = 2;
-int g_serial_fd = -1;
-#ifdef IORS_CONTROL_BUILD
-uint8_t g_image_signing_public_key[IMAGE_PUBLICKEY_BYTES];
-#endif
-
-char g_upload_table_path[MAX_FILE_PATH_LEN] = "pacsat_upload_table.dat";
-
-/* These global variables are in the state file and are resaved when changed.  These default values are
- * overwritten when the state file is loaded */
-int g_state_pb_open = PB_STATE_COMMAND;
-int g_state_uplink_open = FTL0_STATE_SHUT;
-int g_pb_status_period_in_seconds = 30;
-int g_pb_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds
-int g_uplink_status_period_in_seconds = 30;
-int g_uplink_max_period_for_client_in_seconds = 600; // This is 10 mins in the spec 10*60 seconds
-int g_dir_max_file_age_in_seconds = 4320000; // 50 Days or 50 * 24 * 60 * 60 seconds
-int g_dir_maintenance_period_in_seconds = 1; // check one node after this delay
-int g_ftl0_maintenance_period_in_seconds = 60; // check after this delay
-int g_file_queue_check_period_in_seconds = 5; // check after this delay
-int g_state_pacsat_log_level = INFO_LOG;
-int g_state_image_signing_key_number = 0;
-
-int g_dir_next_file_number = 0; // this is updated from the state file and then when the dir is loaded
-int g_ftl0_max_file_size = 153600; // 150k max file size
-int g_ftl0_max_upload_age_in_seconds = 5 * 24 * 60 * 60; // 5 days
-int g_telem_send_period_in_seconds = DEFAULT_PERIOD_TO_SEND_TELEM; // 2 mins
 
 /* Local variables */
+char last_command_time_filename[MAX_FILE_PATH_LEN] = "pacsat_last_command_time.dat";
 pthread_t tnc_listen_pthread;
-int g_run_self_test = false;
 int frame_queue_status_known = false;
 char config_file_name[MAX_FILE_PATH_LEN] = "pi_pacsat.config";
 char data_folder_path[MAX_FILE_PATH_LEN] = "./pacsat";
@@ -126,6 +85,7 @@ void help(void) {
 			"-c,--config                      use config file specified\n"
 			"-d,--dir                         use this data directory, rather than default\n"
 			"-k,--key                         use this command key file, rather than default\n"
+			"-s,--signing-folder              the file that contains the list of folders that need signed files for installation"
 			"-t,--test                        Run self test functions and exit\n"
 			"-v,--verbose                     print additional status and progress messages\n"
 	);

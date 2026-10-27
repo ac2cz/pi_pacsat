@@ -30,6 +30,30 @@
 #include "config.h"
 #include "str_util.h"
 
+/*
+ *  GLOBAL VARIABLES defined here.  They are declared in config.h
+ *  These are the default values.  Many can be updated with a value
+ *  in pacsat.config or can be overridden on the command line.
+ *
+ */
+int g_verbose = false;
+char g_log_filename[MAX_FILE_PATH_LEN];
+int g_run_self_test = false;
+
+/* These global variables are in the config file */
+int g_bit_rate = 1200;
+char g_bbs_callsign[10] = "NA1SS-12";
+char g_broadcast_callsign[10] = "NA1SS-11";
+char g_digi_callsign[10] = "NA1SS-1";
+int g_max_frames_in_tx_buffer = 2;
+int g_serial_fd = -1;
+#ifdef IORS_CONTROL_BUILD
+uint8_t g_image_signing_public_key[IMAGE_PUBLICKEY_BYTES];
+#endif
+
+char g_upload_table_path[MAX_FILE_PATH_LEN] = "pacsat_upload_table.dat";
+
+
 void load_config(char *filename) {
 	char *key;
 	char *value;

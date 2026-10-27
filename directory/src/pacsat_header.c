@@ -812,11 +812,7 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 	}
 
 #ifdef IORS_CONTROL_BUILD
-	/* Signature gate: mandatory for folders that require it, fail closed.
-	 * This runs on the as-stored body bytes, BEFORE unzip and BEFORE any
-	 * line-ending conversion -- that is what was signed. */
-	/* Uncompressed: the body IS the signed content. Verify before we write
-	 * anything to the destination. */
+	/* Signature gate: mandatory for folders that require it, fail closed. */
 		if (pfh->compression != BODY_COMPRESSED_PKZIP) {
 			if (folder_requires_signature(dest_folder)) {
 				if (AuthenticateImage(body, body_len, pfh->signature,
@@ -1010,6 +1006,7 @@ void pfh_debug_print(HEADER *pfh) {
 	if (pfh == NULL) return;
 	debug_print("PFH: File:%04x %s.%s ", (int)pfh->fileId, pfh->fileName, pfh->fileExt);
 
+	debug_print("Type:%d ", pfh->fileType);
 	debug_print("Source:%s ", pfh->source);
 	debug_print("Dest:%s ", pfh->destination);
 	debug_print("Crc:%04x ", pfh->headerCRC);
@@ -1024,8 +1021,13 @@ void pfh_debug_print(HEADER *pfh) {
 	debug_print("Up:%s ", buf);
 	now = pfh->expireTime;
 	strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", gmtime(&now));
-	debug_print("Ex:%u %s ", pfh->expireTime, buf);
-	debug_print(" Contains:%s\n", pfh->userFileName);
+	debug_print("Ex:%s ", buf);
+	debug_print(" Contains:%s", pfh->userFileName);
+	debug_print(" Folder(s):|%s| ", pfh->keyWords);
+	if (pfh->signature_type != 0) {
+		debug_print("- Signed (64 bytes)");
+	}
+	debug_print("\n");
 }
 
 /**
