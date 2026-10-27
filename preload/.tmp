@@ -1,0 +1,16 @@
+pb_open=2
+uplink_open=0
+pb_status_period_in_seconds=30
+pb_max_period_for_client_in_seconds=600
+uplink_status_period_in_seconds=30
+uplink_max_period_for_client_in_seconds=600
+dir_max_file_age_in_seconds=4320000
+dir_maintenance_period_in_seconds=1
+ftl0_maintenance_period_in_seconds=60
+file_queue_check_period_in_seconds=5
+dir_next_file_number=48
+ftl0_max_file_size=153600
+ftl0_max_upload_age_in_seconds=432000
+pacsat_log_level=3
+telem_send_period_in_seconds=120
+image_signing_key_number=0
