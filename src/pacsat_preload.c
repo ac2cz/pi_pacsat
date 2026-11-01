@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
 			strlcpy(data_folder_path, optarg, sizeof(data_folder_path));
 			break;
 		default:
-			error_print("pacsat_preload: Invalid option: %s %s\n",c,optarg);
+			error_print("pacsat_preload: Invalid option: %c %s\n",c,optarg);
 			return 1;
 			break;
 		}
