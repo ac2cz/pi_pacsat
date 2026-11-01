@@ -155,7 +155,6 @@ int main(int argc, char *argv[]) {
 	if (title[0] == '\0') { error_print("-T <title> is required\n"); ok = false; }
 	if (file_type < 0)        { error_print("-t <type> is required\n"); ok = false; }
 	if (!ok) {
-		help();
 		return EXIT_FAILURE;
 	}
 
