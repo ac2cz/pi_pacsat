@@ -44,6 +44,10 @@
 #define PB_ERR_FILE_NOT_DOWNLOADABLE 3
 #define PB_ERR_COMMAND_NOT_AVAILABLE 4
 #define PB_ERR_FILE_INVALID_PACKET 5
+#define PB_ERR_CLOCK_INVALID 6
+#define PB_ERR_PROG_EXECUTION_FAILED 7
+#define PB_ERR_BAD_COMMAND_ARG 8
+#define PB_ERR_FILE_NOT_INSTALLED 9
 
 #define EXIT_LAST_CHUNK_SENT 2 /* This exit code is used when we have sent the last chunk of a file */
 

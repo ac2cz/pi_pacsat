@@ -165,8 +165,8 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				char *folder = get_folder_str(folder_id);
 				if (folder == NULL) {
 					//debug_print("Error - invalid folder\n");
-					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
-					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					last_command_rc = PB_ERR_BAD_COMMAND_ARG;
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_BAD_COMMAND_ARG);
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
@@ -485,11 +485,11 @@ int pc_install_file(DIR_NODE *node, char *folder) {
 	debug_print("Install File: %d into dir: %s\n",node->pfh->fileId, folder);
 	if (pfh_extract_file_and_update_keywords(node->pfh, folder, true) != EXIT_SUCCESS) {
 		debug_print("Error extracting file into %s\n",folder);
-		return PB_ERR_FILE_NOT_AVAILABLE;
+		return PB_ERR_FILE_NOT_INSTALLED;
 	}
 
 	if (dir_update_node(node) != EXIT_SUCCESS) {
-		return PB_ERR_FILE_NOT_AVAILABLE;
+		return PB_ERR_FILE_NOT_INSTALLED;
 	}
 
 	/* If the same tag exists on another file with the same user_filename then remove it, as it can not be valid */
