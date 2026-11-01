@@ -25,7 +25,8 @@ char file_name[MAX_FILE_PATH_LEN] = "";
 int file_type = -1;
 bool compress_if_needed = false;
 char destination[MAX_FILE_PATH_LEN] = "ALL";
-char install_folder[MAX_FILE_PATH_LEN] = "";
+char title[PFH_LONG_CHAR_FIELD_LEN] = "";
+char install_folder[PFH_LONG_CHAR_FIELD_LEN] = "";
 char signature_file[MAX_FILE_PATH_LEN] = "";
 
 /**
@@ -37,6 +38,7 @@ void help(void) {
 			"-f,--file                        the file to load\n"
 			"-t,--type                        the file type as an integer\n"
 			"-D,--dest                        the destination e.g. WOD. Defaults to ALL\n"
+			"-T,--title                       the title of the message\n"
 			"-F,--folder                      the folder that this is installed in (but no copy happens)\n"
 			"-S,--sig                         the signature file to populate the header and sign the file\n"
 			"-c,--config                      use config file specified, otherwise it looks in current dir\n"
@@ -79,6 +81,7 @@ int main(int argc, char *argv[]) {
 			{"file", required_argument, NULL, 'f'},
 			{"type", required_argument, NULL, 't'},
 			{"dest", required_argument, NULL, 'D'},
+			{"title", required_argument, NULL, 'T'},
 			{"folder", required_argument, NULL, 'F'},
 			{"sig", required_argument, NULL, 'S'},
 			{"dir", required_argument, NULL, 'd'},
@@ -92,7 +95,7 @@ int main(int argc, char *argv[]) {
 
 	while (1) {
 		int c;
-		if ((c = getopt_long(argc, argv, "hf:t:D:F:S:d:c:zv", long_option, NULL)) < 0)
+		if ((c = getopt_long(argc, argv, "hf:t:D:T:F:S:d:c:zv", long_option, NULL)) < 0)
 			break;
 		switch (c) {
 		case 'h': // help
@@ -118,6 +121,9 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'D': // dest
 			strlcpy(destination, optarg, sizeof(destination));
+			break;
+		case 'T': // title
+			strlcpy(title, optarg, sizeof(title));
 			break;
 		case 'F': // folder
 			strlcpy(install_folder, optarg, sizeof(install_folder));
@@ -146,6 +152,7 @@ int main(int argc, char *argv[]) {
 
 	bool ok = true;
 	if (file_name[0] == '\0') { error_print("-f <file> is required\n"); ok = false; }
+	if (title[0] == '\0') { error_print("-T <title> is required\n"); ok = false; }
 	if (file_type < 0)        { error_print("-t <type> is required\n"); ok = false; }
 	if (!ok) {
 		help();
@@ -208,13 +215,13 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
-	HEADER *pfh = pfh_make_internal_header(now, file_type, id, "", g_bbs_callsign, destination, user_file_name, user_file_name,
+	HEADER *pfh = pfh_make_internal_header(now, file_type, id, "", g_bbs_callsign, destination, title, user_file_name,
 			create_time, 0, compression_type);
 
 	if (install_folder[0] != '\0') {
 		//debug_print("Adding folder: %s\n",install_folder);
 		pfh_add_keyword(pfh, install_folder);
-		pfh->expireTime = 2145848400; // 2038-01-01
+		pfh->expireTime = (uint32_t)(2145848400L+10*365*24*60*60); // 2038-01-01
 	}
 
 	if (have_signature) {
