@@ -220,7 +220,8 @@ int main(int argc, char *argv[]) {
 	if (install_folder[0] != '\0') {
 		//debug_print("Adding folder: %s\n",install_folder);
 		pfh_add_keyword(pfh, install_folder);
-		pfh->expireTime = (uint32_t)(2145848400L+10*365*24*60*60); // 2038-01-01
+		uint32_t now = time(0);
+		pfh->expireTime = (uint32_t)(now+10*365*24*60*60); // 10 years from now
 	}
 
 	if (have_signature) {

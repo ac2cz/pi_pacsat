@@ -926,7 +926,8 @@ int pfh_extract_file_and_update_keywords(HEADER *pfh, char *dest_folder,
 
 	if (update_keywords_and_expiry) {
 		pfh_add_keyword(pfh, dest_folder);
-		pfh->expireTime = 2145848400; // 2038-01-01
+		uint32_t now = time(0);
+		pfh->expireTime = (uint32_t)(now+10*365*24*60*60); // 10 years from now
 	}
 
 	return EXIT_SUCCESS;
