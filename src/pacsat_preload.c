@@ -128,6 +128,11 @@ int main(int argc, char *argv[]) {
 		case 'd': // data folder
 			strlcpy(data_folder_path, optarg, sizeof(data_folder_path));
 			break;
+		default:
+			error_print("pacsat_preload: Invalid option\n");
+			help();
+			return 1;
+			break;
 		}
 	}
 
@@ -200,7 +205,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
-	HEADER *pfh = pfh_make_internal_header(now, file_type, id, "", g_bbs_callsign, destination, file_name, user_file_name,
+	HEADER *pfh = pfh_make_internal_header(now, file_type, id, "", g_bbs_callsign, destination, user_file_name, user_file_name,
 			create_time, 0, compression_type);
 
 	if (install_folder[0] != '\0') {
