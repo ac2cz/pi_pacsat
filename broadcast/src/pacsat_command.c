@@ -492,20 +492,28 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				switch (downloadable) {
 				case 0:
 					strlcpy(node->pfh->destination, "SYSTEM", PFH_SHORT_CHAR_FIELD_LEN);
+					break;
 				case 2:
 					strlcpy(node->pfh->destination, "SSTV", PFH_SHORT_CHAR_FIELD_LEN);
+					break;
 				case 3:
 					strlcpy(node->pfh->destination, "TXT", PFH_SHORT_CHAR_FIELD_LEN);
+					break;
 				case 4:
 					strlcpy(node->pfh->destination, "LOG", PFH_SHORT_CHAR_FIELD_LEN);
+					break;
 				case 5:
 					strlcpy(node->pfh->destination, "IMAGE", PFH_SHORT_CHAR_FIELD_LEN);
+					break;
 				case 6:
 					strlcpy(node->pfh->destination, "WOD", PFH_SHORT_CHAR_FIELD_LEN);
+					break;
 				case 7:
 					strlcpy(node->pfh->destination, "SENWOD", PFH_SHORT_CHAR_FIELD_LEN);
+					break;
 				default:
 					strlcpy(node->pfh->destination, "ALL", PFH_SHORT_CHAR_FIELD_LEN);
+					break;
 				}
 				if (dir_update_node(node) != EXIT_SUCCESS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
