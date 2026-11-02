@@ -466,6 +466,51 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 				break;
 			}
 #endif
+			case SWCmdPacsatFileDownloadable: {
+				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16);
+				uint16_t downloadable = sw_command->comArg.arguments[3];
+
+				if (pb_is_file_in_use(file_id)) {
+					// This file is currently being broadcast then we can't update it
+					last_command_rc = PB_ERR_TEMPORARY;
+					pb_send_cmd_err(from_callsign, PB_ERR_TEMPORARY);
+					break;
+				}
+
+				//This needs to set the TO address on a specific file
+				DIR_NODE *node = dir_get_node_by_id(file_id);
+				if (node == NULL) {
+					error_print("File %d not available\n",file_id);
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not send ERR Response to TNC \n");
+					}
+					break;
+				}
+				/* Set the TO address on that file. */
+				if (downloadable) {
+					strlcpy(node->pfh->destination, "ALL", PFH_SHORT_CHAR_FIELD_LEN);
+				} else {
+					strlcpy(node->pfh->destination, "SYSTEM", PFH_SHORT_CHAR_FIELD_LEN);
+				}
+				if (dir_update_node(node) != EXIT_SUCCESS) {
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					int r = pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					if (r != EXIT_SUCCESS) {
+						debug_print("\n Error : Could not update the dir node \n");
+					}
+					break;
+				}
+
+				last_command_rc = EXIT_SUCCESS;
+				int rc = pb_send_cmd_ok(from_callsign);
+				if (rc != EXIT_SUCCESS) {
+					debug_print("\n Error : Could not send OK Response to TNC \n");
+				}
+
+				break;
+			}
 
 			default:
 				error_print("\n Error : Unknown pacsat command: %d\n",sw_command->comArg.command);
