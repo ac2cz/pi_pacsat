@@ -426,8 +426,10 @@ void pb_process_frame(char *from_callsign, char *to_callsign, unsigned char *dat
         }
         pb_handle_file_request(from_callsign, data, len);
     }
-    if (pid == PID_COMMAND)
+    if (pid == PID_COMMAND) {
         pc_handle_command(from_callsign, data, len);
+    	pb_status_pending = true;
+    }
 }
 
 static int pb_check_auth(char *from_callsign, unsigned char *data, int *len, int min_body_len) {
