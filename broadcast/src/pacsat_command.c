@@ -489,31 +489,29 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 				/* Set the TO address on that file. */
-				switch (downloadable) {
-				case 0:
+				if (!downloadable) {
 					strlcpy(node->pfh->destination, "SYSTEM", PFH_SHORT_CHAR_FIELD_LEN);
-					break;
-				case 2:
-					strlcpy(node->pfh->destination, "SSTV", PFH_SHORT_CHAR_FIELD_LEN);
-					break;
-				case 3:
-					strlcpy(node->pfh->destination, "TXT", PFH_SHORT_CHAR_FIELD_LEN);
-					break;
-				case 4:
-					strlcpy(node->pfh->destination, "LOG", PFH_SHORT_CHAR_FIELD_LEN);
-					break;
-				case 5:
-					strlcpy(node->pfh->destination, "IMAGE", PFH_SHORT_CHAR_FIELD_LEN);
-					break;
-				case 6:
-					strlcpy(node->pfh->destination, "WOD", PFH_SHORT_CHAR_FIELD_LEN);
-					break;
-				case 7:
-					strlcpy(node->pfh->destination, "SENWOD", PFH_SHORT_CHAR_FIELD_LEN);
-					break;
-				default:
-					strlcpy(node->pfh->destination, "ALL", PFH_SHORT_CHAR_FIELD_LEN);
-					break;
+				} else {
+					switch (node->pfh->fileType) {
+					case PFH_TYPE_ASCII:
+						strlcpy(node->pfh->destination, "TXT", PFH_SHORT_CHAR_FIELD_LEN);
+						break;
+					case PFH_TYPE_AL:
+						strlcpy(node->pfh->destination, "LOG", PFH_SHORT_CHAR_FIELD_LEN);
+						break;
+					case PFH_TYPE_JPG:
+						strlcpy(node->pfh->destination, "IMAGE", PFH_SHORT_CHAR_FIELD_LEN);
+						break;
+					case PFH_TYPE_WL:
+						strlcpy(node->pfh->destination, "WOD", PFH_SHORT_CHAR_FIELD_LEN);
+						break;
+					case PFH_TYPE_SEN_WOD:
+						strlcpy(node->pfh->destination, "SENWOD", PFH_SHORT_CHAR_FIELD_LEN);
+						break;
+					default:
+						strlcpy(node->pfh->destination, "ALL", PFH_SHORT_CHAR_FIELD_LEN);
+						break;
+					}
 				}
 				if (dir_update_node(node) != EXIT_SUCCESS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
