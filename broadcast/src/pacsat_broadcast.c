@@ -158,6 +158,7 @@ static int current_station_on_pb = 0; /* This keeps track of which station we wi
 time_t last_pb_status_time;
 time_t last_pb_frames_queued_time;
 int sent_pb_status = false;
+static int pb_status_pending = false; /* A station left the PB, send status at the next opportunity */
 
 /**
  * pb_send_status()
@@ -338,6 +339,7 @@ static int pb_remove_request(int pos) {
 		if (current_station_on_pb >= number_on_pb)
 			current_station_on_pb = 0;
 	}
+	pb_status_pending = true;
 	return EXIT_SUCCESS;
 }
 
@@ -750,16 +752,14 @@ int pb_next_action() {
 	time_t now = time(0);
 	if (last_pb_status_time == 0) last_pb_status_time = now; // Initialize at startup
 
-	if ((now - last_pb_status_time) > g_pb_status_period_in_seconds) {
+	if (pb_status_pending || (now - last_pb_status_time) > g_pb_status_period_in_seconds) {
 		// then send the status
 		rc = pb_send_status();
 		if (rc != EXIT_SUCCESS) {
 			error_print("Could not send PB status to TNC \n");
 		}
-//		char buffer[256];
-//		pb_make_list_str(buffer, sizeof(buffer));
-//		debug_print("%s | %d frames queued\n", buffer, tnc_get_frames_queued());
 		last_pb_status_time = now;
+		pb_status_pending = false;
 		sent_pb_status = true;
 	}
 
