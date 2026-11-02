@@ -468,7 +468,7 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 #endif
 			case SWCmdPacsatFileDownloadable: {
 				uint32_t file_id = sw_command->comArg.arguments[0] + (sw_command->comArg.arguments[1] << 16);
-				uint16_t downloadable = sw_command->comArg.arguments[3];
+				uint16_t downloadable = sw_command->comArg.arguments[2];
 
 				if (pb_is_file_in_use(file_id)) {
 					// This file is currently being broadcast then we can't update it
@@ -489,10 +489,15 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					break;
 				}
 				/* Set the TO address on that file. */
-				if (downloadable) {
-					strlcpy(node->pfh->destination, "ALL", PFH_SHORT_CHAR_FIELD_LEN);
-				} else {
+				switch (downloadable) {
+				case 0:
 					strlcpy(node->pfh->destination, "SYSTEM", PFH_SHORT_CHAR_FIELD_LEN);
+				case 2:
+					strlcpy(node->pfh->destination, "SSTV", PFH_SHORT_CHAR_FIELD_LEN);
+				case 3:
+					strlcpy(node->pfh->destination, "TXT", PFH_SHORT_CHAR_FIELD_LEN);
+				default:
+					strlcpy(node->pfh->destination, "ALL", PFH_SHORT_CHAR_FIELD_LEN);
 				}
 				if (dir_update_node(node) != EXIT_SUCCESS) {
 					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
