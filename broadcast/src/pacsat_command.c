@@ -496,6 +496,14 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					strlcpy(node->pfh->destination, "SSTV", PFH_SHORT_CHAR_FIELD_LEN);
 				case 3:
 					strlcpy(node->pfh->destination, "TXT", PFH_SHORT_CHAR_FIELD_LEN);
+				case 4:
+					strlcpy(node->pfh->destination, "LOG", PFH_SHORT_CHAR_FIELD_LEN);
+				case 5:
+					strlcpy(node->pfh->destination, "IMAGE", PFH_SHORT_CHAR_FIELD_LEN);
+				case 6:
+					strlcpy(node->pfh->destination, "WOD", PFH_SHORT_CHAR_FIELD_LEN);
+				case 7:
+					strlcpy(node->pfh->destination, "SENWOD", PFH_SHORT_CHAR_FIELD_LEN);
 				default:
 					strlcpy(node->pfh->destination, "ALL", PFH_SHORT_CHAR_FIELD_LEN);
 				}
