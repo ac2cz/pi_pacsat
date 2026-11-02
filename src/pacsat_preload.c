@@ -233,6 +233,16 @@ int main(int argc, char *argv[]) {
 	if (g_verbose) { debug_print("Adding file: %s\n",file_name);	pfh_debug_print(pfh); }
 	dir_get_file_path_from_file_id(id, get_dir_folder(), psf_name, sizeof(psf_name));
 
+	/* Set the upload time here.  If it is left at 0 then the first dir_load()
+	 * assigns it and dir_add_pfh() zeroes the expiry in memory, which the next
+	 * full header rewrite then saves to disk.  Must be unique and newer than
+	 * every file already in the dir. */
+	DIR_NODE *tail = dir_get_tail();
+	if (tail != NULL && tail->pfh->uploadTime >= now)
+		pfh->uploadTime = tail->pfh->uploadTime + 1;
+	else
+		pfh->uploadTime = now;
+
 	int rc;
 	rc = pfh_make_internal_file(pfh, get_dir_folder(), file_name);
 	if (rc != EXIT_SUCCESS) {

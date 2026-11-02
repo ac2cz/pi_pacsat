@@ -996,6 +996,7 @@ void dir_file_queue_check(time_t now, char * folder, uint8_t file_type, char * d
 	closedir(d);
 }
 
+#if 0
 /**
  * This saves a big endian 4 byte int into little endian format in the MRAM
  */
@@ -1033,8 +1034,91 @@ int dir_fs_save_short(FILE *fp, uint16_t value, uint32_t offset) {
     }
     return EXIT_SUCCESS;
 }
+#endif
 
+/*
+ * Return the byte offset of field id in a PFH buffer (pointing at the id),
+ * or -1 if not found or the field is not data_len bytes long.
+ */
+static int dir_find_pfh_field(unsigned char *buf, int len, unsigned short id, int data_len) {
+	int i = 2; /* skip 0xAA 0x55 */
+	while (i + 3 <= len) {
+		unsigned short fid = buf[i] | (buf[i+1] << 8);
+		unsigned char flen = buf[i+2];
+		if (fid == 0 && flen == 0)
+			return -1; /* end of header */
+		if (fid == id) {
+			if (flen != data_len || i + 3 + flen > len)
+				return -1;
+			return i;
+		}
+		i += 3 + flen;
+	}
+	return -1;
+}
 
+/**
+ * Update fileId, uploadTime and expireTime in place in the file, then
+ * recalculate the header checksum. Fields the spacecraft does not understand
+ * are preserved.
+ */
+static int dir_fs_update_header_id_and_uptime(char *file_name_with_path, HEADER *pfh) {
+	int len = pfh->bodyOffset;
+	if (len < BODY_OFFSET_BYTE_POS + 5 || len > MAX_PFH_LENGTH) {
+		error_print("Bad body offset %d in %s\n", len, file_name_with_path);
+		return EXIT_FAILURE;
+	}
+
+	FILE *fp = fopen(file_name_with_path, "r+");
+	if (fp == NULL) {
+		error_print("Unable to open %s for writing: %s\n", file_name_with_path, strerror(errno));
+		return EXIT_FAILURE;
+	}
+	if (fread(pfh_byte_buffer, 1, len, fp) != (size_t)len) {
+		error_print("Unable to read header from %s\n", file_name_with_path);
+		fclose(fp);
+		return EXIT_FAILURE;
+	}
+
+	int up_pos = dir_find_pfh_field(pfh_byte_buffer, len, UPLOAD_TIME, 4);
+	int ex_pos = dir_find_pfh_field(pfh_byte_buffer, len, EXPIRE_TIME, 4);
+	if (up_pos < 0 || ex_pos < 0) {
+		error_print("Upload or expire time field missing in %s\n", file_name_with_path);
+		fclose(fp);
+		return EXIT_FAILURE;
+	}
+
+	pfh_store_int(&pfh_byte_buffer[FILE_ID_BYTE_POS + 3], pfh->fileId);
+	pfh_store_int(&pfh_byte_buffer[up_pos + 3], pfh->uploadTime);
+	pfh_store_int(&pfh_byte_buffer[ex_pos + 3], pfh->expireTime);
+
+	/* Zero the checksum, recalculate over the whole header, store it */
+	pfh_byte_buffer[HEADER_CHECKSUM_BYTE_POS + 3] = 0x00;
+	pfh_byte_buffer[HEADER_CHECKSUM_BYTE_POS + 4] = 0x00;
+	uint16_t crc_result = 0;
+	for (int j = 0; j < len; j++)
+		crc_result += pfh_byte_buffer[j] & 0xff;
+	pfh_store_short(&pfh_byte_buffer[HEADER_CHECKSUM_BYTE_POS + 3], crc_result);
+	pfh->headerCRC = crc_result;
+
+	if (fseek(fp, 0, SEEK_SET) != 0) {
+		error_print("Unable to seek in %s: %s\n", file_name_with_path, strerror(errno));
+		fclose(fp);
+		return EXIT_FAILURE;
+	}
+	if (fwrite(pfh_byte_buffer, 1, len, fp) != (size_t)len) {
+		error_print("Unable to write header to %s: %s\n", file_name_with_path, strerror(errno));
+		fclose(fp);
+		return EXIT_FAILURE;
+	}
+	if (fclose(fp) != 0) {
+		error_print("Unable to close %s: %s\n", file_name_with_path, strerror(errno));
+		return EXIT_FAILURE;
+	}
+	return EXIT_SUCCESS;
+}
+
+#if 0
 /**
  * Update the header in place in the file. This preserves any pacsat header fields that the spacecraft
  * does not understand, but which are important to the sender/receiver.
@@ -1098,7 +1182,7 @@ static int dir_fs_update_header_id_and_uptime(char *file_name_with_path, HEADER 
     }
     return EXIT_SUCCESS;
 }
-
+#endif
 
 /*********************************************************************************************
  *
