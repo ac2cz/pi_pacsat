@@ -212,6 +212,12 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					break;
 				}
+				if (folder_id == FolderSigning) {
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
+					break;
+				}
+
 				int is_directory_folder = false;
 				if (folder_id == FolderDir)
 					is_directory_folder = true;
@@ -277,6 +283,12 @@ int pc_handle_command(char *from_callsign, unsigned char *data, int len) {
 					if (r != EXIT_SUCCESS) {
 						debug_print("\n Error : Could not send ERR Response to TNC \n");
 					}
+					break;
+				}
+
+				if (folder_id == FolderSigning) {
+					last_command_rc = PB_ERR_FILE_NOT_AVAILABLE;
+					pb_send_cmd_err(from_callsign, PB_ERR_FILE_NOT_AVAILABLE);
 					break;
 				}
 
