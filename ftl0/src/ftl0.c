@@ -354,7 +354,7 @@ int ftl0_connection_received(char *from_callsign, char *to_callsign, int channel
 	unsigned char data_bytes[sizeof(login_data)+2];
 
 	time_t now = time(0);
-	if (now < CLOCK_2024_01_01) { // 2024-01-01
+	if (now < CLOCK_FLOOR || now > CLOCK_CEILING) { // 2026-01-01
 		/* Do not allow uploads if the clock is not set */
 		ftl0_disconnect(from_callsign, channel);
 		return EXIT_FAILURE;

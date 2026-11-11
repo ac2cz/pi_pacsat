@@ -27,7 +27,7 @@ static fstelemetry_t fstelemetry;
 int send_telemetry(time_t now) {
 
 	fstelemetry.timestamp = (uint32_t) time(0);
-	if (fstelemetry.timestamp < CLOCK_2024_01_01) {
+	if (fstelemetry.timestamp < CLOCK_FLOOR || fstelemetry.timestamp > CLOCK_CEILING) {
 		/* The clock is not set or is corrupt */
 		return EXIT_FAILURE;
 	}
