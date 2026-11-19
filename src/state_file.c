@@ -124,6 +124,11 @@ void load_state(char *filepath) {
 }
 
 void save_state() {
+	if (filename[0] == '\0') {
+		/* State was never loaded by this process (e.g. pacsat_preload),
+		 * so there is nothing to save and no file we own */
+		return;
+	}
 	char tmp_filename[MAX_FILE_PATH_LEN];
 	strlcpy(tmp_filename, filename, sizeof(tmp_filename));
 	strlcat(tmp_filename, ".tmp", sizeof(tmp_filename));
