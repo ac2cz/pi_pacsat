@@ -228,12 +228,18 @@ uint32_t dir_get_file_id_from_filename(char *file_name) {
  * received, but we need to allocate it before that.
  *
  */
-int dir_next_file_number() {
+uint32_t dir_next_file_number() {
 	g_dir_next_file_number++;
 	save_state();
 	return g_dir_next_file_number;
 }
 
+/* Allocate the next file number without saving state.  For tools that have
+ * not loaded the state file, e.g. pacsat_preload */
+uint32_t dir_alloc_file_number() {
+	g_dir_next_file_number++;
+	return g_dir_next_file_number;
+}
 /**
  * Return the upload time for a record that we are updating and guarantee that it is unique.
  *

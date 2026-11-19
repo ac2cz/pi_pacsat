@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
 	char user_file_name[MAX_FILE_PATH_LEN] = "";
 	char psf_name[MAX_FILE_PATH_LEN] = "";
 
-	uint32_t id = dir_next_file_number();
+	uint32_t id = dir_alloc_file_number();
 
 	const char *base = strrchr(file_name, '/');   /* last '/' in the path, or NULL */
 	if (base != NULL)
